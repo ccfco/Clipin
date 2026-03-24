@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 /// 剪贴板监控 — 每 0.5s 检查 NSPasteboard.changeCount
 @MainActor
@@ -7,6 +6,7 @@ final class ClipboardMonitor: ObservableObject {
     private let core: ClipinCore
     private var timer: Timer?
     private var lastChangeCount: Int
+    private var isPaused = false
 
     init(core: ClipinCore) {
         self.core = core
@@ -27,13 +27,24 @@ final class ClipboardMonitor: ObservableObject {
         timer = nil
     }
 
-    /// 有新内容被保存时触发
+    /// 暂停监控（粘贴时用，避免把自己写入的内容又存一遍）
+    func pause() {
+        isPaused = true
+    }
+
+    /// 恢复监控，跳过暂停期间的变化
+    func resume() {
+        lastChangeCount = NSPasteboard.general.changeCount
+        isPaused = false
+    }
+
     var onNewItem: (() -> Void)?
 
     private func checkClipboard() {
+        guard !isPaused else { return }
+
         let pasteboard = NSPasteboard.general
         let currentCount = pasteboard.changeCount
-
         guard currentCount != lastChangeCount else { return }
         lastChangeCount = currentCount
 
@@ -41,7 +52,6 @@ final class ClipboardMonitor: ObservableObject {
         let sourceApp = tracker.bundleIdentifier
         let sourceName = tracker.appName
 
-        // 优先级: 图片 > 文件 > URL > 文本
         if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
             saveImage(imageData, sourceApp: sourceApp, sourceName: sourceName)
         } else if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
@@ -95,7 +105,6 @@ final class ClipboardMonitor: ObservableObject {
         saveContent(url.path, type: .file, sourceApp: sourceApp, sourceName: sourceName)
     }
 
-    /// 尝试从文本中提取 URL
     private func extractURL(from pasteboard: NSPasteboard) -> String? {
         guard let text = pasteboard.string(forType: .string),
               let url = URL(string: text),

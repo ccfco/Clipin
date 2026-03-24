@@ -46,7 +46,7 @@ struct MainPanel: View {
             return .handled
         }
         .onKeyPress(.escape) {
-            viewModel.onPasteAndClose?()
+            viewModel.close()
             return .handled
         }
     }
