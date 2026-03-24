@@ -1,0 +1,16 @@
+# Rust
+rust/target/
+
+# UniFFI generated
+Clipin/Generated/
+
+# Xcode (xcodegen generates .xcodeproj)
+Clipin.xcodeproj/
+*.xcuserdata
+DerivedData/
+
+# macOS
+.DS_Store
+
+# Build
+.build/

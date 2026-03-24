@@ -1,0 +1,53 @@
+name: Clipin
+options:
+  bundleIdPrefix: com.ccfco
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+  defaultConfig: Release
+
+configs:
+  Debug: debug
+  Release: release
+
+targets:
+  Clipin:
+    type: application
+    platform: macOS
+    sources:
+      - path: Clipin/App
+      - path: Clipin/Views
+        optional: true
+      - path: Clipin/ViewModels
+        optional: true
+      - path: Clipin/Services
+        optional: true
+      - path: Clipin/Generated
+        optional: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.Clipin
+        PRODUCT_NAME: Clipin
+        INFOPLIST_FILE: Clipin/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Clipin/Clipin.entitlements
+        LIBRARY_SEARCH_PATHS:
+          - $(SRCROOT)/rust/target/release
+        OTHER_LDFLAGS:
+          - -lclipin_core
+        SWIFT_INCLUDE_PATHS:
+          - $(SRCROOT)/Clipin/Generated
+        SWIFT_OBJC_BRIDGING_HEADER: Clipin/BridgingHeader.h
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/Clipin/Generated
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: 1
+        GENERATE_INFOPLIST_FILE: false
+        LD_RUNPATH_SEARCH_PATHS:
+          - $(inherited)
+          - "@executable_path/../Frameworks"
+        SWIFT_VERSION: "6.0"
+    preBuildScripts:
+      - name: Build Rust Core
+        script: |
+          "${SRCROOT}/scripts/build-rust.sh"
+        basedOnDependencyAnalysis: false
