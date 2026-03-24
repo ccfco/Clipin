@@ -33,7 +33,7 @@ enum PasteService {
     }
 
     /// 模拟 Cmd+V 按键
-    private static func simulatePaste() {
+    static func simulatePaste() {
         let source = CGEventSource(stateID: .hidSystemState)
 
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)  // V key

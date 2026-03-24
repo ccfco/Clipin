@@ -47,9 +47,9 @@ final class ClipboardViewModel: ObservableObject {
         guard let item = selectedItem else { return }
         PasteService.writeToClipboard(item)
         onPasteAndClose?()
-        // 延迟模拟按键，等窗口隐藏后再粘贴
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            PasteService.paste(item)
+        // 等窗口隐藏 + 焦点切回后再模拟 Cmd+V
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            PasteService.simulatePaste()
         }
     }
 

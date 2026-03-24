@@ -9,6 +9,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: ClipboardMonitor?
     private var viewModel: ClipboardViewModel?
     private let hotKey = HotKeyService()
+    private var previousApp: NSRunningApplication?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
@@ -34,7 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupPanel() {
         let vm = ClipboardViewModel(core: appState.core)
         vm.onPasteAndClose = { [weak self] in
-            self?.panel?.orderOut(nil)
+            self?.hideAndRestoreFocus()
         }
         self.viewModel = vm
         let contentView = MainPanel(viewModel: vm)
@@ -90,11 +91,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func togglePanel() {
         guard let panel else { return }
         if panel.isVisible {
-            panel.orderOut(nil)
+            hideAndRestoreFocus()
         } else {
+            // 记住当前前台应用，粘贴后切回
+            previousApp = NSWorkspace.shared.frontmostApplication
             viewModel?.loadItems()
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+
+    private func hideAndRestoreFocus() {
+        panel?.orderOut(nil)
+        // 把焦点还给之前的应用
+        previousApp?.activate()
+        previousApp = nil
     }
 }
