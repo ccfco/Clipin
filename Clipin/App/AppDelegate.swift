@@ -1,14 +1,18 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: NSPanel?
     private let appState = AppState.shared
+    private var monitor: ClipboardMonitor?
+    private var viewModel: ClipboardViewModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupPanel()
+        startMonitoring()
         print("✅ Clipin launched")
     }
 
@@ -26,7 +30,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Floating Panel
 
     private func setupPanel() {
-        let contentView = MainPanel(core: appState.core)
+        let vm = ClipboardViewModel(core: appState.core)
+        vm.onPasteAndClose = { [weak self] in
+            self?.panel?.orderOut(nil)
+        }
+        self.viewModel = vm
+        let contentView = MainPanel(viewModel: vm)
         let hostingView = NSHostingView(rootView: contentView)
 
         let panel = NSPanel(
@@ -56,11 +65,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.panel = panel
     }
 
+    // MARK: - Clipboard Monitoring
+
+    private func startMonitoring() {
+        let monitor = ClipboardMonitor(core: appState.core)
+        monitor.onNewItem = { [weak self] in
+            self?.viewModel?.loadItems()
+        }
+        monitor.start()
+        self.monitor = monitor
+    }
+
     @objc private func togglePanel() {
         guard let panel else { return }
         if panel.isVisible {
             panel.orderOut(nil)
         } else {
+            viewModel?.loadItems()
             panel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }

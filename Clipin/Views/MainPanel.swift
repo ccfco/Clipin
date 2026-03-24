@@ -2,10 +2,10 @@ import SwiftUI
 
 /// 主面板 — Raycast 风格双栏布局
 struct MainPanel: View {
-    @StateObject private var viewModel: ClipboardViewModel
+    @ObservedObject var viewModel: ClipboardViewModel
 
-    init(core: ClipinCore) {
-        _viewModel = StateObject(wrappedValue: ClipboardViewModel(core: core))
+    init(viewModel: ClipboardViewModel) {
+        self.viewModel = viewModel
     }
 
     var body: some View {
@@ -40,6 +40,14 @@ struct MainPanel: View {
         }
         .onChange(of: viewModel.typeFilter) {
             viewModel.loadItems()
+        }
+        .onKeyPress(.return) {
+            viewModel.pasteSelected()
+            return .handled
+        }
+        .onKeyPress(.escape) {
+            viewModel.onPasteAndClose?()
+            return .handled
         }
     }
 

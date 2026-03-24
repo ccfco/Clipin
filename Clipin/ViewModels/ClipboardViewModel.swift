@@ -40,6 +40,19 @@ final class ClipboardViewModel: ObservableObject {
         loadItems()
     }
 
+    /// 粘贴选中的条目并通知关闭面板
+    var onPasteAndClose: (() -> Void)?
+
+    func pasteSelected() {
+        guard let item = selectedItem else { return }
+        PasteService.writeToClipboard(item)
+        onPasteAndClose?()
+        // 延迟模拟按键，等窗口隐藏后再粘贴
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            PasteService.paste(item)
+        }
+    }
+
     /// 按日期分组
     var groupedItems: [(String, [ClipItem])] {
         let calendar = Calendar.current
