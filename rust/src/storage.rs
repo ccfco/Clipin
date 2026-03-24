@@ -22,51 +22,71 @@ impl Storage {
 
     fn init_schema(&self) -> Result<(), ClipinError> {
         let conn = self.conn.lock().unwrap();
-        conn.execute_batch(
-            "
-            CREATE TABLE IF NOT EXISTS clip_items (
-                id          TEXT PRIMARY KEY,
-                content     TEXT NOT NULL DEFAULT '',
-                clip_type   TEXT NOT NULL DEFAULT 'text',
-                source_app  TEXT,
-                source_name TEXT,
-                is_pinned   INTEGER NOT NULL DEFAULT 0,
-                created_at  INTEGER NOT NULL,
-                image_path  TEXT,
-                char_count  INTEGER NOT NULL DEFAULT 0,
-                hash        TEXT NOT NULL
-            );
+        let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+        Self::run_migrations(&conn, version)
+    }
 
-            CREATE INDEX IF NOT EXISTS idx_created_at ON clip_items(created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_clip_type ON clip_items(clip_type);
-            CREATE INDEX IF NOT EXISTS idx_is_pinned ON clip_items(is_pinned);
-            CREATE INDEX IF NOT EXISTS idx_hash ON clip_items(hash);
+    /// 按版本号顺序执行 migration，每个版本只跑一次。
+    /// 新增字段时在这里加 v2、v3…，已发布版本的 migration 不可修改。
+    fn run_migrations(conn: &Connection, from_version: i32) -> Result<(), ClipinError> {
+        if from_version < 1 {
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS clip_items (
+                    id          TEXT PRIMARY KEY,
+                    content     TEXT NOT NULL DEFAULT '',
+                    clip_type   TEXT NOT NULL DEFAULT 'text',
+                    source_app  TEXT,
+                    source_name TEXT,
+                    is_pinned   INTEGER NOT NULL DEFAULT 0,
+                    created_at  INTEGER NOT NULL,
+                    image_path  TEXT,
+                    char_count  INTEGER NOT NULL DEFAULT 0,
+                    hash        TEXT NOT NULL
+                );
 
-            CREATE VIRTUAL TABLE IF NOT EXISTS clip_fts USING fts5(
-                content,
-                source_name,
-                content='clip_items',
-                content_rowid='rowid'
-            );
+                CREATE INDEX IF NOT EXISTS idx_created_at ON clip_items(created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_clip_type ON clip_items(clip_type);
+                CREATE INDEX IF NOT EXISTS idx_is_pinned ON clip_items(is_pinned);
+                CREATE INDEX IF NOT EXISTS idx_hash ON clip_items(hash);
 
-            CREATE TRIGGER IF NOT EXISTS clip_items_ai AFTER INSERT ON clip_items BEGIN
-                INSERT INTO clip_fts(rowid, content, source_name)
-                VALUES (new.rowid, new.content, new.source_name);
-            END;
+                CREATE VIRTUAL TABLE IF NOT EXISTS clip_fts USING fts5(
+                    content,
+                    source_name,
+                    content='clip_items',
+                    content_rowid='rowid'
+                );
 
-            CREATE TRIGGER IF NOT EXISTS clip_items_ad AFTER DELETE ON clip_items BEGIN
-                INSERT INTO clip_fts(clip_fts, rowid, content, source_name)
-                VALUES ('delete', old.rowid, old.content, old.source_name);
-            END;
+                CREATE TRIGGER IF NOT EXISTS clip_items_ai AFTER INSERT ON clip_items BEGIN
+                    INSERT INTO clip_fts(rowid, content, source_name)
+                    VALUES (new.rowid, new.content, new.source_name);
+                END;
 
-            CREATE TRIGGER IF NOT EXISTS clip_items_au AFTER UPDATE ON clip_items BEGIN
-                INSERT INTO clip_fts(clip_fts, rowid, content, source_name)
-                VALUES ('delete', old.rowid, old.content, old.source_name);
-                INSERT INTO clip_fts(rowid, content, source_name)
-                VALUES (new.rowid, new.content, new.source_name);
-            END;
-            ",
-        )?;
+                CREATE TRIGGER IF NOT EXISTS clip_items_ad AFTER DELETE ON clip_items BEGIN
+                    INSERT INTO clip_fts(clip_fts, rowid, content, source_name)
+                    VALUES ('delete', old.rowid, old.content, old.source_name);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS clip_items_au AFTER UPDATE ON clip_items BEGIN
+                    INSERT INTO clip_fts(clip_fts, rowid, content, source_name)
+                    VALUES ('delete', old.rowid, old.content, old.source_name);
+                    INSERT INTO clip_fts(rowid, content, source_name)
+                    VALUES (new.rowid, new.content, new.source_name);
+                END;
+
+                PRAGMA user_version = 1;
+                ",
+            )?;
+        }
+
+        // 未来加字段示例（v2）：
+        // if from_version < 2 {
+        //     conn.execute_batch("
+        //         ALTER TABLE clip_items ADD COLUMN tags TEXT NOT NULL DEFAULT '';
+        //         PRAGMA user_version = 2;
+        //     ")?;
+        // }
+
         Ok(())
     }
 
@@ -254,6 +274,13 @@ impl Storage {
         &self.image_dir
     }
 
+    /// 当前 schema 版本号，用于验证 migration 已正确执行
+    pub fn schema_version(&self) -> i32 {
+        let conn = self.conn.lock().unwrap();
+        conn.query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0)
+    }
+
     fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<ClipItem> {
         let clip_type_str: String = row.get(2)?;
         Ok(ClipItem {
@@ -267,5 +294,68 @@ impl Storage {
             image_path: row.get(7)?,
             char_count: row.get(8)?,
         })
+    }
+}
+
+#[cfg(test)]
+mod migration_tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn test_fresh_db_is_version_1() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+
+        let storage = Storage::new(&db_path, &img_dir).unwrap();
+        assert_eq!(storage.schema_version(), 1, "新建数据库应为 v1");
+    }
+
+    #[test]
+    fn test_existing_v0_migrates_to_v1() {
+        // 模拟旧版本数据库（user_version=0，没有 schema）
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("legacy.db");
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+
+        // 先建一个空的旧数据库（version=0）
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch("PRAGMA user_version = 0;").unwrap();
+        }
+
+        // Storage::new 应自动 migrate 到 v1
+        let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
+        assert_eq!(storage.schema_version(), 1, "旧数据库应 migrate 到 v1");
+
+        // 数据表应已创建
+        let conn = storage.conn.lock().unwrap();
+        let count: i32 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='clip_items'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "clip_items 表应存在");
+    }
+
+    #[test]
+    fn test_migration_is_idempotent() {
+        // 同一个数据库 open 两次，不应报错也不应重置数据
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+
+        let s1 = Storage::new(&db_path, &img_dir).unwrap();
+        drop(s1);
+
+        // 第二次 open 不应出错
+        let s2 = Storage::new(&db_path, &img_dir).unwrap();
+        assert_eq!(s2.schema_version(), 1);
     }
 }
