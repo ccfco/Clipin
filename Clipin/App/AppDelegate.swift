@@ -10,9 +10,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewModel: ClipboardViewModel?
     private let hotKey = HotKeyService()
 
-    // 呼出面板前记录的前台应用，粘贴后切回
-    private var previousApp: NSRunningApplication?
-
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupPanel()
@@ -35,18 +32,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupPanel() {
         let vm = ClipboardViewModel(core: appState.core)
-
-        // ViewModel 只通知"用户请求粘贴"，AppDelegate 负责完整编排
         vm.onPasteRequested = { [weak self] item in
             self?.performPaste(item)
         }
         vm.onCloseRequested = { [weak self] in
             self?.hidePanel()
         }
-
         self.viewModel = vm
-
-        let hostingView = NSHostingView(rootView: MainPanel(viewModel: vm))
 
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
@@ -54,7 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.contentView = hostingView
+        panel.contentView = NSHostingView(rootView: MainPanel(viewModel: vm))
         panel.titlebarAppearsTransparent = true
         panel.titleVisibility = .hidden
         panel.isMovableByWindowBackground = true
@@ -62,6 +54,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
+        panel.becomesKeyOnlyIfNeeded = false
 
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
@@ -71,7 +64,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.panel = panel
     }
 
-    // MARK: - Clipboard Monitoring
+    // MARK: - Monitoring
 
     private func startMonitoring() {
         let monitor = ClipboardMonitor(core: appState.core)
@@ -91,7 +84,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey.start()
     }
 
-    // MARK: - Panel Show/Hide
+    // MARK: - Show / Hide
 
     @objc func togglePanel() {
         guard let panel else { return }
@@ -103,67 +96,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showPanel() {
-        // 记录当前前台应用，关闭时恢复焦点
-        previousApp = NSWorkspace.shared.frontmostApplication
         viewModel?.loadItems()
+        // makeKeyAndOrderFront 让面板接收键盘事件
+        // 不调 NSApp.activate —— 保持之前的应用为前台，粘贴时不需要切回
         panel?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func hidePanel() {
         panel?.orderOut(nil)
-        previousApp?.activate()
-        previousApp = nil
     }
 
     // MARK: - Paste
 
-    /// 完整粘贴流程：暂停监控 → 写剪贴板 → 隐藏面板 → 等焦点切回 → 模拟 Cmd+V → 恢复监控
     private func performPaste(_ item: ClipItem) {
-        guard let target = previousApp else {
-            // 没有目标应用时，只写剪贴板
-            monitor?.pause()
-            PasteService.writeToClipboard(item)
-            hidePanel()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.monitor?.resume()
-            }
-            return
-        }
-
+        // 暂停监控避免把自己写入的内容存一遍
         monitor?.pause()
         PasteService.writeToClipboard(item)
 
-        // 隐藏面板并切回目标应用
-        panel?.orderOut(nil)
-        previousApp = nil
+        // 隐藏面板，此时之前的应用自然重新获得键盘焦点
+        hidePanel()
 
-        // 监听目标应用激活，确认焦点到位后再模拟按键
-        var observer: NSObjectProtocol?
-        observer = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let activated = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  activated.processIdentifier == target.processIdentifier else { return }
-
-            // 目标应用已激活，移除 observer 并模拟粘贴
-            if let obs = observer {
-                NSWorkspace.shared.notificationCenter.removeObserver(obs)
-            }
+        // 极短延迟等面板动画完成，前台应用不变所以不需要切换等待
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             PasteService.simulatePaste()
-            self?.monitor?.resume()
-        }
-
-        target.activate()
-
-        // 保底：2 秒后如果通知没触发也清理（目标应用已经在前台的情况）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-            if let obs = observer {
-                NSWorkspace.shared.notificationCenter.removeObserver(obs)
-                observer = nil
-            }
             self?.monitor?.resume()
         }
     }
