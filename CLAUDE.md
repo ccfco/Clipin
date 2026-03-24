@@ -26,8 +26,13 @@ cd rust && cargo test --lib
 
 ## 关键路径
 
-- `rust/src/lib.rs` — Rust 入口 + UniFFI 导出
-- `Clipin/App/` — SwiftUI App 入口
+- `rust/src/lib.rs` — Rust 入口 + UniFFI 导出（ClipinCore API）
+- `rust/src/storage.rs` — SQLite + FTS5 存储层
+- `Clipin/App/AppDelegate.swift` — Menu bar + NSPanel + 生命周期
+- `Clipin/Views/MainPanel.swift` — Raycast 风格双栏布局
+- `Clipin/Services/ClipboardMonitor.swift` — 剪贴板轮询
+- `Clipin/Services/HotKeyService.swift` — ⌘+Shift+V 全局快捷键
+- `Clipin/Services/PasteService.swift` — 模拟 Cmd+V 粘贴
 - `Clipin/Generated/` — UniFFI 自动生成（.gitignore）
 - `scripts/build-rust.sh` — 构建脚本
 - `project.yml` — xcodegen 配置
@@ -37,3 +42,6 @@ cd rust && cargo test --lib
 - **Bridging Header**（非 modulemap）：解决 Xcode Explicit Module Build 下 UniFFI C 头文件导入问题
 - **xcodegen**：代码化管理 Xcode 项目，.xcodeproj 不提交
 - **LSUIElement=true**：纯 menu bar app，不出现在 Dock
+- **AppState: `@unchecked Sendable`**（非 `@MainActor`）：ClipinCore 内部用 Mutex 保证线程安全
+- **AppDelegate: `@MainActor`**：所有 UI 交互在主线程，避免 Swift 6 actor isolation 错误
+- **不沙盒**：CGEvent tap 需要辅助功能权限，沙盒限制太多
