@@ -8,11 +8,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let appState = AppState.shared
     private var monitor: ClipboardMonitor?
     private var viewModel: ClipboardViewModel?
+    private let hotKey = HotKeyService()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupPanel()
         startMonitoring()
+        setupHotKey()
         print("✅ Clipin launched")
     }
 
@@ -74,6 +76,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         monitor.start()
         self.monitor = monitor
+    }
+
+    // MARK: - Global Hotkey
+
+    private func setupHotKey() {
+        hotKey.onToggle = { [weak self] in
+            self?.togglePanel()
+        }
+        hotKey.start()
     }
 
     @objc private func togglePanel() {

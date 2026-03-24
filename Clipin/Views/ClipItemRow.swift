@@ -58,7 +58,7 @@ struct ClipItemRow: View {
         case .text, .url:
             return item.content.isEmpty ? "(empty)" : item.content
         case .image:
-            return item.imagePath ?? "Image"
+            return "Image"
         case .file:
             let url = URL(fileURLWithPath: item.content)
             return url.lastPathComponent

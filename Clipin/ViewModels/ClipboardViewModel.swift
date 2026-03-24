@@ -56,7 +56,6 @@ final class ClipboardViewModel: ObservableObject {
     /// 按日期分组
     var groupedItems: [(String, [ClipItem])] {
         let calendar = Calendar.current
-        let now = Date()
 
         var pinned: [ClipItem] = []
         var today: [ClipItem] = []
