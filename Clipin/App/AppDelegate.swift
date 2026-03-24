@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Combine
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -9,12 +10,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: ClipboardMonitor?
     private var viewModel: ClipboardViewModel?
     private let hotKey = HotKeyService()
+    private var cancellables = Set<AnyCancellable>()
+    private var permissionWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupPanel()
         startMonitoring()
         setupHotKey()
+        checkPermissionOnLaunch()
     }
 
     // MARK: - Menu Bar
@@ -104,6 +108,43 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hidePanel() {
         panel?.orderOut(nil)
+    }
+
+    // MARK: - Permission
+
+    private func checkPermissionOnLaunch() {
+        let pm = PermissionManager.shared
+        guard !pm.isAccessibilityGranted else { return }
+
+        let view = PermissionView(permission: pm)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 400, height: 420),
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = NSHostingView(rootView: view)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.center()
+        window.level = .floating
+
+        // 授权后自动关闭
+        NotificationCenter.default.addObserver(forName: .init("AccessibilityGranted"), object: nil, queue: .main) { [weak window] _ in
+            window?.close()
+        }
+
+        // 轮询到授权时发通知
+        pm.$isAccessibilityGranted
+            .filter { $0 }
+            .first()
+            .receive(on: RunLoop.main)
+            .sink { [weak window] _ in window?.close() }
+            .store(in: &cancellables)
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        self.permissionWindow = window
     }
 
     // MARK: - Paste
