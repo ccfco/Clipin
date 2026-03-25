@@ -31,8 +31,8 @@ struct MainPanel: View {
                     .frame(width: 260)
                     .background(Color.primary.opacity(0.04))
 
-                // 左右分栏竖向细线
-                Rectangle().fill(Color.primary.opacity(0.08)).frame(width: 0.5)
+                // 左右分栏竖向分隔线（参考 ChatGPT 可见度）
+                Rectangle().fill(Color.primary.opacity(0.1)).frame(width: 1)
 
                 PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -45,14 +45,17 @@ struct MainPanel: View {
             bottomBar
         }
         .frame(width: 760, height: 520)
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.88))
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.96))
         .background(.ultraThinMaterial)
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.22), radius: 32, y: 16)
+        // 多层阴影叠加：宽散射 + 中层 + 贴边，制造卡片深度感
+        .shadow(color: .black.opacity(0.04), radius: 64, y: 16)
+        .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
+        .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
         .onAppear {
             viewModel.loadItems()
         }
