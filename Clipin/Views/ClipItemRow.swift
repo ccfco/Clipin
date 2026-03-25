@@ -33,10 +33,10 @@ func detectHexColor(in text: String) -> Color? {
     }
 }
 
-/// bundle identifier → app icon 缓存，避免每次渲染都查 NSWorkspace
+/// bundle identifier → app icon 缓存
 private let appIconCache = AppIconCache()
 
-/// 图片缩略图缓存，避免每次渲染都从磁盘加载
+/// 图片缩略图缓存
 private let thumbnailCache = ThumbnailCache()
 
 private final class AppIconCache: @unchecked Sendable {
@@ -63,7 +63,6 @@ private final class ThumbnailCache: @unchecked Sendable {
         defer { lock.unlock() }
         if let cached = cache[path] { return cached }
         guard let image = NSImage(contentsOfFile: path) else { return nil }
-        // 缩放到 56pt（2x retina），避免缓存原图占用过多内存
         let thumbSize: CGFloat = 56
         let thumb = NSImage(size: NSSize(width: thumbSize, height: thumbSize))
         thumb.lockFocus()
@@ -75,88 +74,77 @@ private final class ThumbnailCache: @unchecked Sendable {
     }
 }
 
-/// 列表中的单行剪贴板项
+/// 列表中的单行剪贴板项 — 极简单行布局
 struct ClipItemRow: View {
     let item: ClipListItem
     var shortcutNumber: Int? = nil
     var searchQuery: String = ""
+    var isSelected: Bool = false
+    var isHovered: Bool = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            // 图片类型显示缩略图；颜色值显示色块；其他显示图标
-            if item.clipType == .image, let path = item.imagePath,
-               let nsImage = thumbnailCache.thumbnail(for: path) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 28, height: 28)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(color)
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
-                }
-                .frame(width: 28, height: 28)
-            } else {
-                Image(systemName: iconName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.08))
-                    )
-            }
+        HStack(spacing: 9) {
+            typeIndicator
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(highlightedDisplayText)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-
-                HStack(spacing: 4) {
-                    if let bundleId = item.sourceApp,
-                       let icon = appIconCache.icon(for: bundleId) {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .frame(width: 12, height: 12)
-                    }
-
-                    if let sourceName = item.sourceName, !sourceName.isEmpty {
-                        Text(sourceName)
-                    }
-
-                    Text(timeLabel)
-                        .fontDesign(.monospaced)
-                }
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+            Text(highlightedDisplayText)
+                .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Pin 标记 — 仅选中/hover 时可见
+            if item.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .opacity(isSelected || isHovered ? 1 : 0.3)
             }
 
-            Spacer(minLength: 8)
-
+            // ⌘N 快捷键徽章 — 仅选中/hover 时出现
             if let n = shortcutNumber {
                 Text("⌘\(n)")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
+                    .foregroundStyle(.quaternary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
                     .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.15))
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(Color.primary.opacity(0.06))
                     )
+                    .opacity(isSelected || isHovered ? 1 : 0)
             }
 
-            if item.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-            }
+            // 时间 — 右对齐，退场角色
+            Text(timeLabel)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.vertical, 7)
+    }
+
+    /// 类型指示器：图片显示缩略图，颜色值显示色块，其他显示单色图标
+    @ViewBuilder
+    private var typeIndicator: some View {
+        if item.clipType == .image, let path = item.imagePath,
+           let nsImage = thumbnailCache.thumbnail(for: path) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 20, height: 20)
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5, style: .continuous).fill(color)
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+            }
+            .frame(width: 20, height: 20)
+        } else {
+            Image(systemName: iconName)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
+        }
     }
 
     private var displayText: String {
@@ -181,7 +169,6 @@ struct ClipItemRow: View {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return result }
 
-        // 大小写不敏感查找所有匹配范围并加高亮背景
         var searchStart = text.startIndex
         while searchStart < text.endIndex,
               let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
@@ -197,27 +184,10 @@ struct ClipItemRow: View {
 
     private var iconName: String {
         switch item.clipType {
-        case .text:
-            return "doc.text"
-        case .image:
-            return "photo"
-        case .file:
-            return "folder"
-        case .url:
-            return "link"
-        }
-    }
-
-    private var iconColor: Color {
-        switch item.clipType {
-        case .text:
-            return .accentColor
-        case .image:
-            return .green
-        case .file:
-            return .orange
-        case .url:
-            return .blue
+        case .text:  return "doc.text"
+        case .image: return "photo"
+        case .file:  return "folder"
+        case .url:   return "link"
         }
     }
 
@@ -230,14 +200,14 @@ struct ClipItemRow: View {
     }
 
     private static let timeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
     }()
 
     private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "M/d"
-        return formatter
+        let f = DateFormatter()
+        f.dateFormat = "M/d"
+        return f
     }()
 }

@@ -24,7 +24,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
         let field = InterceptingTextField()
         field.isBordered = false
         field.backgroundColor = .clear
-        field.font = .systemFont(ofSize: 14)
+        field.font = .systemFont(ofSize: 15)
         field.placeholderString = placeholder
         field.focusRingType = .none
         field.delegate = context.coordinator
@@ -120,8 +120,8 @@ struct SearchBar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(Color(nsColor: .windowBackgroundColor).opacity(0.75))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(Color.primary.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             Menu {
                 Button("All Types") { typeFilter = nil }
@@ -147,7 +147,7 @@ struct SearchBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color.primary.opacity(0.05))
     }
 
     private var filterLabel: String {

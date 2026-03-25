@@ -22,7 +22,6 @@ struct PreviewPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     @ViewBuilder
@@ -36,10 +35,10 @@ struct PreviewPane: View {
             } else {
                 SelectableTextPreview(
                     text: item.content,
-                    font: .monospacedSystemFont(ofSize: 13, weight: .regular),
+                    font: .monospacedSystemFont(ofSize: 12, weight: .regular),
                     searchQuery: searchQuery
                 )
-                .padding(20)
+                .padding(24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
 
@@ -58,7 +57,7 @@ struct PreviewPane: View {
                     searchQuery: searchQuery
                 )
             }
-            .padding(20)
+            .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
         case .image:
@@ -73,7 +72,7 @@ struct PreviewPane: View {
                     unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
                 }
             }
-            .padding(20)
+            .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
         case .file:
@@ -101,7 +100,7 @@ struct PreviewPane: View {
                 )
                 .frame(minHeight: 80)
             }
-            .padding(20)
+            .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
@@ -147,23 +146,23 @@ struct PreviewPane: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxHeight: 170)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color.primary.opacity(0.04))
     }
 
     private func infoRow(_ label: String, value: String, icon: NSImage? = nil) -> some View {
         HStack(alignment: .center, spacing: 8) {
             Text(label)
-                .font(.system(size: 11))
+                .font(.system(size: 10))
                 .foregroundStyle(.tertiary)
             Spacer()
             if let icon {
                 Image(nsImage: icon)
                     .resizable()
-                    .frame(width: 14, height: 14)
+                    .frame(width: 13, height: 13)
             }
             Text(value)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.primary)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
                 .textSelection(.enabled)
         }
     }
@@ -344,7 +343,13 @@ private struct SelectableTextPreview: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
         let textColor = NSColor.labelColor
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = 4
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: textColor,
+            .paragraphStyle: para
+        ]
         let attributed = NSMutableAttributedString(string: text, attributes: attrs)
 
         // 搜索高亮

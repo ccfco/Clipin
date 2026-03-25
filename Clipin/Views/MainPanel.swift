@@ -26,22 +26,23 @@ struct MainPanel: View {
             HStack(spacing: 0) {
                 itemList
                     .frame(width: 260)
-                    .background(Color(nsColor: .controlBackgroundColor))
+                    .background(Color.primary.opacity(0.04))
 
                 PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .windowBackgroundColor))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
 
             bottomBar
         }
         .frame(width: 760, height: 520)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.ultraThinMaterial)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
+        .shadow(color: .black.opacity(0.22), radius: 32, y: 16)
         .onAppear {
             viewModel.loadItems()
         }
@@ -83,7 +84,7 @@ struct MainPanel: View {
                             .padding(.vertical, 2)
                             .background(
                                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.3))
+                                    .fill(Color.primary.opacity(0.06))
                             )
                     }
                     .foregroundStyle(.primary)
@@ -116,7 +117,7 @@ struct MainPanel: View {
                             .padding(.vertical, 2)
                             .background(
                                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.3))
+                                    .fill(Color.primary.opacity(0.06))
                             )
                     }
                 }
@@ -141,7 +142,7 @@ struct MainPanel: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color.primary.opacity(0.04))
     }
 
     private var pinLabel: String {
@@ -206,11 +207,12 @@ private struct ItemListView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(.tertiary)
+            .tracking(0.5)
             .padding(.horizontal, 14)
-            .padding(.top, 10)
-            .padding(.bottom, 2)
+            .padding(.top, 12)
+            .padding(.bottom, 3)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -219,19 +221,25 @@ private struct ItemListView: View {
         let isSelected = selection.wrappedValue == item.id
         let isHovered = hoveredID == item.id
 
-        return ClipItemRow(item: item, shortcutNumber: number, searchQuery: searchQuery)
-            .id(item.id)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(
-                        isSelected
-                            ? Color(nsColor: .quaternaryLabelColor).opacity(0.6)
-                            : isHovered
-                                ? Color(nsColor: .quaternaryLabelColor).opacity(0.3)
-                                : Color.clear
-                    )
-                    .padding(.horizontal, 6)
-            )
+        return ClipItemRow(
+            item: item,
+            shortcutNumber: number,
+            searchQuery: searchQuery,
+            isSelected: isSelected,
+            isHovered: isHovered
+        )
+        .id(item.id)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    isSelected
+                        ? Color.primary.opacity(0.1)
+                        : isHovered
+                            ? Color.primary.opacity(0.05)
+                            : Color.clear
+                )
+                .padding(.horizontal, 6)
+        )
             .contentShape(Rectangle())
             .onTapGesture { selection.wrappedValue = item.id }
             .onHover { hovered in hoveredID = hovered ? item.id : nil }
