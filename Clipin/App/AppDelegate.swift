@@ -183,7 +183,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.targetAppName = previousApp?.localizedName
         viewModel?.loadItems()
 
-        // 从略微缩小 + 透明开始，动画到正常状态
+        // 每次打开时定位到鼠标所在屏幕的中央偏上，支持多显示器
+        let screen = NSScreen.screens.first(where: {
+            $0.frame.contains(NSEvent.mouseLocation)
+        }) ?? NSScreen.main ?? NSScreen.screens.first
+        if let f = screen?.visibleFrame {
+            let panelSize = panel.frame.size
+            let x = f.midX - panelSize.width / 2
+            let y = f.midY + f.height * 0.1
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        }
+
+        // 从透明开始，动画到正常状态
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
 
