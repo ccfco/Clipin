@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var previousApp: NSRunningApplication?
     private var clickOutsideMonitor: Any?
     private var keyMonitor: Any?
+    private var hideGeneration: Int = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
@@ -174,6 +175,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showPanel() {
         guard let panel else { return }
+
+        // 取消正在进行的 hide 动画（递增 generation 使旧 completion 失效）
+        hideGeneration += 1
+        panel.alphaValue = 1
+        panel.animator().alphaValue = 1
+
         let front = NSWorkspace.shared.frontmostApplication
         if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
             previousApp = front
@@ -183,7 +190,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.targetAppName = previousApp?.localizedName
         viewModel?.loadItems()
 
-        // 每次打开时定位到鼠标所在屏幕的中央偏上，支持多显示器
         let screen = NSScreen.screens.first(where: {
             $0.frame.contains(NSEvent.mouseLocation)
         }) ?? NSScreen.main ?? NSScreen.screens.first
@@ -194,7 +200,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         }
 
-        // 从透明开始，动画到正常状态
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
 
@@ -213,14 +218,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         stopClickOutsideMonitor()
         stopKeyMonitor()
 
+        hideGeneration += 1
+        let expectedGeneration = hideGeneration
+
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
+            guard let self, self.hideGeneration == expectedGeneration else { return }
             panel.orderOut(nil)
-            panel.alphaValue = 1  // 重置，下次 show 前的初始状态
-            self?.previousApp?.activate()
+            panel.alphaValue = 1
+            self.previousApp?.activate()
         })
     }
 
