@@ -53,13 +53,19 @@ struct PreviewPane: View {
     private func content(for item: ClipItem) -> some View {
         switch item.clipType {
         case .text:
-            SelectableTextPreview(
-                text: item.content,
-                font: .monospacedSystemFont(ofSize: 13, weight: .regular),
-                searchQuery: searchQuery
-            )
-            .padding(20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if let color = detectHexColor(in: item.content) {
+                ColorSwatchPreview(color: color, originalText: item.content)
+                    .padding(20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                SelectableTextPreview(
+                    text: item.content,
+                    font: .monospacedSystemFont(ofSize: 13, weight: .regular),
+                    searchQuery: searchQuery
+                )
+                .padding(20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
 
         case .url:
             VStack(alignment: .leading, spacing: 14) {
@@ -242,6 +248,76 @@ struct PreviewPane: View {
         case .file: return "folder"
         case .url: return "link"
         }
+    }
+}
+
+private struct ColorSwatchPreview: View {
+    let color: Color
+    let originalText: String
+
+    private var nsColor: NSColor {
+        NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ZStack {
+                // 浅灰底，当颜色有透明度时可见
+                Color(nsColor: .controlBackgroundColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(color)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            }
+            .frame(height: 120)
+
+            VStack(alignment: .leading, spacing: 10) {
+                colorRow("HEX", value: originalText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
+                colorRow("RGB", value: rgbString)
+                colorRow("HSL", value: hslString)
+            }
+        }
+    }
+
+    private func colorRow(_ label: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 36, alignment: .leading)
+            Text(value)
+                .font(.system(size: 12, design: .monospaced))
+                .textSelection(.enabled)
+        }
+    }
+
+    private var rgbString: String {
+        let c = nsColor
+        let r = Int((c.redComponent * 255).rounded())
+        let g = Int((c.greenComponent * 255).rounded())
+        let b = Int((c.blueComponent * 255).rounded())
+        return "rgb(\(r), \(g), \(b))"
+    }
+
+    private var hslString: String {
+        let c = nsColor
+        let r = c.redComponent, g = c.greenComponent, b = c.blueComponent
+        let maxC = max(r, g, b), minC = min(r, g, b)
+        let l = (maxC + minC) / 2
+        guard maxC != minC else {
+            return "hsl(0°, 0%, \(Int((l * 100).rounded()))%)"
+        }
+        let d = maxC - minC
+        let s = l > 0.5 ? d / (2 - maxC - minC) : d / (maxC + minC)
+        var h: CGFloat
+        switch maxC {
+        case r: h = (g - b) / d + (g < b ? 6 : 0)
+        case g: h = (b - r) / d + 2
+        default: h = (r - g) / d + 4
+        }
+        h /= 6
+        return "hsl(\(Int((h * 360).rounded()))°, \(Int((s * 100).rounded()))%, \(Int((l * 100).rounded()))%)"
     }
 }
 

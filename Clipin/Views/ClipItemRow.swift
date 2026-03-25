@@ -1,6 +1,38 @@
 import SwiftUI
 import AppKit
 
+/// 检测十六进制颜色字符串，返回 SwiftUI Color（#RGB / #RRGGBB / #RRGGBBAA）
+func detectHexColor(in text: String) -> Color? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("#"), (4...9).contains(trimmed.count) else { return nil }
+    let hex = String(trimmed.dropFirst())
+    guard hex.allSatisfy(\.isHexDigit) else { return nil }
+
+    var rgb: UInt64 = 0
+    guard Scanner(string: hex).scanHexInt64(&rgb) else { return nil }
+
+    switch hex.count {
+    case 3:
+        let r = CGFloat((rgb >> 8) & 0xF) * 17 / 255
+        let g = CGFloat((rgb >> 4) & 0xF) * 17 / 255
+        let b = CGFloat(rgb & 0xF) * 17 / 255
+        return Color(red: r, green: g, blue: b)
+    case 6:
+        let r = CGFloat((rgb >> 16) & 0xFF) / 255
+        let g = CGFloat((rgb >> 8) & 0xFF) / 255
+        let b = CGFloat(rgb & 0xFF) / 255
+        return Color(red: r, green: g, blue: b)
+    case 8:
+        let r = CGFloat((rgb >> 24) & 0xFF) / 255
+        let g = CGFloat((rgb >> 16) & 0xFF) / 255
+        let b = CGFloat((rgb >> 8) & 0xFF) / 255
+        let a = CGFloat(rgb & 0xFF) / 255
+        return Color(red: r, green: g, blue: b, opacity: a)
+    default:
+        return nil
+    }
+}
+
 /// bundle identifier → app icon 缓存，避免每次渲染都查 NSWorkspace
 private let appIconCache = AppIconCache()
 
@@ -52,7 +84,7 @@ struct ClipItemRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // 图片类型显示缩略图，其他类型显示图标
+            // 图片类型显示缩略图；颜色值显示色块；其他显示图标
             if item.clipType == .image, let path = item.imagePath,
                let nsImage = thumbnailCache.thumbnail(for: path) {
                 Image(nsImage: nsImage)
@@ -60,6 +92,14 @@ struct ClipItemRow: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: 28, height: 28)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(color)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+                }
+                .frame(width: 28, height: 28)
             } else {
                 Image(systemName: iconName)
                     .font(.system(size: 13, weight: .semibold))

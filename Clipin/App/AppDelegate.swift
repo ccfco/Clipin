@@ -188,7 +188,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.searchQuery = ""
         viewModel?.typeFilter = nil
         viewModel?.targetAppName = previousApp?.localizedName
-        viewModel?.loadItems()
+        viewModel?.loadItems(selectLatest: true)
 
         let screen = NSScreen.screens.first(where: {
             $0.frame.contains(NSEvent.mouseLocation)
