@@ -41,6 +41,20 @@ pub struct ClipItem {
     pub char_count: i32,
 }
 
+/// 列表使用的轻量摘要记录，避免长文本拖慢整个面板
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ClipListItem {
+    pub id: String,
+    pub preview: String,
+    pub clip_type: ClipType,
+    pub source_app: Option<String>,
+    pub source_name: Option<String>,
+    pub is_pinned: bool,
+    pub created_at: i64,
+    pub image_path: Option<String>,
+    pub char_count: i32,
+}
+
 /// 错误类型
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum ClipinError {

@@ -22,6 +22,10 @@ targets:
         optional: true
       - path: Clipin/Services
         optional: true
+      - path: Clipin/Resources
+        excludes:
+          - Info.plist
+        optional: true
       - path: Clipin/Generated
         optional: true
     settings:

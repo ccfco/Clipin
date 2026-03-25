@@ -7,8 +7,10 @@ struct ClipinApp: App {
     var body: some Scene {
         // Menu bar app — no main window
         Settings {
-            Text("Clipin Settings")
-                .frame(width: 300, height: 200)
+            SettingsView(
+                settings: SettingsStore.shared,
+                core: AppState.shared.core
+            )
         }
     }
 }

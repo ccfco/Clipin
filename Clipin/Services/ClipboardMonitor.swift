@@ -1,8 +1,17 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 /// 剪贴板监控 — 每 0.5s 检查 NSPasteboard.changeCount
 @MainActor
 final class ClipboardMonitor: ObservableObject {
+    private enum ClipboardPayload: Sendable {
+        case text(String, String?, String?)
+        case url(String, String?, String?)
+        case file(String, String?, String?)
+        case image(Data, String?, String?)
+    }
+
     private let core: ClipinCore
     private var timer: Timer?
     private var lastChangeCount: Int
@@ -52,57 +61,75 @@ final class ClipboardMonitor: ObservableObject {
         let sourceApp = tracker.bundleIdentifier
         let sourceName = tracker.appName
 
-        if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
-            saveImage(imageData, sourceApp: sourceApp, sourceName: sourceName)
-        } else if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
+        // 高层语义优先，低层二进制兜底
+        // file → url → image → text
+        if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
             .urlReadingFileURLsOnly: true
         ]) as? [URL], let firstURL = fileURLs.first {
-            saveFile(firstURL, sourceApp: sourceApp, sourceName: sourceName)
+            persist(.file(firstURL.path, sourceApp, sourceName))
         } else if let urlString = pasteboard.string(forType: .URL) ?? extractURL(from: pasteboard) {
-            saveContent(urlString, type: .url, sourceApp: sourceApp, sourceName: sourceName)
+            persist(.url(urlString, sourceApp, sourceName))
+        } else if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
+            persist(.image(imageData, sourceApp, sourceName))
         } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
-            saveContent(text, type: .text, sourceApp: sourceApp, sourceName: sourceName)
+            persist(.text(text, sourceApp, sourceName))
         }
     }
 
-    private func saveContent(_ content: String, type: ClipType, sourceApp: String?, sourceName: String?) {
-        _ = try? core.saveItem(
-            content: content,
-            clipType: type,
-            sourceApp: sourceApp,
-            sourceName: sourceName,
-            imagePath: nil
-        )
-        onNewItem?()
-    }
+    private func persist(_ payload: ClipboardPayload) {
+        let core = self.core
 
-    private func saveImage(_ data: Data, sourceApp: String?, sourceName: String?) {
-        let imageDir = core.imageDir()
-        let filename = UUID().uuidString + ".png"
-        let path = (imageDir as NSString).appendingPathComponent(filename)
+        Task.detached(priority: .utility) { [weak self] in
+            do {
+                switch payload {
+                case let .text(content, sourceApp, sourceName):
+                    _ = try core.saveItem(
+                        content: content,
+                        clipType: .text,
+                        sourceApp: sourceApp,
+                        sourceName: sourceName,
+                        imagePath: nil
+                    )
 
-        guard let image = NSImage(data: data),
-              let tiffData = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData),
-              let pngData = bitmap.representation(using: .png, properties: [:]) else { return }
+                case let .url(content, sourceApp, sourceName):
+                    _ = try core.saveItem(
+                        content: content,
+                        clipType: .url,
+                        sourceApp: sourceApp,
+                        sourceName: sourceName,
+                        imagePath: nil
+                    )
 
-        do {
-            try pngData.write(to: URL(fileURLWithPath: path))
-            _ = try core.saveItem(
-                content: "image",
-                clipType: .image,
-                sourceApp: sourceApp,
-                sourceName: sourceName,
-                imagePath: path
-            )
-            onNewItem?()
-        } catch {
-            print("⚠️ Failed to save image: \(error)")
+                case let .file(path, sourceApp, sourceName):
+                    _ = try core.saveItem(
+                        content: path,
+                        clipType: .file,
+                        sourceApp: sourceApp,
+                        sourceName: sourceName,
+                        imagePath: nil
+                    )
+
+                case let .image(data, sourceApp, sourceName):
+                    let imageDir = core.imageDir()
+                    let filename = UUID().uuidString + ".png"
+                    let path = (imageDir as NSString).appendingPathComponent(filename)
+                    let pngData = try Self.makePNGData(from: data)
+                    try pngData.write(to: URL(fileURLWithPath: path), options: .atomic)
+                    _ = try core.saveItem(
+                        content: "image",
+                        clipType: .image,
+                        sourceApp: sourceApp,
+                        sourceName: sourceName,
+                        imagePath: path
+                    )
+                }
+
+                guard let self else { return }
+                await self.notifyNewItem()
+            } catch {
+                print("⚠️ Failed to persist clipboard item: \(error)")
+            }
         }
-    }
-
-    private func saveFile(_ url: URL, sourceApp: String?, sourceName: String?) {
-        saveContent(url.path, type: .file, sourceApp: sourceApp, sourceName: sourceName)
     }
 
     private func extractURL(from pasteboard: NSPasteboard) -> String? {
@@ -112,4 +139,38 @@ final class ClipboardMonitor: ObservableObject {
               ["http", "https"].contains(scheme) else { return nil }
         return text
     }
+
+    nonisolated private static func makePNGData(from data: Data) throws -> Data {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            throw ClipboardMonitorError.invalidImageData
+        }
+
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            throw ClipboardMonitorError.failedToEncodePNG
+        }
+
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw ClipboardMonitorError.failedToEncodePNG
+        }
+
+        return output as Data
+    }
+
+    @MainActor
+    private func notifyNewItem() {
+        onNewItem?()
+    }
+}
+
+private enum ClipboardMonitorError: Error {
+    case invalidImageData
+    case failedToEncodePNG
 }

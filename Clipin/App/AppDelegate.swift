@@ -6,18 +6,26 @@ import Combine
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: NSPanel?
+    private var settingsWindow: NSWindow?
     private let appState = AppState.shared
+    private let settings = SettingsStore.shared
     private var monitor: ClipboardMonitor?
     private var viewModel: ClipboardViewModel?
     private let hotKey = HotKeyService()
     private var cancellables = Set<AnyCancellable>()
     private var permissionWindow: NSWindow?
+    private lazy var cleanupService = CleanupService(core: appState.core, settings: settings)
+    private var previousApp: NSRunningApplication?
+    private var clickOutsideMonitor: Any?
+    private var keyMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupPanel()
         startMonitoring()
         setupHotKey()
+        setupSettingsObservers()
+        runCleanupAndReload()
         checkPermissionOnLaunch()
     }
 
@@ -27,9 +35,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clipin")
-            button.action = #selector(togglePanel)
+            button.action = #selector(statusBarClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.target = self
         }
+    }
+
+    @objc private func statusBarClicked(_ sender: NSStatusBarButton) {
+        guard let event = NSApp.currentEvent else { return }
+        if event.type == .rightMouseUp {
+            let menu = NSMenu()
+            menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(NSMenuItem(title: "Quit Clipin", action: #selector(quitApp), keyEquivalent: "q"))
+            statusItem?.menu = menu
+            statusItem?.button?.performClick(nil)
+            // 用完后移除 menu，恢复左键 toggle 行为
+            statusItem?.menu = nil
+        } else {
+            togglePanel()
+        }
+    }
+
+    @objc private func openSettings() {
+        openSettingsWindow()
+    }
+
+    @objc private func quitApp() {
+        NSApplication.shared.terminate(nil)
     }
 
     // MARK: - Panel
@@ -39,18 +72,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         vm.onPasteRequested = { [weak self] item in
             self?.performPaste(item)
         }
+        vm.onPastePlainRequested = { [weak self] item in
+            self?.performPastePlain(item)
+        }
+        vm.onCopyRequested = { [weak self] item in
+            self?.performCopy(item)
+        }
         vm.onCloseRequested = { [weak self] in
             self?.hidePanel()
         }
         self.viewModel = vm
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
             styleMask: [.titled, .closable, .resizable, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.contentView = NSHostingView(rootView: MainPanel(viewModel: vm))
+        panel.contentView = NSHostingView(
+            rootView: MainPanel(
+                viewModel: vm,
+                onOpenSettings: { [weak self] in
+                    self?.openSettingsWindow()
+                }
+            )
+        )
         panel.titlebarAppearsTransparent = true
         panel.titleVisibility = .hidden
         panel.isMovableByWindowBackground = true
@@ -73,7 +119,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startMonitoring() {
         let monitor = ClipboardMonitor(core: appState.core)
         monitor.onNewItem = { [weak self] in
-            self?.viewModel?.loadItems()
+            self?.runCleanupAndReload(selectLatest: true)
         }
         monitor.start()
         self.monitor = monitor
@@ -85,7 +131,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey.onToggle = { [weak self] in
             self?.togglePanel()
         }
-        hotKey.start()
+    }
+
+    private func setupSettingsObservers() {
+        settings.$shortcut
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] shortcut in
+                self?.hotKey.start(with: shortcut)
+            }
+            .store(in: &cancellables)
+
+        Publishers.CombineLatest(
+            settings.$retentionDays.removeDuplicates(),
+            settings.$maxHistoryItems.removeDuplicates()
+        )
+        .dropFirst()
+        .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
+        .sink { [weak self] _, _ in
+            self?.runCleanupAndReload()
+        }
+        .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .clipHistoryDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.viewModel?.loadItems()
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Show / Hide
@@ -99,15 +172,116 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showPanel() {
+    @objc private func showPanel() {
+        let front = NSWorkspace.shared.frontmostApplication
+        if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
+            previousApp = front
+        }
+        viewModel?.searchQuery = ""
+        viewModel?.typeFilter = nil
         viewModel?.loadItems()
-        // makeKeyAndOrderFront 让面板接收键盘事件
-        // 不调 NSApp.activate —— 保持之前的应用为前台，粘贴时不需要切回
         panel?.makeKeyAndOrderFront(nil)
+        startClickOutsideMonitor()
+        startKeyMonitor()
     }
 
     private func hidePanel() {
         panel?.orderOut(nil)
+        stopClickOutsideMonitor()
+        stopKeyMonitor()
+        previousApp?.activate()
+    }
+
+    private func startClickOutsideMonitor() {
+        guard clickOutsideMonitor == nil else { return }
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.hidePanel()
+        }
+    }
+
+    private func stopClickOutsideMonitor() {
+        if let monitor = clickOutsideMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickOutsideMonitor = nil
+        }
+    }
+
+    // MARK: - Key Monitor
+
+    private func startKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, let vm = self.viewModel else { return event }
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            switch event.keyCode {
+            // ⇧Return — paste as plain text
+            case 0x24 where flags == .shift:
+                vm.pastePlainSelected()
+                return nil
+
+            // ⌘⇧P — toggle pin
+            case 0x23 where flags == [.command, .shift]:
+                vm.togglePinSelected()
+                return nil
+
+            // ⌘⌫ — delete
+            case 0x33 where flags == .command:
+                vm.deleteSelected()
+                return nil
+
+            // ⌘O — open URL/file
+            case 0x1F where flags == .command:
+                vm.openSelected()
+                return nil
+
+            default:
+                return event
+            }
+        }
+    }
+
+    private func stopKeyMonitor() {
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
+    }
+
+    private func runCleanupAndReload(selectLatest: Bool = false) {
+        let cleanup = cleanupService
+        Task.detached(priority: .utility) {
+            _ = try? await cleanup.runNow()
+        }
+        viewModel?.loadItems(selectLatest: selectLatest)
+    }
+
+    private func openSettingsWindow() {
+        let window: NSWindow
+
+        if let existingWindow = settingsWindow {
+            window = existingWindow
+        } else {
+            let newWindow = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 560, height: 520),
+                styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            newWindow.title = "Clipin Settings"
+            newWindow.titlebarAppearsTransparent = true
+            newWindow.isReleasedWhenClosed = false
+            newWindow.contentView = NSHostingView(
+                rootView: SettingsView(settings: settings, core: appState.core)
+            )
+            settingsWindow = newWindow
+            window = newWindow
+        }
+
+        settings.refreshLaunchAtLoginStatus()
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - Permission
@@ -130,11 +304,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.level = .floating
 
         // 授权后自动关闭
-        NotificationCenter.default.addObserver(forName: .init("AccessibilityGranted"), object: nil, queue: .main) { [weak window] _ in
-            window?.close()
-        }
-
-        // 轮询到授权时发通知
         pm.$isAccessibilityGranted
             .filter { $0 }
             .first()
@@ -142,24 +311,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak window] _ in window?.close() }
             .store(in: &cancellables)
 
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        // floating level 足够让窗口可见，不需要 activate 整个 app
+        window.orderFrontRegardless()
         self.permissionWindow = window
     }
 
     // MARK: - Paste
 
     private func performPaste(_ item: ClipItem) {
-        // 暂停监控避免把自己写入的内容存一遍
         monitor?.pause()
         PasteService.writeToClipboard(item)
-
-        // 隐藏面板，此时之前的应用自然重新获得键盘焦点
         hidePanel()
 
-        // 极短延迟等面板动画完成，前台应用不变所以不需要切换等待
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        previousApp?.activate()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             PasteService.simulatePaste()
+            self?.monitor?.resume()
+        }
+    }
+
+    private func performPastePlain(_ item: ClipItem) {
+        monitor?.pause()
+        PasteService.writeAsPlainText(item)
+        hidePanel()
+
+        previousApp?.activate()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            PasteService.simulatePaste()
+            self?.monitor?.resume()
+        }
+    }
+
+    private func performCopy(_ item: ClipItem) {
+        monitor?.pause()
+        PasteService.writeToClipboard(item)
+        hidePanel()
+        // 短暂延迟后恢复监控，跳过自己写入的 changeCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.monitor?.resume()
         }
     }

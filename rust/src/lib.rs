@@ -49,9 +49,34 @@ impl ClipinCore {
         self.storage.get_items(limit, offset, type_filter.as_ref())
     }
 
+    /// 获取轻量列表项，避免大文本拖慢列表渲染
+    pub fn get_list_items(
+        &self,
+        limit: i32,
+        offset: i32,
+        type_filter: Option<ClipType>,
+    ) -> Vec<ClipListItem> {
+        self.storage
+            .get_list_items(limit, offset, type_filter.as_ref())
+    }
+
     /// FTS5 全文搜索
     pub fn search(&self, query: String, type_filter: Option<ClipType>) -> Vec<ClipItem> {
         self.storage.search(&query, type_filter.as_ref())
+    }
+
+    /// 搜索轻量列表项
+    pub fn search_list_items(
+        &self,
+        query: String,
+        type_filter: Option<ClipType>,
+    ) -> Vec<ClipListItem> {
+        self.storage.search_list_items(&query, type_filter.as_ref())
+    }
+
+    /// 按 ID 获取完整记录，用于右侧详情预览
+    pub fn get_item(&self, id: String) -> Result<ClipItem, ClipinError> {
+        self.storage.get_item(&id)
     }
 
     /// 切换 Pin 状态，返回新状态
@@ -64,9 +89,36 @@ impl ClipinCore {
         self.storage.delete_item(&id)
     }
 
+    /// 导入一条记录（保留原始时间戳和 pin 状态，用于跨设备迁移）
+    pub fn import_item(
+        &self,
+        content: String,
+        clip_type: ClipType,
+        source_app: Option<String>,
+        source_name: Option<String>,
+        image_path: Option<String>,
+        is_pinned: bool,
+        created_at: i64,
+    ) -> Result<ClipItem, ClipinError> {
+        self.storage.import_item(
+            &content,
+            &clip_type,
+            source_app.as_deref(),
+            source_name.as_deref(),
+            image_path.as_deref(),
+            is_pinned,
+            created_at,
+        )
+    }
+
     /// 清理指定时间戳之前的未 pin 记录，返回清理数量
     pub fn clear_unpinned_before(&self, timestamp: i64) -> Result<i32, ClipinError> {
         self.storage.clear_unpinned_before(timestamp)
+    }
+
+    /// 保留最新 N 条未 pin 记录，其余删除
+    pub fn trim_unpinned(&self, keep_latest: i32) -> Result<i32, ClipinError> {
+        self.storage.trim_unpinned(keep_latest)
     }
 
     /// 获取图片存储目录
@@ -178,11 +230,33 @@ mod tests {
     }
 
     #[test]
+    fn test_list_items_are_truncated() {
+        let core = setup_core();
+        let content = "a".repeat(600);
+
+        core.save_item(content.clone(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        let items = core.get_list_items(10, 0, None);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].preview.len(), 240);
+
+        let full_item = core.get_item(items[0].id.clone()).unwrap();
+        assert_eq!(full_item.content, content);
+    }
+
+    #[test]
     fn test_search() {
         let core = setup_core();
 
-        core.save_item("rust programming language".into(), ClipType::Text, None, None, None)
-            .unwrap();
+        core.save_item(
+            "rust programming language".into(),
+            ClipType::Text,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
         core.save_item("swift ui tutorial".into(), ClipType::Text, None, None, None)
             .unwrap();
         core.save_item("rust cargo build".into(), ClipType::Text, None, None, None)

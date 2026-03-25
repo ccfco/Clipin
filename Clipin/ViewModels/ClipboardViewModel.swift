@@ -1,63 +1,175 @@
+import AppKit
 import Foundation
 import SwiftUI
+import Combine
+
+struct ClipSection: Identifiable {
+    let title: String
+    let items: [ClipListItem]
+    var id: String { title }
+}
 
 @MainActor
 final class ClipboardViewModel: ObservableObject {
-    @Published var items: [ClipItem] = []
     @Published var selectedItem: ClipItem?
+    @Published var selectedItemID: String?
     @Published var searchQuery: String = ""
     @Published var typeFilter: ClipType?
+    @Published private(set) var sections: [ClipSection] = []
 
     private let core: ClipinCore
+    private var items: [ClipListItem] = []
+    private var flatOrder: [ClipListItem] = []
+    private var debounce: AnyCancellable?
 
-    // AppDelegate 负责处理粘贴和关闭，ViewModel 只上报事件
     var onPasteRequested: ((ClipItem) -> Void)?
+    var onPastePlainRequested: ((ClipItem) -> Void)?
+    var onCopyRequested: ((ClipItem) -> Void)?
     var onCloseRequested: (() -> Void)?
 
     init(core: ClipinCore) {
         self.core = core
+        debounce = Publishers.CombineLatest($searchQuery, $typeFilter)
+            .dropFirst()
+            .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
+            .sink { [weak self] _, _ in self?.loadItems() }
     }
 
-    func loadItems() {
+    // MARK: - Load
+
+    func loadItems(selectLatest: Bool = false) {
+        let currentSelectionID = selectLatest ? nil : selectedItemID
+
         if searchQuery.isEmpty {
-            items = core.getItems(limit: 200, offset: 0, typeFilter: typeFilter)
+            items = core.getListItems(limit: 200, offset: 0, typeFilter: typeFilter)
         } else {
-            items = core.search(query: searchQuery, typeFilter: typeFilter)
+            items = core.searchListItems(query: searchQuery, typeFilter: typeFilter)
         }
-        // 保持当前选中，若已不在列表中则选第一个
-        if selectedItem == nil || !items.contains(where: { $0.id == selectedItem?.id }) {
-            selectedItem = items.first
+        rebuildSections()
+
+        let nextID: String?
+        if let currentSelectionID,
+           items.contains(where: { $0.id == currentSelectionID }) {
+            nextID = currentSelectionID
+        } else {
+            nextID = flatOrder.first?.id
         }
+        selectItem(id: nextID)
     }
+
+    // MARK: - Selection
+
+    func selectItem(id: String?) {
+        selectedItemID = id
+        guard let id else {
+            selectedItem = nil
+            return
+        }
+        selectedItem = try? core.getItem(id: id)
+    }
+
+    func selectNext() {
+        guard !flatOrder.isEmpty else { return }
+        guard let currentID = selectedItemID,
+              let idx = flatOrder.firstIndex(where: { $0.id == currentID }) else {
+            selectItem(id: flatOrder.first?.id)
+            return
+        }
+        selectItem(id: flatOrder[min(idx + 1, flatOrder.count - 1)].id)
+    }
+
+    func selectPrev() {
+        guard !flatOrder.isEmpty else { return }
+        guard let currentID = selectedItemID,
+              let idx = flatOrder.firstIndex(where: { $0.id == currentID }) else {
+            selectItem(id: flatOrder.last?.id)
+            return
+        }
+        selectItem(id: flatOrder[max(idx - 1, 0)].id)
+    }
+
+    // MARK: - Actions
 
     func pasteSelected() {
-        guard let item = selectedItem else { return }
+        guard let selectedItemID else { return }
+        guard let item = try? core.getItem(id: selectedItemID) else { return }
         onPasteRequested?(item)
     }
 
-    func close() {
-        onCloseRequested?()
+    func pastePlainSelected() {
+        guard let selectedItemID else { return }
+        guard let item = try? core.getItem(id: selectedItemID) else { return }
+        onPastePlainRequested?(item)
     }
 
-    func togglePin(_ item: ClipItem) {
-        _ = try? core.togglePin(id: item.id)
+    func copySelected() {
+        guard let selectedItemID else { return }
+        guard let item = try? core.getItem(id: selectedItemID) else { return }
+        onCopyRequested?(item)
+    }
+
+    func openSelected() {
+        guard let item = selectedItem else { return }
+        switch item.clipType {
+        case .url:
+            if let url = URL(string: item.content) {
+                NSWorkspace.shared.open(url)
+            }
+        case .file:
+            let url = URL(fileURLWithPath: item.content)
+            NSWorkspace.shared.open(url)
+        default:
+            break
+        }
+    }
+
+    func close() { onCloseRequested?() }
+
+    func togglePinSelected() {
+        guard let selectedItemID else { return }
+        _ = try? core.togglePin(id: selectedItemID)
         loadItems()
     }
 
-    func deleteItem(_ item: ClipItem) {
-        try? core.deleteItem(id: item.id)
-        if selectedItem?.id == item.id { selectedItem = nil }
+    func togglePin(id: String) {
+        _ = try? core.togglePin(id: id)
         loadItems()
     }
 
-    // MARK: - 按日期分组
+    func deleteSelected() {
+        guard let id = selectedItemID else { return }
+        deleteItem(id: id)
+    }
 
-    var groupedItems: [(String, [ClipItem])] {
+    func deleteItem(id: String) {
+        try? core.deleteItem(id: id)
+        if selectedItemID == id {
+            selectedItemID = nil
+            selectedItem = nil
+        }
+        loadItems()
+    }
+
+    var selectedListItem: ClipListItem? {
+        guard let selectedItemID else { return nil }
+        return items.first(where: { $0.id == selectedItemID })
+    }
+
+    // MARK: - Private
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M月d日"
+        return f
+    }()
+
+    private func rebuildSections() {
         let calendar = Calendar.current
-        var pinned: [ClipItem] = []
-        var today: [ClipItem] = []
-        var yesterday: [ClipItem] = []
-        var older: [String: [ClipItem]] = [:]
+        var pinned: [ClipListItem] = []
+        var today: [ClipListItem] = []
+        var yesterday: [ClipListItem] = []
+        var older: [(key: String, items: [ClipListItem])] = []
+        var olderMap: [String: Int] = [:]
 
         for item in items {
             if item.isPinned {
@@ -70,19 +182,25 @@ final class ClipboardViewModel: ObservableObject {
             } else if calendar.isDateInYesterday(date) {
                 yesterday.append(item)
             } else {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "M月d日"
-                older[formatter.string(from: date), default: []].append(item)
+                let key = Self.dateFormatter.string(from: date)
+                if let idx = olderMap[key] {
+                    older[idx].items.append(item)
+                } else {
+                    olderMap[key] = older.count
+                    older.append((key: key, items: [item]))
+                }
             }
         }
 
-        var result: [(String, [ClipItem])] = []
-        if !pinned.isEmpty    { result.append(("📌 Pinned", pinned)) }
-        if !today.isEmpty     { result.append(("Today", today)) }
-        if !yesterday.isEmpty { result.append(("Yesterday", yesterday)) }
-        for (key, items) in older.sorted(by: { ($0.value.first?.createdAt ?? 0) > ($1.value.first?.createdAt ?? 0) }) {
-            result.append((key, items))
+        var result: [ClipSection] = []
+        if !pinned.isEmpty    { result.append(ClipSection(title: "Pinned", items: pinned)) }
+        if !today.isEmpty     { result.append(ClipSection(title: "Today", items: today)) }
+        if !yesterday.isEmpty { result.append(ClipSection(title: "Yesterday", items: yesterday)) }
+        for group in older {
+            result.append(ClipSection(title: group.key, items: group.items))
         }
-        return result
+
+        sections = result
+        flatOrder = result.flatMap(\.items)
     }
 }

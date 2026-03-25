@@ -1,4 +1,99 @@
+import AppKit
 import Carbon.HIToolbox
+
+struct HotKeyShortcut: Codable, Equatable {
+    var keyCode: UInt32
+    var modifierFlagsRaw: UInt
+    var key: String
+
+    static let `default` = HotKeyShortcut(
+        keyCode: UInt32(kVK_ANSI_V),
+        modifierFlagsRaw: NSEvent.ModifierFlags.command.union(.shift).rawValue,
+        key: "V"
+    )
+
+    var modifierFlags: NSEvent.ModifierFlags {
+        NSEvent.ModifierFlags(rawValue: modifierFlagsRaw).intersection(.deviceIndependentFlagsMask)
+    }
+
+    var carbonModifiers: UInt32 {
+        var modifiers: UInt32 = 0
+        if modifierFlags.contains(.command) { modifiers |= UInt32(cmdKey) }
+        if modifierFlags.contains(.option) { modifiers |= UInt32(optionKey) }
+        if modifierFlags.contains(.control) { modifiers |= UInt32(controlKey) }
+        if modifierFlags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+        return modifiers
+    }
+
+    var displayString: String {
+        modifierSymbols + key
+    }
+
+    static func capture(from event: NSEvent) -> HotKeyShortcut? {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard !modifiers.intersection([.command, .option, .control, .shift]).isEmpty else {
+            return nil
+        }
+        guard !Self.ignoredKeyCodes.contains(event.keyCode) else {
+            return nil
+        }
+
+        let keyCode = UInt32(event.keyCode)
+        let key = displayKey(for: keyCode, fallback: event.charactersIgnoringModifiers)
+        return HotKeyShortcut(
+            keyCode: keyCode,
+            modifierFlagsRaw: modifiers.rawValue,
+            key: key
+        )
+    }
+
+    private var modifierSymbols: String {
+        var result = ""
+        if modifierFlags.contains(.control) { result += "^" }
+        if modifierFlags.contains(.option) { result += "⌥" }
+        if modifierFlags.contains(.shift) { result += "⇧" }
+        if modifierFlags.contains(.command) { result += "⌘" }
+        return result
+    }
+
+    private static let ignoredKeyCodes: Set<UInt16> = [
+        UInt16(kVK_Command),
+        UInt16(kVK_RightCommand),
+        UInt16(kVK_Shift),
+        UInt16(kVK_RightShift),
+        UInt16(kVK_Option),
+        UInt16(kVK_RightOption),
+        UInt16(kVK_Control),
+        UInt16(kVK_RightControl),
+        UInt16(kVK_CapsLock),
+        UInt16(kVK_Function)
+    ]
+
+    private static func displayKey(for keyCode: UInt32, fallback: String?) -> String {
+        switch Int(keyCode) {
+        case kVK_Return: return "Return"
+        case kVK_Tab: return "Tab"
+        case kVK_Space: return "Space"
+        case kVK_Delete: return "Delete"
+        case kVK_Escape: return "Esc"
+        case kVK_ForwardDelete: return "Forward Delete"
+        case kVK_LeftArrow: return "Left"
+        case kVK_RightArrow: return "Right"
+        case kVK_UpArrow: return "Up"
+        case kVK_DownArrow: return "Down"
+        case kVK_Home: return "Home"
+        case kVK_End: return "End"
+        case kVK_PageUp: return "Page Up"
+        case kVK_PageDown: return "Page Down"
+        default:
+            if let fallback,
+               let first = fallback.trimmingCharacters(in: .whitespacesAndNewlines).first {
+                return String(first).uppercased()
+            }
+            return "Key \(keyCode)"
+        }
+    }
+}
 
 /// 全局快捷键服务 — 使用 Carbon RegisterEventHotKey API
 /// 不需要辅助功能权限，是 macOS 注册全局快捷键的标准方式
@@ -8,8 +103,14 @@ final class HotKeyService: @unchecked Sendable {
 
     var onToggle: (() -> Void)?
 
-    func start() {
-        // 注册 Carbon event handler
+    func start(with shortcut: HotKeyShortcut) {
+        installHandlerIfNeeded()
+        register(shortcut)
+    }
+
+    private func installHandlerIfNeeded() {
+        guard eventHandler == nil else { return }
+
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
@@ -21,11 +122,27 @@ final class HotKeyService: @unchecked Sendable {
             }
             return noErr
         }, 1, &eventType, selfPtr, &eventHandler)
+    }
 
-        // ⌘+Shift+V → V = kVK_ANSI_V (0x09), modifiers = cmdKey + shiftKey
+    private func register(_ shortcut: HotKeyShortcut) {
+        if let ref = hotKeyRef {
+            UnregisterEventHotKey(ref)
+            hotKeyRef = nil
+        }
+
         let hotKeyID = EventHotKeyID(signature: OSType(0x434C5049), id: 1)  // "CLPI"
-        let modifiers = UInt32(cmdKey | shiftKey)
-        RegisterEventHotKey(UInt32(kVK_ANSI_V), modifiers, hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
+        let status = RegisterEventHotKey(
+            shortcut.keyCode,
+            shortcut.carbonModifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
+
+        if status != noErr {
+            print("⚠️ Failed to register hotkey: \(status)")
+        }
     }
 
     func stop() {

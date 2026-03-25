@@ -1,129 +1,181 @@
 import SwiftUI
 
-/// 主面板 — Raycast 风格双栏布局
+/// 主面板 — 偏原生 macOS 的双栏布局
 struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
+    var onOpenSettings: () -> Void = {}
 
-    init(viewModel: ClipboardViewModel) {
+    init(viewModel: ClipboardViewModel, onOpenSettings: @escaping () -> Void = {}) {
         self.viewModel = viewModel
+        self.onOpenSettings = onOpenSettings
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            // 顶部搜索栏
-            SearchBar(query: $viewModel.searchQuery, typeFilter: $viewModel.typeFilter)
+            SearchBar(
+                query: $viewModel.searchQuery,
+                typeFilter: $viewModel.typeFilter,
+                onNavigate: { delta in
+                    if delta > 0 { viewModel.selectNext() }
+                    else { viewModel.selectPrev() }
+                },
+                onSubmit: { viewModel.pasteSelected() },
+                onEscape: { viewModel.close() }
+            )
 
             Divider()
 
-            // 双栏内容区
-            HSplitView {
-                // 左侧列表
+            HStack(spacing: 0) {
                 itemList
-                    .frame(minWidth: 280, idealWidth: 320, maxWidth: 400)
+                    .frame(width: 260)
+                    .background(Color(nsColor: .controlBackgroundColor))
 
-                // 右侧预览
+                Divider()
+
                 PreviewPane(item: viewModel.selectedItem)
-                    .frame(minWidth: 300, idealWidth: 400)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(nsColor: .windowBackgroundColor))
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Divider()
 
-            // 底部工具栏
             bottomBar
         }
-        .frame(width: 720, height: 480)
+        .frame(width: 760, height: 520)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.10), radius: 18, y: 10)
         .onAppear {
             viewModel.loadItems()
         }
-        .onChange(of: viewModel.searchQuery) {
-            viewModel.loadItems()
-        }
-        .onChange(of: viewModel.typeFilter) {
-            viewModel.loadItems()
-        }
-        .onKeyPress(.return) {
-            viewModel.pasteSelected()
-            return .handled
-        }
-        .onKeyPress(.escape) {
-            viewModel.close()
-            return .handled
-        }
     }
 
-    // MARK: - 左侧列表
-
     private var itemList: some View {
-        ScrollViewReader { proxy in
-            List(selection: Binding(
-                get: { viewModel.selectedItem?.id },
-                set: { id in
-                    viewModel.selectedItem = viewModel.items.first(where: { $0.id == id })
+        ItemListView(
+            sections: viewModel.sections,
+            selection: Binding(
+                get: { viewModel.selectedItemID },
+                set: { viewModel.selectItem(id: $0) }
+            ),
+            onActivate: { item in
+                viewModel.selectItem(id: item.id)
+                viewModel.pasteSelected()
+            }
+        )
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 6) {
+            if viewModel.selectedListItem != nil {
+                ShortcutHint(keys: ["↵"], label: "Paste")
+                ShortcutHint(keys: ["⇧", "↵"], label: "Plain")
+                ShortcutHint(keys: ["⌘", "⇧", "P"], label: pinLabel)
+                ShortcutHint(keys: ["⌘", "⌫"], label: "Delete")
+
+                if let item = viewModel.selectedItem,
+                   item.clipType == .url || item.clipType == .file {
+                    ShortcutHint(keys: ["⌘", "O"], label: "Open")
                 }
-            )) {
-                ForEach(viewModel.groupedItems, id: \.0) { group, items in
-                    Section(group) {
-                        ForEach(items, id: \.id) { item in
-                            ClipItemRow(item: item, isSelected: viewModel.selectedItem?.id == item.id)
-                                .tag(item.id)
-                                .id(item.id)
+            } else {
+                Text("Clipboard History")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                onOpenSettings()
+            } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var pinLabel: String {
+        viewModel.selectedListItem?.isPinned == true ? "Unpin" : "Pin"
+    }
+}
+
+/// 快捷键提示胶囊 — 模仿 Raycast 底部 action bar 风格
+private struct ShortcutHint: View {
+    let keys: [String]
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
+                Text(key)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.3))
+                    )
+            }
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct ItemListView: View {
+    let sections: [ClipSection]
+    let selection: Binding<String?>
+    let onActivate: (ClipListItem) -> Void
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            List(selection: selection) {
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.items, id: \.id) { item in
+                            row(for: item)
                         }
+                    } header: {
+                        Text(section.title)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
                     }
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .onChange(of: selection.wrappedValue) { _, newID in
+                guard let newID else { return }
+                withAnimation(.easeInOut(duration: 0.12)) {
+                    proxy.scrollTo(newID, anchor: .center)
+                }
+            }
         }
     }
 
-    // MARK: - 底部工具栏
-
-    private var bottomBar: some View {
-        HStack {
-            if let item = viewModel.selectedItem {
-                Button {
-                    viewModel.deleteItem(item)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                        .font(.system(size: 12))
+    private func row(for item: ClipListItem) -> some View {
+        ClipItemRow(item: item, isSelected: selection.wrappedValue == item.id)
+            .tag(item.id)
+            .id(item.id)
+            .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded {
+                    onActivate(item)
                 }
-                .buttonStyle(.plain)
-
-                Button {
-                    viewModel.togglePin(item)
-                } label: {
-                    Label(item.isPinned ? "Unpin" : "Pin", systemImage: item.isPinned ? "pin.slash" : "pin")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
-
-                Text("Clipboard History")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-
-                Spacer()
-
-                // 粘贴快捷键提示
-                HStack(spacing: 4) {
-                    Text("Paste")
-                        .font(.system(size: 12))
-                    Text("↵")
-                        .font(.system(size: 11, design: .monospaced))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 2)
-                        .background(.quaternary)
-                        .clipShape(RoundedRectangle(cornerRadius: 3))
-                }
-            } else {
-                Spacer()
-                Text("Clipboard History")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-                Spacer()
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+            )
     }
 }

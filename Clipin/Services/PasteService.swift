@@ -32,6 +32,21 @@ enum PasteService {
         }
     }
 
+    /// 以纯文本写回剪贴板（去除富文本格式，图片/文件转为路径文本）
+    static func writeAsPlainText(_ item: ClipItem) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+
+        switch item.clipType {
+        case .text, .url:
+            pasteboard.setString(item.content, forType: .string)
+        case .image:
+            pasteboard.setString(item.imagePath ?? "image", forType: .string)
+        case .file:
+            pasteboard.setString(item.content, forType: .string)
+        }
+    }
+
     /// 模拟 Cmd+V 按键
     static func simulatePaste() {
         let source = CGEventSource(stateID: .hidSystemState)
