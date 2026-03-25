@@ -5,6 +5,7 @@ struct ClipItemRow: View {
     let item: ClipListItem
     let isSelected: Bool
     var shortcutNumber: Int? = nil
+    var searchQuery: String = ""
 
     var body: some View {
         HStack(spacing: 10) {
@@ -28,10 +29,9 @@ struct ClipItemRow: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(displayText)
+                Text(highlightedDisplayText)
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
-                    .foregroundStyle(isSelected ? .primary : .primary)
 
                 HStack(spacing: 6) {
                     if let sourceName = item.sourceName, !sourceName.isEmpty {
@@ -91,6 +91,27 @@ struct ClipItemRow: View {
             let url = URL(fileURLWithPath: item.preview)
             return url.lastPathComponent.isEmpty ? item.preview : url.lastPathComponent
         }
+    }
+
+    private var highlightedDisplayText: AttributedString {
+        let text = displayText
+        var result = AttributedString(text)
+
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return result }
+
+        // 大小写不敏感查找所有匹配范围并加高亮背景
+        var searchStart = text.startIndex
+        while searchStart < text.endIndex,
+              let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
+            if let attrRange = Range(range, in: result) {
+                result[attrRange].backgroundColor = .accentColor.opacity(0.25)
+                result[attrRange].foregroundColor = .primary
+            }
+            searchStart = range.upperBound
+        }
+
+        return result
     }
 
     private var iconName: String {

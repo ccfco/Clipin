@@ -60,6 +60,7 @@ struct MainPanel: View {
             sections: viewModel.sections,
             isEmpty: viewModel.isEmpty,
             hasActiveFilter: viewModel.hasActiveFilter,
+            searchQuery: viewModel.searchQuery,
             selection: Binding(
                 get: { viewModel.selectedItemID },
                 set: { viewModel.selectItem(id: $0) }
@@ -146,6 +147,7 @@ private struct ItemListView: View {
     let sections: [ClipSection]
     let isEmpty: Bool
     let hasActiveFilter: Bool
+    let searchQuery: String
     let selection: Binding<String?>
     let onActivate: (ClipListItem) -> Void
     let onPin: (ClipListItem) -> Void
@@ -216,7 +218,7 @@ private struct ItemListView: View {
         let globalIndex = flatIDs.firstIndex(of: item.id)
         let shortcutNumber = globalIndex.flatMap { $0 < 9 ? $0 + 1 : nil }
 
-        return ClipItemRow(item: item, isSelected: selection.wrappedValue == item.id, shortcutNumber: shortcutNumber)
+        return ClipItemRow(item: item, isSelected: selection.wrappedValue == item.id, shortcutNumber: shortcutNumber, searchQuery: searchQuery)
             .tag(item.id)
             .id(item.id)
             .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
