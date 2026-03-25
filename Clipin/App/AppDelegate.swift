@@ -277,7 +277,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
 
             // ⌘C — copy to clipboard (without pasting)
+            // 如果焦点在文本控件且有选区，放行给系统处理
             case 0x08 where flags == .command:
+                if let responder = self.panel?.firstResponder as? NSTextView,
+                   responder.selectedRange().length > 0 {
+                    return event
+                }
                 vm.copySelected()
                 return nil
 
