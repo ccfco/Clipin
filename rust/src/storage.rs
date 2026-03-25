@@ -128,7 +128,12 @@ impl Storage {
         image_path: Option<&str>,
     ) -> Result<ClipItem, ClipinError> {
         let conn = self.conn.lock().unwrap();
-        let hash = Self::content_hash(content, clip_type);
+        // 图片用 image_path 计算 hash（content 固定为 "image"，否则所有图片 hash 相同）
+        let hash_input = match clip_type {
+            ClipType::Image => image_path.unwrap_or(content),
+            _ => content,
+        };
+        let hash = Self::content_hash(hash_input, clip_type);
         let now = chrono::Utc::now().timestamp_millis();
         let char_count = content.chars().count() as i32;
 

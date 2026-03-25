@@ -2,10 +2,17 @@ import AppKit
 import SwiftUI
 import Combine
 
+/// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
+/// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
+private final class ClipinPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private var panel: NSPanel?
+    private var panel: ClipinPanel?
     private var settingsWindow: NSWindow?
     private let appState = AppState.shared
     private let settings = SettingsStore.shared
@@ -84,7 +91,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.viewModel = vm
 
-        let panel = NSPanel(
+        let panel = ClipinPanel(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
