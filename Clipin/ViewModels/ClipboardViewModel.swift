@@ -234,6 +234,14 @@ final class ClipboardViewModel: ObservableObject {
         applyActionFilter()
     }
 
+    @discardableResult
+    func clearActionQuery() -> Bool {
+        guard isShowingActions, !actionQuery.isEmpty else { return false }
+        actionQuery = ""
+        applyActionFilter()
+        return true
+    }
+
     func setTypeFilterByIndex(_ index: Int) {
         switch index {
         case 0: typeFilter = nil

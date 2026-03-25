@@ -301,7 +301,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 case 0x30:  // Tab / Shift-Tab 在动作面板内不应泄漏到类型筛选
                     return nil
                 case 0x35:  // Escape
-                    vm.hideActionsPalette(restoreFocus: true)
+                    if !vm.clearActionQuery() {
+                        vm.hideActionsPalette(restoreFocus: true)
+                    }
                     return nil
                 default:
                     if shouldRouteEventToPalette(event, flags: flags),

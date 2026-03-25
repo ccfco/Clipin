@@ -157,7 +157,7 @@ struct ActionPalette: View {
             }
 
             if !query.isEmpty {
-                Text("\(actions.count) action\(actions.count == 1 ? "" : "s")")
+                Text("Esc clears query, Esc again closes · \(actions.count) action\(actions.count == 1 ? "" : "s")")
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.tertiary)
             }
@@ -227,7 +227,9 @@ struct ActionPalette: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            Text("Keep typing to narrow down available actions, or press Escape to close.")
+            Text(query.isEmpty
+                 ? "Keep typing to narrow down available actions, or press Escape to close."
+                 : "No matches yet. Press Escape to clear the filter, then Escape again to close.")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
