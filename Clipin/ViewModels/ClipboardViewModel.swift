@@ -73,6 +73,7 @@ final class ClipboardViewModel: ObservableObject {
     var onPasteRequested: ((ClipItem) -> Void)?
     var onPastePlainRequested: ((ClipItem) -> Void)?
     var onCopyRequested: ((ClipItem) -> Void)?
+    var onQuickLookRequested: ((ClipItem) -> Void)?
     var onCloseRequested: (() -> Void)?
 
     init(core: ClipinCore) {
@@ -176,6 +177,11 @@ final class ClipboardViewModel: ObservableObject {
         guard let selectedItemID else { return }
         guard let item = try? core.getItem(id: selectedItemID) else { return }
         onCopyRequested?(item)
+    }
+
+    func quickLookSelected() {
+        guard let item = currentSelectedItem() else { return }
+        onQuickLookRequested?(item)
     }
 
     func openSelected() {
@@ -294,7 +300,19 @@ final class ClipboardViewModel: ObservableObject {
     /// 是否正在搜索或过滤
     var hasActiveFilter: Bool { !searchQuery.isEmpty || typeFilter != nil }
 
+    var canTriggerQuickLookWithSpace: Bool {
+        selectedItemID != nil && searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     // MARK: - Private
+
+    func currentSelectedItem() -> ClipItem? {
+        guard let selectedItemID else { return nil }
+        if selectedItem?.id == selectedItemID {
+            return selectedItem
+        }
+        return try? core.getItem(id: selectedItemID)
+    }
 
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()

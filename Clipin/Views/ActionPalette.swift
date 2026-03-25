@@ -195,6 +195,10 @@ struct ActionPaletteBuilder {
             viewModel.copySelected()
         })
 
+        list.append(PaletteAction("Quick Look", systemImage: "space", badge: "Space", section: .primary) {
+            viewModel.quickLookSelected()
+        })
+
         list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P") {
             viewModel.togglePinSelected()
         })

@@ -208,6 +208,11 @@ struct MainPanel: View {
                 )
                 .padding(.leading, 10)
 
+                if viewModel.canTriggerQuickLookWithSpace {
+                    keyBadge(label: "Quick Look", key: "Space")
+                        .padding(.leading, 10)
+                }
+
                 Spacer()
 
                 Button { viewModel.toggleActionsPalette() } label: {

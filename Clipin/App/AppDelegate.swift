@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import QuickLookUI
 
 /// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
@@ -26,6 +27,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickOutsideMonitor: Any?
     private var keyMonitor: Any?
     private var hideGeneration: Int = 0
+    private let quickLookService = QuickLookService()
+    private var quickLookItems: [NSURL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
@@ -86,9 +89,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         vm.onCopyRequested = { [weak self] item in
             self?.performCopy(item)
         }
+        vm.onQuickLookRequested = { [weak self] item in
+            self?.toggleQuickLook(for: item)
+        }
         vm.onCloseRequested = { [weak self] in
             self?.hidePanel()
         }
+
+        Publishers.CombineLatest(
+            vm.$searchQuery.removeDuplicates(),
+            vm.$typeFilter.removeDuplicates()
+        )
+        .dropFirst()
+        .receive(on: RunLoop.main)
+        .sink { [weak self] _, _ in
+            self?.closeQuickLook()
+        }
+        .store(in: &cancellables)
         self.viewModel = vm
 
         let panel = ClipinPanel(
@@ -227,6 +244,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.hideActionsPalette()
         stopClickOutsideMonitor()
         stopKeyMonitor()
+        closeQuickLook(restorePanelFocus: false)
 
         hideGeneration += 1
         let expectedGeneration = hideGeneration
@@ -286,6 +304,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             switch event.keyCode {
+            // Space — 当搜索框为空时，进入系统 Quick Look
+            case 0x31 where flags.isEmpty && vm.canTriggerQuickLookWithSpace:
+                vm.quickLookSelected()
+                return nil
+
             // Tab / Shift-Tab — 全局循环筛选（不依赖搜索框焦点）
             case 0x30 where flags.isEmpty:
                 vm.cycleTypeFilter()
@@ -298,9 +321,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // 注意：不要使用 flags.isEmpty，箭头键自带 .numericPad 等隐藏修饰符
             case 0x7E:
                 vm.selectPrev()
+                self.refreshQuickLookIfNeeded()
                 return nil
             case 0x7D:
                 vm.selectNext()
+                self.refreshQuickLookIfNeeded()
                 return nil
 
             // Return — 粘贴选中项（全局生效）
@@ -321,6 +346,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // ⌘⌫ — delete
             case 0x33 where flags == .command:
                 vm.deleteSelected()
+                self.refreshQuickLookIfNeeded()
                 return nil
 
             // ⌘O — open URL/file
@@ -368,6 +394,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4]
                     if let index = optMapping[event.keyCode] {
                         vm.setTypeFilterByIndex(index)
+                        self.refreshQuickLookIfNeeded()
                         return nil
                     }
                 }
@@ -511,5 +538,100 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
             }
         }
+    }
+
+    private func toggleQuickLook(for item: ClipItem) {
+        if QLPreviewPanel.sharedPreviewPanelExists(),
+           QLPreviewPanel.sharedPreviewPanel().isVisible {
+            closeQuickLook()
+            return
+        }
+
+        showQuickLook(for: item)
+    }
+
+    private func refreshQuickLookIfNeeded() {
+        guard QLPreviewPanel.sharedPreviewPanelExists(),
+              QLPreviewPanel.sharedPreviewPanel().isVisible,
+              let item = viewModel?.currentSelectedItem() else { return }
+        showQuickLook(for: item, preserveVisibility: true)
+    }
+
+    private func showQuickLook(for item: ClipItem, preserveVisibility: Bool = false) {
+        guard let panel = activeQuickLookPanel() else { return }
+
+        do {
+            let items = try quickLookService.preparePreviewItems(for: item)
+            guard !items.isEmpty else {
+                closeQuickLook()
+                return
+            }
+
+            quickLookItems = items
+            panel.dataSource = self
+            panel.delegate = self
+            panel.reloadData()
+            panel.currentPreviewItemIndex = 0
+
+            if !preserveVisibility {
+                panel.makeKeyAndOrderFront(nil)
+            } else {
+                panel.refreshCurrentPreviewItem()
+            }
+        } catch {
+            print("⚠️ Failed to prepare Quick Look preview: \(error)")
+            closeQuickLook()
+        }
+    }
+
+    private func closeQuickLook(restorePanelFocus: Bool = true) {
+        guard QLPreviewPanel.sharedPreviewPanelExists() else { return }
+        let panel = QLPreviewPanel.sharedPreviewPanel()
+        if panel.isVisible {
+            panel.orderOut(nil)
+        }
+        panel.dataSource = nil
+        panel.delegate = nil
+        quickLookItems.removeAll()
+        quickLookService.clearStagedFiles()
+        if restorePanelFocus {
+            self.panel?.makeKeyAndOrderFront(nil)
+            NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+        }
+    }
+
+    private func activeQuickLookPanel() -> QLPreviewPanel? {
+        QLPreviewPanel.sharedPreviewPanel()
+    }
+}
+
+extension AppDelegate: QLPreviewPanelDataSource, QLPreviewPanelDelegate {
+    func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
+        quickLookItems.count
+    }
+
+    func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
+        guard quickLookItems.indices.contains(index) else { return nil }
+        return quickLookItems[index]
+    }
+
+    func previewPanel(_ panel: QLPreviewPanel!, handle event: NSEvent!) -> Bool {
+        guard event.type == .keyDown else { return false }
+
+        if event.keyCode == 0x31 || event.keyCode == 0x35 {
+            closeQuickLook()
+            return true
+        }
+
+        return false
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              window == activeQuickLookPanel() else { return }
+        quickLookItems.removeAll()
+        quickLookService.clearStagedFiles()
+        panel?.makeKeyAndOrderFront(nil)
+        NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
     }
 }
