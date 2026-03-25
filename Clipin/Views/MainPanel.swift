@@ -209,12 +209,14 @@ struct MainPanel: View {
             }
 
             Button { viewModel.togglePanelPin() } label: {
-                Image(systemName: viewModel.isPanelPinned ? "lock.fill" : "lock.open")
-                    .font(.system(size: 12))
-                    .foregroundStyle(viewModel.isPanelPinned ? Color.accentColor : Color.secondary)
+                keyBadge(
+                    label: viewModel.isPanelPinned ? "Pinned" : "Stay",
+                    key: "⌘⇧L",
+                    primary: viewModel.isPanelPinned
+                )
             }
-            .buttonStyle(.borderless)
-            .help(viewModel.isPanelPinned ? "Auto-Close  ⌘⇧L" : "Keep Open  ⌘⇧L")
+            .buttonStyle(.plain)
+            .padding(.leading, 10)
 
             Button { onOpenSettings() } label: {
                 Image(systemName: "gearshape")
