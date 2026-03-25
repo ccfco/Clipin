@@ -117,6 +117,18 @@ struct PreviewPane: View {
 
                 infoRow("Source", value: item.sourceName ?? "Unknown", icon: sourceAppIcon(for: item))
                 infoRow("Type", value: typeLabel(item.clipType))
+                if item.clipType == .image, let path = item.imagePath {
+                    if let image = NSImage(contentsOfFile: path),
+                       let rep = image.representations.first {
+                        let w = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
+                        let h = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
+                        infoRow("Dimensions", value: "\(w) × \(h)")
+                    }
+                    if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                       let bytes = attrs[.size] as? Int64 {
+                        infoRow("Size", value: ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
+                    }
+                }
                 if item.isPinned {
                     infoRow("Status", value: "Pinned")
                 }

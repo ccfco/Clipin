@@ -78,7 +78,6 @@ private final class ThumbnailCache: @unchecked Sendable {
 /// 列表中的单行剪贴板项
 struct ClipItemRow: View {
     let item: ClipListItem
-    let isSelected: Bool
     var shortcutNumber: Int? = nil
     var searchQuery: String = ""
 
@@ -107,7 +106,7 @@ struct ClipItemRow: View {
                     .frame(width: 28, height: 28)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(iconBackground)
+                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.08))
                     )
             }
 
@@ -158,14 +157,6 @@ struct ClipItemRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(isSelected ? Color.accentColor.opacity(0.22) : Color.clear, lineWidth: 1)
-        )
     }
 
     private var displayText: String {
@@ -228,13 +219,6 @@ struct ClipItemRow: View {
         case .url:
             return .blue
         }
-    }
-
-    private var iconBackground: Color {
-        if isSelected {
-            return Color.accentColor.opacity(0.14)
-        }
-        return Color(nsColor: .quaternaryLabelColor).opacity(0.08)
     }
 
     private var timeLabel: String {

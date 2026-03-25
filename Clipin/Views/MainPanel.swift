@@ -75,29 +75,67 @@ struct MainPanel: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 0) {
             if viewModel.selectedListItem != nil {
-                if let appName = viewModel.targetAppName {
-                    ShortcutHint(keys: ["↵"], label: "Paste to \(appName)")
-                } else {
-                    ShortcutHint(keys: ["↵"], label: "Paste")
+                // 主操作：Paste
+                Button {
+                    viewModel.pasteSelected()
+                } label: {
+                    HStack(spacing: 5) {
+                        Text(viewModel.targetAppName.map { "Paste to \($0)" } ?? "Paste")
+                            .font(.system(size: 11, weight: .medium))
+                        Text("↵")
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.3))
+                            )
+                    }
+                    .foregroundStyle(.primary)
                 }
-                ShortcutHint(keys: ["⇧", "↵"], label: "Plain")
-                ShortcutHint(keys: ["⌘", "C"], label: "Copy")
-                ShortcutHint(keys: ["⌘", "⇧", "P"], label: pinLabel)
-                ShortcutHint(keys: ["⌘", "⌫"], label: "Delete")
+                .buttonStyle(.borderless)
 
-                if let item = viewModel.selectedItem,
-                   item.clipType == .url || item.clipType == .file {
-                    ShortcutHint(keys: ["⌘", "O"], label: "Open")
+                Spacer()
+
+                // 次操作：Actions 菜单
+                Menu {
+                    Button("Paste as Plain Text") { viewModel.pastePlainSelected() }
+                    Button("Copy to Clipboard") { viewModel.copySelected() }
+                    Divider()
+                    Button(pinLabel) { viewModel.togglePinSelected() }
+                    if let item = viewModel.selectedItem,
+                       item.clipType == .url || item.clipType == .file {
+                        Button("Open") { viewModel.openSelected() }
+                    }
+                    Divider()
+                    Button("Delete", role: .destructive) { viewModel.deleteSelected() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Text("Actions")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text("⌘K")
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.3))
+                            )
+                    }
                 }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             } else {
                 Text("Clipboard History")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
+                Spacer()
             }
-
-            Spacer()
 
             Button {
                 onOpenSettings()
@@ -107,6 +145,7 @@ struct MainPanel: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
+            .padding(.leading, 8)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -224,13 +263,18 @@ private struct ItemListView: View {
 
     private func row(for item: ClipListItem) -> some View {
         let number = shortcutIndex[item.id]
+        let isSelected = selection.wrappedValue == item.id
 
-        return ClipItemRow(item: item, isSelected: selection.wrappedValue == item.id, shortcutNumber: number, searchQuery: searchQuery)
+        return ClipItemRow(item: item, shortcutNumber: number, searchQuery: searchQuery)
             .tag(item.id)
             .id(item.id)
-            .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
+            .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
             .listRowSeparator(.hidden)
-            .listRowBackground(Color.clear)
+            .listRowBackground(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+                    .padding(.horizontal, 4)
+            )
             .contextMenu {
                 Button("Paste") { onActivate(item) }
                 Button(item.isPinned ? "Unpin" : "Pin") { onPin(item) }
