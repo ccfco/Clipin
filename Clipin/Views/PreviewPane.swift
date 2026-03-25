@@ -108,34 +108,38 @@ struct PreviewPane: View {
     }
 
     private func infoSection(for item: ClipItem) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Information")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Information")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
 
-            infoRow("Source", value: item.sourceName ?? "Unknown", icon: sourceAppIcon(for: item))
-            infoRow("Type", value: typeLabel(item.clipType))
-            if item.isPinned {
-                infoRow("Status", value: "Pinned")
+                infoRow("Source", value: item.sourceName ?? "Unknown", icon: sourceAppIcon(for: item))
+                infoRow("Type", value: typeLabel(item.clipType))
+                if item.isPinned {
+                    infoRow("Status", value: "Pinned")
+                }
+                if item.clipType == .text || item.clipType == .url {
+                    infoRow("Characters", value: "\(item.charCount)")
+                    let lines = item.content.components(separatedBy: .newlines).count
+                    infoRow("Lines", value: "\(lines)")
+                    let words = item.content.split { $0.isWhitespace || $0.isNewline }.count
+                    infoRow("Words", value: "\(words)")
+                }
+                if item.copyCount > 1 {
+                    infoRow("Times copied", value: "\(item.copyCount)")
+                }
+                if item.firstCopiedAt != item.createdAt {
+                    infoRow("First copied", value: Self.absoluteDateString(item.firstCopiedAt))
+                }
+                infoRow("Copied", value: relativeDate(item.createdAt))
             }
-            if item.clipType == .text || item.clipType == .url {
-                infoRow("Characters", value: "\(item.charCount)")
-                let lines = item.content.components(separatedBy: .newlines).count
-                infoRow("Lines", value: "\(lines)")
-                let words = item.content.split { $0.isWhitespace || $0.isNewline }.count
-                infoRow("Words", value: "\(words)")
-            }
-            if item.copyCount > 1 {
-                infoRow("Times copied", value: "\(item.copyCount)")
-            }
-            if item.firstCopiedAt != item.createdAt {
-                infoRow("First copied", value: Self.absoluteDateString(item.firstCopiedAt))
-            }
-            infoRow("Copied", value: relativeDate(item.createdAt))
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .frame(maxHeight: 180)
         .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
     }
 
