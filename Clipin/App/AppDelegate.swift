@@ -236,6 +236,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 vm.openSelected()
                 return nil
 
+            // ⌘C — copy to clipboard (without pasting)
+            case 0x08 where flags == .command:
+                vm.copySelected()
+                return nil
+
             default:
                 // ⌘1-9 — quick paste by index
                 if flags == .command,
@@ -245,7 +250,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     vm.pasteItemAt(index: digit - 1)
                     return nil
                 }
-                return event
                 return event
             }
         }

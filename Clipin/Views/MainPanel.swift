@@ -80,6 +80,7 @@ struct MainPanel: View {
                     ShortcutHint(keys: ["↵"], label: "Paste")
                 }
                 ShortcutHint(keys: ["⇧", "↵"], label: "Plain")
+                ShortcutHint(keys: ["⌘", "C"], label: "Copy")
                 ShortcutHint(keys: ["⌘", "⇧", "P"], label: pinLabel)
                 ShortcutHint(keys: ["⌘", "⌫"], label: "Delete")
 
