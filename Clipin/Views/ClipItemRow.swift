@@ -1,4 +1,23 @@
 import SwiftUI
+import AppKit
+
+/// bundle identifier → app icon 缓存，避免每次渲染都查 NSWorkspace
+private let appIconCache = AppIconCache()
+
+private final class AppIconCache: @unchecked Sendable {
+    private var cache: [String: NSImage] = [:]
+    private let lock = NSLock()
+
+    func icon(for bundleId: String) -> NSImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = cache[bundleId] { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else { return nil }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        cache[bundleId] = icon
+        return icon
+    }
+}
 
 /// 列表中的单行剪贴板项
 struct ClipItemRow: View {
@@ -33,7 +52,14 @@ struct ClipItemRow: View {
                     .font(.system(size: 13, weight: .medium))
                     .lineLimit(1)
 
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
+                    if let bundleId = item.sourceApp,
+                       let icon = appIconCache.icon(for: bundleId) {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: 12, height: 12)
+                    }
+
                     if let sourceName = item.sourceName, !sourceName.isEmpty {
                         Text(sourceName)
                     }
