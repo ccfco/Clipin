@@ -354,7 +354,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func performPaste(_ item: ClipItem) {
         monitor?.pause()
-        PasteService.writeToClipboard(item)
+        guard PasteService.writeToClipboard(item) else {
+            monitor?.resume()
+            return
+        }
         hidePanel()
 
         previousApp?.activate()
@@ -382,7 +385,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         monitor?.pause()
         PasteService.writeToClipboard(item)
         hidePanel()
-        // 短暂延迟后恢复监控，跳过自己写入的 changeCount
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.monitor?.resume()
         }

@@ -8,8 +8,9 @@ enum PasteService {
         simulatePaste()
     }
 
-    /// 仅写回剪贴板（不模拟粘贴）
-    static func writeToClipboard(_ item: ClipItem) {
+    /// 将 ClipItem 写回剪贴板，成功返回 true
+    @discardableResult
+    static func writeToClipboard(_ item: ClipItem) -> Bool {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
 
@@ -19,16 +20,18 @@ enum PasteService {
             if item.clipType == .url {
                 pasteboard.setString(item.content, forType: .URL)
             }
+            return true
 
         case .image:
-            if let path = item.imagePath,
-               let image = NSImage(contentsOfFile: path) {
-                pasteboard.writeObjects([image])
-            }
+            guard let path = item.imagePath,
+                  let image = NSImage(contentsOfFile: path) else { return false }
+            pasteboard.writeObjects([image])
+            return true
 
         case .file:
             let url = URL(fileURLWithPath: item.content)
             pasteboard.writeObjects([url as NSURL])
+            return true
         }
     }
 
