@@ -286,6 +286,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             switch event.keyCode {
+            // ↑↓ — 项目导航（全局生效，不受焦点影响）
+            // 注意：不要使用 flags.isEmpty，箭头键自带 .numericPad 等隐藏修饰符
+            case 0x7E:
+                vm.selectPrev()
+                return nil
+            case 0x7D:
+                vm.selectNext()
+                return nil
+
+            // Return — 粘贴选中项（全局生效）
+            case 0x24 where flags.isEmpty:
+                vm.pasteSelected()
+                return nil
+
             // ⇧Return — paste as plain text
             case 0x24 where flags == .shift:
                 vm.pastePlainSelected()

@@ -361,41 +361,6 @@ private struct ColorSwatchPreview: View {
     }
 }
 
-private class PreviewTextView: NSTextView {
-    weak var vm: ClipboardViewModel?
-
-    override func keyDown(with event: NSEvent) {
-        // NSTextView 会吃掉所有按键用于文本编辑和滚动。
-        // 为了保证在右侧大段文本里点选后，依然能无缝上下切换列表条目和回车粘贴，
-        // 必须截获导航键和回车键，将其强制转发给 ViewModel。
-        let keyCode = event.keyCode
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-        if keyCode == 0x7E { // ↑
-            vm?.selectPrev()
-            return
-        }
-        if keyCode == 0x7D { // ↓
-            vm?.selectNext()
-            return
-        }
-        if keyCode == 0x24 { // Return
-            if flags == .shift {
-                vm?.pastePlainSelected()
-            } else if flags.isEmpty {
-                vm?.pasteSelected()
-            }
-            return
-        }
-        if keyCode == 0x35 { // Escape 丢弃焦点
-            window?.makeFirstResponder(nil)
-            return
-        }
-
-        super.keyDown(with: event)
-    }
-}
-
 private struct SelectableTextPreview: NSViewRepresentable {
     let text: String
     let font: NSFont
@@ -409,8 +374,7 @@ private struct SelectableTextPreview: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
 
-        let textView = PreviewTextView()
-        textView.vm = vm
+        let textView = NSTextView()
         textView.drawsBackground = false
         textView.isEditable = false
         textView.isSelectable = true
