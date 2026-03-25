@@ -90,15 +90,22 @@ impl Storage {
         // }
 
         if from_version < 2 {
-            conn.execute_batch(
-                "
-                ALTER TABLE clip_items ADD COLUMN copy_count INTEGER NOT NULL DEFAULT 1;
-                ALTER TABLE clip_items ADD COLUMN first_copied_at INTEGER NOT NULL DEFAULT 0;
-                -- 回填：first_copied_at = created_at for existing rows
-                UPDATE clip_items SET first_copied_at = created_at WHERE first_copied_at = 0;
-                PRAGMA user_version = 2;
-                ",
-            )?;
+            // 检查列是否已存在（防止重复 ALTER 崩溃）
+            let has_copy_count: bool = conn
+                .prepare("PRAGMA table_info(clip_items)")?
+                .query_map([], |row| row.get::<_, String>(1))?
+                .any(|name| name.as_deref() == Ok("copy_count"));
+
+            if !has_copy_count {
+                conn.execute_batch(
+                    "
+                    ALTER TABLE clip_items ADD COLUMN copy_count INTEGER NOT NULL DEFAULT 1;
+                    ALTER TABLE clip_items ADD COLUMN first_copied_at INTEGER NOT NULL DEFAULT 0;
+                    UPDATE clip_items SET first_copied_at = created_at WHERE first_copied_at = 0;
+                    ",
+                )?;
+            }
+            conn.execute_batch("PRAGMA user_version = 2;")?;
         }
 
         Ok(())
