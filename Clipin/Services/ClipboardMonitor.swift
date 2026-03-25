@@ -80,8 +80,9 @@ final class ClipboardMonitor: ObservableObject {
         // file → url → image → text
         if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
             .urlReadingFileURLsOnly: true
-        ]) as? [URL], let firstURL = fileURLs.first {
-            persist(.file(firstURL.path, sourceApp, sourceName))
+        ]) as? [URL], !fileURLs.isEmpty {
+            let paths = fileURLs.map(\.path)
+            persist(.file(FileClipboardContent.encodedContent(from: paths), sourceApp, sourceName))
         } else if let urlString = pasteboard.string(forType: .URL) ?? extractURL(from: pasteboard) {
             persist(.url(urlString, sourceApp, sourceName))
         } else if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {

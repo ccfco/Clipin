@@ -204,8 +204,7 @@ struct ClipItemRow: View {
         case .image:
             return "Image"
         case .file:
-            let url = URL(fileURLWithPath: item.preview)
-            return url.lastPathComponent.isEmpty ? item.preview : url.lastPathComponent
+            return FileClipboardContent.displayTitle(for: item.preview)
         }
     }
 

@@ -25,6 +25,7 @@
 - **Compact action palette** — Press ⌘K for a focused command sheet with full keyboard control
 - **Smart dedup** — Repeated copies are merged, tracking copy count and timestamps
 - **Rich preview** — Right pane shows full content, metadata, image thumbnails, search highlights, and hex color swatches
+- **Finder multi-file aware** — Copy multiple files at once and Clipin preserves, previews, reopens, and pastes the full selection
 - **Color detection** — Hex colors (#RGB / #RRGGBB) are shown with a color swatch, RGB, and HSL values
 - **Pin important items** — Pinned entries stay at the top, never expire
 - **Type filtering** — Filter by Text, Image, File, or URL

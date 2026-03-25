@@ -186,8 +186,10 @@ final class ClipboardViewModel: ObservableObject {
                 NSWorkspace.shared.open(url)
             }
         case .file:
-            let url = URL(fileURLWithPath: item.content)
-            NSWorkspace.shared.open(url)
+            let urls = FileClipboardContent.paths(from: item.content).map(URL.init(fileURLWithPath:))
+            for url in urls {
+                NSWorkspace.shared.open(url)
+            }
         default:
             break
         }

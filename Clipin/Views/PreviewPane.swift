@@ -94,17 +94,21 @@ struct PreviewPane: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
         case .file:
+            let paths = FileClipboardContent.paths(from: item.content)
+            let primaryPath = paths.first ?? item.content
+            let primaryURL = URL(fileURLWithPath: primaryPath)
+            let fileListText = paths.isEmpty ? item.content : paths.joined(separator: "\n")
+
             VStack(alignment: .leading, spacing: 16) {
-                let url = URL(fileURLWithPath: item.content)
                 HStack(spacing: 14) {
-                    Image(nsImage: NSWorkspace.shared.icon(forFile: item.content))
+                    Image(nsImage: NSWorkspace.shared.icon(forFile: primaryPath))
                         .resizable()
                         .frame(width: 56, height: 56)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(url.lastPathComponent)
+                        Text(FileClipboardContent.displayName(for: primaryPath))
                             .font(.system(size: 16, weight: .semibold))
-                        Text(url.deletingLastPathComponent().path)
+                        Text(fileHeaderSubtitle(paths: paths, primaryURL: primaryURL))
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
@@ -112,7 +116,7 @@ struct PreviewPane: View {
                 }
 
                 SelectableTextPreview(
-                    text: item.content,
+                    text: fileListText,
                     font: .monospacedSystemFont(ofSize: 12, weight: .regular),
                     searchQuery: searchQuery,
                     vm: vm
@@ -155,6 +159,13 @@ struct PreviewPane: View {
             if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
                let bytes = attrs[.size] as? Int64 {
                 all.append(("File size", ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file), nil))
+            }
+        }
+
+        if item.clipType == .file {
+            let paths = FileClipboardContent.paths(from: item.content)
+            if paths.count > 1 {
+                all.append(("Items", "\(paths.count)", nil))
             }
         }
 
@@ -229,6 +240,12 @@ struct PreviewPane: View {
             .font(.system(size: 13))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func fileHeaderSubtitle(paths: [String], primaryURL: URL) -> String {
+        let directory = primaryURL.deletingLastPathComponent().path
+        guard paths.count > 1 else { return directory }
+        return "\(FileClipboardContent.summaryLabel(for: paths.joined(separator: "\n"))) • \(directory)"
     }
 
     private func sourceAppIcon(for item: ClipItem) -> NSImage? {
