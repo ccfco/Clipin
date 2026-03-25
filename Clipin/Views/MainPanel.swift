@@ -58,6 +58,8 @@ struct MainPanel: View {
     private var itemList: some View {
         ItemListView(
             sections: viewModel.sections,
+            isEmpty: viewModel.isEmpty,
+            hasActiveFilter: viewModel.hasActiveFilter,
             selection: Binding(
                 get: { viewModel.selectedItemID },
                 set: { viewModel.selectItem(id: $0) }
@@ -142,6 +144,8 @@ private struct ShortcutHint: View {
 
 private struct ItemListView: View {
     let sections: [ClipSection]
+    let isEmpty: Bool
+    let hasActiveFilter: Bool
     let selection: Binding<String?>
     let onActivate: (ClipListItem) -> Void
     let onPin: (ClipListItem) -> Void
@@ -153,6 +157,14 @@ private struct ItemListView: View {
     }
 
     var body: some View {
+        if isEmpty {
+            emptyState
+        } else {
+            listContent
+        }
+    }
+
+    private var listContent: some View {
         ScrollViewReader { proxy in
             List(selection: selection) {
                 ForEach(sections) { section in
@@ -177,6 +189,27 @@ private struct ItemListView: View {
                 }
             }
         }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: hasActiveFilter ? "magnifyingglass" : "clipboard")
+                .font(.system(size: 24))
+                .foregroundStyle(.tertiary)
+
+            Text(hasActiveFilter ? "No results" : "No history yet")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Text(hasActiveFilter
+                 ? "Try a different search term or filter."
+                 : "Copy something and it will appear here.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 200)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func row(for item: ClipListItem) -> some View {

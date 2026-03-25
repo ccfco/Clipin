@@ -129,20 +129,20 @@ struct ClipItemRow: View {
     private var timeLabel: String {
         let date = Date(timeIntervalSince1970: TimeInterval(item.createdAt) / 1000.0)
         if Calendar.current.isDateInToday(date) {
-            return timeFormatter.string(from: date)
+            return Self.timeFormatter.string(from: date)
         }
-        return dateFormatter.string(from: date)
+        return Self.dateFormatter.string(from: date)
     }
 
-    private var timeFormatter: DateFormatter {
+    private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter
-    }
+    }()
 
-    private var dateFormatter: DateFormatter {
+    private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "M/d"
         return formatter
-    }
+    }()
 }

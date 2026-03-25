@@ -164,6 +164,12 @@ final class ClipboardViewModel: ObservableObject {
         return items.first(where: { $0.id == selectedItemID })
     }
 
+    /// 列表是否为空（用于空状态提示）
+    var isEmpty: Bool { flatOrder.isEmpty }
+
+    /// 是否正在搜索或过滤
+    var hasActiveFilter: Bool { !searchQuery.isEmpty || typeFilter != nil }
+
     // MARK: - Private
 
     private static let dateFormatter: DateFormatter = {
