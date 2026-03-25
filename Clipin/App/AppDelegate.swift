@@ -272,6 +272,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 vm.copySelected()
                 return nil
 
+            // ⌘, — open settings
+            case 0x2B where flags == .command:
+                self.hidePanel()
+                self.openSettingsWindow()
+                return nil
+
             default:
                 // ⌘1-9 — quick paste by index
                 if flags == .command,
