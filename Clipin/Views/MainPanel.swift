@@ -23,18 +23,14 @@ struct MainPanel: View {
                 onEscape: { viewModel.close() }
             )
 
-            Divider()
-
             HStack(spacing: 0) {
                 itemList
                     .frame(width: 260)
                     .background(Color(nsColor: .controlBackgroundColor))
 
-                Divider()
-
                 PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color(nsColor: .windowBackgroundColor))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(nsColor: .windowBackgroundColor))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -157,31 +153,6 @@ struct MainPanel: View {
     }
 }
 
-/// 快捷键提示胶囊 — 模仿 Raycast 底部 action bar 风格
-private struct ShortcutHint: View {
-    let keys: [String]
-    let label: String
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(Array(keys.enumerated()), id: \.offset) { _, key in
-                Text(key)
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.3))
-                    )
-            }
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
 private struct ItemListView: View {
     let sections: [ClipSection]
     let isEmpty: Bool
@@ -191,6 +162,8 @@ private struct ItemListView: View {
     let onActivate: (ClipListItem) -> Void
     let onPin: (ClipListItem) -> Void
     let onDelete: (ClipListItem) -> Void
+
+    @State private var hoveredID: String?
 
     /// 预计算 id -> 序号索引，O(n) 构建，O(1) 查找
     private var shortcutIndex: [String: Int] {
@@ -215,22 +188,17 @@ private struct ItemListView: View {
 
     private var listContent: some View {
         ScrollViewReader { proxy in
-            List(selection: selection) {
-                ForEach(sections) { section in
-                    Section {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(sections) { section in
+                        sectionHeader(section.title)
                         ForEach(section.items, id: \.id) { item in
                             row(for: item)
                         }
-                    } header: {
-                        Text(section.title)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .textCase(nil)
                     }
                 }
+                .padding(.vertical, 6)
             }
-            .listStyle(.sidebar)
-            .scrollContentBackground(.hidden)
             .onChange(of: selection.wrappedValue) { _, newID in
                 guard let newID else { return }
                 withAnimation(.easeInOut(duration: 0.12)) {
@@ -238,6 +206,45 @@ private struct ItemListView: View {
                 }
             }
         }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func row(for item: ClipListItem) -> some View {
+        let number = shortcutIndex[item.id]
+        let isSelected = selection.wrappedValue == item.id
+        let isHovered = hoveredID == item.id
+
+        return ClipItemRow(item: item, shortcutNumber: number, searchQuery: searchQuery)
+            .id(item.id)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(
+                        isSelected
+                            ? Color(nsColor: .quaternaryLabelColor).opacity(0.6)
+                            : isHovered
+                                ? Color(nsColor: .quaternaryLabelColor).opacity(0.3)
+                                : Color.clear
+                    )
+                    .padding(.horizontal, 6)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { selection.wrappedValue = item.id }
+            .onHover { hovered in hoveredID = hovered ? item.id : nil }
+            .contextMenu {
+                Button("Paste") { onActivate(item) }
+                Button(item.isPinned ? "Unpin" : "Pin") { onPin(item) }
+                Divider()
+                Button("Delete", role: .destructive) { onDelete(item) }
+            }
     }
 
     private var emptyState: some View {
@@ -259,27 +266,5 @@ private struct ItemListView: View {
                 .frame(maxWidth: 200)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func row(for item: ClipListItem) -> some View {
-        let number = shortcutIndex[item.id]
-        let isSelected = selection.wrappedValue == item.id
-
-        return ClipItemRow(item: item, shortcutNumber: number, searchQuery: searchQuery)
-            .tag(item.id)
-            .id(item.id)
-            .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
-            .listRowSeparator(.hidden)
-            .listRowBackground(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
-                    .padding(.horizontal, 4)
-            )
-            .contextMenu {
-                Button("Paste") { onActivate(item) }
-                Button(item.isPinned ? "Unpin" : "Pin") { onPin(item) }
-                Divider()
-                Button("Delete", role: .destructive) { onDelete(item) }
-            }
     }
 }

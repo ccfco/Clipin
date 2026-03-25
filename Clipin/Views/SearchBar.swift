@@ -122,10 +122,6 @@ struct SearchBar: View {
             .padding(.vertical, 8)
             .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-            )
 
             Menu {
                 Button("All Types") { typeFilter = nil }
@@ -145,10 +141,6 @@ struct SearchBar: View {
                 .padding(.vertical, 8)
                 .background(Color(nsColor: .controlBackgroundColor))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
-                )
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
