@@ -132,7 +132,11 @@ struct MainPanel: View {
                 else { viewModel.selectPrev() }
             },
             onSubmit: { viewModel.pasteSelected() },
-            onEscape: { viewModel.close() },
+            onEscape: {
+                if !viewModel.clearActiveQueryAndFilters() {
+                    viewModel.close()
+                }
+            },
             onCycleTypeFilter: { reverse in
                 viewModel.cycleTypeFilter(reverse: reverse)
             }

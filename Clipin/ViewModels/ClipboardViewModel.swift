@@ -69,6 +69,7 @@ final class ClipboardViewModel: ObservableObject {
     private var flatOrder: [ClipListItem] = []
     private var debounce: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
+    private var skipNextDebouncedLoad = false
 
     var onPasteRequested: ((ClipItem) -> Void)?
     var onPastePlainRequested: ((ClipItem) -> Void)?
@@ -81,7 +82,14 @@ final class ClipboardViewModel: ObservableObject {
         debounce = Publishers.CombineLatest($searchQuery, $typeFilter)
             .dropFirst()
             .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
-            .sink { [weak self] _, _ in self?.loadItems() }
+            .sink { [weak self] _, _ in
+                guard let self else { return }
+                if self.skipNextDebouncedLoad {
+                    self.skipNextDebouncedLoad = false
+                    return
+                }
+                self.loadItems()
+            }
     }
 
     // MARK: - Load
@@ -233,6 +241,16 @@ final class ClipboardViewModel: ObservableObject {
             nextIndex = (currentIndex + 1) % filters.count
         }
         typeFilter = filters[nextIndex]
+    }
+
+    @discardableResult
+    func clearActiveQueryAndFilters() -> Bool {
+        guard hasActiveFilter else { return false }
+        skipNextDebouncedLoad = true
+        searchQuery = ""
+        typeFilter = nil
+        loadItems()
+        return true
     }
 
     func togglePinSelected() {

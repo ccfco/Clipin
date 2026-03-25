@@ -343,6 +343,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 vm.pastePlainSelected()
                 return nil
 
+            // Escape — 先退出瞬态状态，再关闭面板；不依赖当前焦点位置
+            case 0x35:
+                handleEscape(for: vm)
+                return nil
+
             // ⌘⇧P — toggle pin
             case 0x23 where flags == [.command, .shift]:
                 vm.togglePinSelected()
@@ -421,6 +426,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             _ = try? await cleanup.runNow()
         }
         viewModel?.loadItems(selectLatest: selectLatest)
+    }
+
+    private func handleEscape(for vm: ClipboardViewModel) {
+        if QLPreviewPanel.sharedPreviewPanelExists(),
+           QLPreviewPanel.sharedPreviewPanel().isVisible {
+            closeQuickLook()
+            return
+        }
+
+        if vm.clearActiveQueryAndFilters() {
+            return
+        }
+
+        hidePanel()
     }
 
     private func openSettingsWindow() {
