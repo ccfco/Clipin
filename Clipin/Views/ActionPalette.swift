@@ -195,7 +195,7 @@ struct ActionPaletteBuilder {
             viewModel.copySelected()
         })
 
-        list.append(PaletteAction("Quick Look", systemImage: "space", badge: "Space", section: .primary) {
+        list.append(PaletteAction("Quick Look", systemImage: "space", badge: viewModel.selectedQuickLookKey, section: .primary) {
             viewModel.quickLookSelected()
         })
 

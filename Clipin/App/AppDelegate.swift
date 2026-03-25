@@ -309,6 +309,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 vm.quickLookSelected()
                 return nil
 
+            // ⌘Y — 无论是否正在搜索，都提供稳定的系统级预览入口
+            case 0x10 where flags == .command:
+                vm.quickLookSelected()
+                return nil
+
             // Tab / Shift-Tab — 全局循环筛选（不依赖搜索框焦点）
             case 0x30 where flags.isEmpty:
                 vm.cycleTypeFilter()

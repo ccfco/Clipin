@@ -181,6 +181,9 @@ final class ClipboardViewModel: ObservableObject {
 
     func quickLookSelected() {
         guard let item = currentSelectedItem() else { return }
+        if isShowingActions {
+            hideActionsPalette()
+        }
         onQuickLookRequested?(item)
     }
 
@@ -302,6 +305,14 @@ final class ClipboardViewModel: ObservableObject {
 
     var canTriggerQuickLookWithSpace: Bool {
         selectedItemID != nil && searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var canQuickLookSelectedItem: Bool {
+        selectedItemID != nil
+    }
+
+    var selectedQuickLookKey: String {
+        canTriggerQuickLookWithSpace ? "Space" : "⌘Y"
     }
 
     // MARK: - Private

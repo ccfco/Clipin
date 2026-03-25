@@ -208,8 +208,8 @@ struct MainPanel: View {
                 )
                 .padding(.leading, 10)
 
-                if viewModel.canTriggerQuickLookWithSpace {
-                    keyBadge(label: "Quick Look", key: "Space")
+                if viewModel.canQuickLookSelectedItem {
+                    keyBadge(label: "Quick Look", key: viewModel.selectedQuickLookKey)
                         .padding(.leading, 10)
                 }
 
