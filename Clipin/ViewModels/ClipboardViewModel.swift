@@ -17,6 +17,7 @@ final class ClipboardViewModel: ObservableObject {
     @Published var typeFilter: ClipType?
     @Published private(set) var sections: [ClipSection] = []
     @Published var targetAppName: String?
+    @Published var isShowingActions = false
 
     private let core: ClipinCore
     private var items: [ClipListItem] = []

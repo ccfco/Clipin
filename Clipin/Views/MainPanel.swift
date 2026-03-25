@@ -50,6 +50,16 @@ struct MainPanel: View {
         .frame(width: 760, height: 520)
         // 纯实色白背景，不受桌面颜色污染
         .background(Color(nsColor: .textBackgroundColor))
+        .overlay(alignment: .bottomLeading) {
+            if viewModel.isShowingActions {
+                ActionPalette(
+                    isPresented: $viewModel.isShowingActions,
+                    actions: ActionPaletteBuilder.actions(for: viewModel)
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: viewModel.isShowingActions)
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
@@ -85,59 +95,26 @@ struct MainPanel: View {
     private var bottomBar: some View {
         HStack(spacing: 0) {
             if viewModel.selectedListItem != nil {
-                // 主操作：Paste
-                Button {
-                    viewModel.pasteSelected()
-                } label: {
-                    HStack(spacing: 5) {
-                        Text(viewModel.targetAppName.map { "Paste to \($0)" } ?? "Paste")
-                            .font(.system(size: 11, weight: .medium))
-                        Text("↵")
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .fill(Color.primary.opacity(0.06))
-                            )
-                    }
-                    .foregroundStyle(.primary)
+                // 主操作：可点击的 key badge
+                Button { viewModel.pasteSelected() } label: {
+                    keyBadge(
+                        label: viewModel.targetAppName.map { "Paste to \($0)" } ?? "Paste",
+                        key: "↵",
+                        primary: true
+                    )
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+
+                keyBadge(label: "Plain Text", key: "⇧↵")
+                    .padding(.leading, 10)
 
                 Spacer()
 
-                // 次操作：Actions 菜单
-                Menu {
-                    Button("Paste as Plain Text") { viewModel.pastePlainSelected() }
-                    Button("Copy to Clipboard") { viewModel.copySelected() }
-                    Divider()
-                    Button(pinLabel) { viewModel.togglePinSelected() }
-                    if let item = viewModel.selectedItem,
-                       item.clipType == .url || item.clipType == .file {
-                        Button("Open") { viewModel.openSelected() }
-                    }
-                    Divider()
-                    Button("Delete", role: .destructive) { viewModel.deleteSelected() }
-                } label: {
-                    HStack(spacing: 5) {
-                        Text("Actions")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.secondary)
-                        Text("⌘K")
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(
-                                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .fill(Color.primary.opacity(0.06))
-                            )
-                    }
+                // Actions — 点击 or ⌘K 打开 palette
+                Button { viewModel.isShowingActions.toggle() } label: {
+                    keyBadge(label: "Actions", key: "⌘K")
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
+                .buttonStyle(.plain)
             } else {
                 Text("Clipboard History")
                     .font(.system(size: 11, weight: .medium))
@@ -145,23 +122,34 @@ struct MainPanel: View {
                 Spacer()
             }
 
-            Button {
-                onOpenSettings()
-            } label: {
+            Button { onOpenSettings() } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
-            .padding(.leading, 8)
+            .padding(.leading, 12)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
-    private var pinLabel: String {
-        viewModel.selectedListItem?.isPinned == true ? "Unpin" : "Pin"
+    private func keyBadge(label: String, key: String, primary: Bool = false) -> some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(primary ? Color.primary : Color.secondary)
+            Text(key)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color.primary.opacity(0.06))
+                )
+        }
     }
 }
 
@@ -248,13 +236,15 @@ private struct ItemListView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(
                     isSelected
-                        ? Color.primary.opacity(0.1)
+                        ? Color.accentColor.opacity(0.12)
                         : isHovered
-                            ? Color.primary.opacity(0.05)
+                            ? Color.primary.opacity(0.04)
                             : Color.clear
                 )
                 .padding(.horizontal, 6)
         )
+        .animation(.easeOut(duration: 0.1), value: isSelected)
+        .animation(.easeOut(duration: 0.08), value: isHovered)
             .contentShape(Rectangle())
             .onTapGesture { selection.wrappedValue = item.id }
             .onHover { hovered in hoveredID = hovered ? item.id : nil }

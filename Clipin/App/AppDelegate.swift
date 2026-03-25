@@ -223,6 +223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hidePanel() {
         guard let panel else { return }
+        viewModel?.isShowingActions = false
         stopClickOutsideMonitor()
         stopKeyMonitor()
 
@@ -292,6 +293,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     return event
                 }
                 vm.copySelected()
+                return nil
+
+            // ⌘K — toggle actions palette
+            case 0x28 where flags == .command:
+                vm.isShowingActions.toggle()
                 return nil
 
             // ⌘, — open settings

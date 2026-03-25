@@ -87,7 +87,8 @@ struct ClipItemRow: View {
             typeIndicator
 
             Text(highlightedDisplayText)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 13))
+                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -95,31 +96,34 @@ struct ClipItemRow: View {
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.7) : Color(nsColor: .tertiaryLabelColor))
                     .opacity(isSelected || isHovered ? 1 : 0.3)
             }
 
-            // ⌘N 快捷键徽章 — 仅选中/hover 时出现
+            // ⌘N 快捷键徽章
+            // ⌘1-3 默认半显（opacity: 0.4），让用户发现最快路径；其余 hover/selected 才显
             if let n = shortcutNumber {
+                let alwaysVisible = n <= 3
                 Text("⌘\(n)")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(.quaternary)
+                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.7) : Color(nsColor: .quaternaryLabelColor))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(Color.primary.opacity(0.06))
+                            .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.06))
                     )
-                    .opacity(isSelected || isHovered ? 1 : 0)
+                    .opacity(isSelected || isHovered ? 1 : (alwaysVisible ? 0.4 : 0))
             }
 
             // 时间 — 右对齐，退场角色
             Text(timeLabel)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(isSelected ? Color.accentColor.opacity(0.6) : Color(nsColor: .tertiaryLabelColor))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
+        .animation(.easeOut(duration: 0.1), value: isSelected)
     }
 
     /// 类型指示器：图片显示缩略图，颜色值显示色块，其他显示单色图标
@@ -130,20 +134,20 @@ struct ClipItemRow: View {
             Image(nsImage: nsImage)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 20, height: 20)
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .frame(width: 24, height: 24)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
             ZStack {
                 RoundedRectangle(cornerRadius: 5, style: .continuous).fill(color)
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
             }
-            .frame(width: 20, height: 20)
+            .frame(width: 24, height: 24)
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 20, height: 20)
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                .frame(width: 24, height: 24)
         }
     }
 

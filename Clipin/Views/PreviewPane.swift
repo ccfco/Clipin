@@ -106,47 +106,61 @@ struct PreviewPane: View {
     }
 
     private func infoSection(for item: ClipItem) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                infoRow("Source", value: item.sourceName ?? "Unknown", icon: sourceAppIcon(for: item))
-                infoRow("Type", value: typeLabel(item.clipType))
-                if item.clipType == .image, let path = item.imagePath {
-                    if let image = NSImage(contentsOfFile: path),
-                       let rep = image.representations.first {
-                        let w = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
-                        let h = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
-                        infoRow("Dimensions", value: "\(w) × \(h)")
-                    }
-                    if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
-                       let bytes = attrs[.size] as? Int64 {
-                        infoRow("Size", value: ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
-                    }
-                }
-                if item.isPinned {
-                    infoRow("Status", value: "Pinned")
-                }
-                if item.clipType == .text || item.clipType == .url {
-                    infoRow("Characters", value: "\(item.charCount)")
-                    let lines = item.content.components(separatedBy: .newlines).count
-                    infoRow("Lines", value: "\(lines)")
-                    let words = item.content.split { $0.isWhitespace || $0.isNewline }.count
-                    infoRow("Words", value: "\(words)")
-                }
-                if item.copyCount > 1 {
-                    infoRow("Times copied", value: "\(item.copyCount)")
-                }
-                if item.firstCopiedAt != item.createdAt {
-                    infoRow("First copied", value: Self.absoluteDateString(item.firstCopiedAt))
-                }
-                infoRow("Copied", value: relativeDate(item.createdAt))
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(spacing: 0) {
+            Divider()
+            infoGrid(for: item)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: 170)
+        .frame(maxHeight: 130)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func infoGrid(for item: ClipItem) -> some View {
+        // 构建左右两列的 info 条目
+        var leftItems: [(String, String, NSImage?)] = []
+        var rightItems: [(String, String, NSImage?)] = []
+
+        leftItems.append(("Source", item.sourceName ?? "Unknown", sourceAppIcon(for: item)))
+        leftItems.append(("Type", typeLabel(item.clipType), nil))
+        if item.isPinned { leftItems.append(("Status", "Pinned", nil)) }
+
+        if item.clipType == .image, let path = item.imagePath {
+            if let image = NSImage(contentsOfFile: path),
+               let rep = image.representations.first {
+                let w = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
+                let h = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
+                rightItems.append(("Dimensions", "\(w) × \(h)", nil))
+            }
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+               let bytes = attrs[.size] as? Int64 {
+                rightItems.append(("File size", ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file), nil))
+            }
+        }
+
+        if item.clipType == .text || item.clipType == .url {
+            let words = item.content.split { $0.isWhitespace || $0.isNewline }.count
+            rightItems.append(("Words", "\(words)", nil))
+            rightItems.append(("Characters", "\(item.charCount)", nil))
+        }
+
+        if item.copyCount > 1 { rightItems.append(("Copies", "\(item.copyCount)", nil)) }
+        rightItems.append(("Copied", relativeDate(item.createdAt), nil))
+
+        return HStack(alignment: .top, spacing: 0) {
+            infoColumn(items: leftItems)
+            infoColumn(items: rightItems)
+        }
+    }
+
+    private func infoColumn(items: [(String, String, NSImage?)]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, entry in
+                infoRow(entry.0, value: entry.1, icon: entry.2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func infoRow(_ label: String, value: String, icon: NSImage? = nil) -> some View {
