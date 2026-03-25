@@ -151,9 +151,20 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func deleteItem(id: String) {
+        // 删除前记住相邻项，删除后自动选中
+        var nextSelectionID: String?
+        if selectedItemID == id, let idx = flatOrder.firstIndex(where: { $0.id == id }) {
+            if idx + 1 < flatOrder.count {
+                nextSelectionID = flatOrder[idx + 1].id
+            } else if idx > 0 {
+                nextSelectionID = flatOrder[idx - 1].id
+            }
+        }
+
         try? core.deleteItem(id: id)
+
         if selectedItemID == id {
-            selectedItemID = nil
+            selectedItemID = nextSelectionID
             selectedItem = nil
         }
         loadItems()
