@@ -147,6 +147,9 @@ struct PreviewPane: View {
         }
         .frame(maxHeight: 170)
         .background(Color.primary.opacity(0.04))
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+        }
     }
 
     private func infoRow(_ label: String, value: String, icon: NSImage? = nil) -> some View {

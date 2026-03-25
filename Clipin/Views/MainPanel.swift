@@ -23,19 +23,29 @@ struct MainPanel: View {
                 onEscape: { viewModel.close() }
             )
 
+            // 搜索栏底部细线
+            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+
             HStack(spacing: 0) {
                 itemList
                     .frame(width: 260)
                     .background(Color.primary.opacity(0.04))
+
+                // 左右分栏竖向细线
+                Rectangle().fill(Color.primary.opacity(0.08)).frame(width: 0.5)
 
                 PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+            // action bar 顶部细线
+            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
+
             bottomBar
         }
         .frame(width: 760, height: 520)
+        .background(Color(nsColor: .windowBackgroundColor).opacity(0.88))
         .background(.ultraThinMaterial)
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
