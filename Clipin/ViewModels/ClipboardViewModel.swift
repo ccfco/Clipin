@@ -201,7 +201,7 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func openSelected() {
-        guard let item = selectedItem else { return }
+        guard let item = currentSelectedItem() else { return }
         switch item.clipType {
         case .url:
             if let url = URL(string: item.content) {
