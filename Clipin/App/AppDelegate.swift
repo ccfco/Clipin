@@ -322,7 +322,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // ⌘, — open settings
             case 0x2B where flags == .command:
-                self.hidePanel()
+                if !vm.isPanelPinned { self.hidePanel() }
                 self.openSettingsWindow()
                 return nil
 
@@ -439,12 +439,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let pinned = viewModel?.isPanelPinned ?? false
         if !pinned { hidePanel() }
 
-        previousApp?.activate()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            PasteService.simulatePaste()
-            self?.monitor?.resume()
-        }
+        pasteToTarget(pinned: pinned)
     }
 
     private func performPastePlain(_ item: ClipItem) {
@@ -453,11 +448,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let pinned = viewModel?.isPanelPinned ?? false
         if !pinned { hidePanel() }
 
-        previousApp?.activate()
+        pasteToTarget(pinned: pinned)
+    }
+
+    /// 激活目标 app 并模拟 Cmd+V；pinned 模式下粘贴后重新聚焦面板
+    private func pasteToTarget(pinned: Bool) {
+        // pinned 模式：用当前最前台的非 Clipin app（用户可能已切到别处）
+        let targetApp: NSRunningApplication?
+        if pinned {
+            let front = NSWorkspace.shared.frontmostApplication
+            targetApp = (front?.bundleIdentifier != Bundle.main.bundleIdentifier) ? front : previousApp
+        } else {
+            targetApp = previousApp
+        }
+        targetApp?.activate()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             PasteService.simulatePaste()
             self?.monitor?.resume()
+            // pinned 模式：粘贴后重新聚焦面板和搜索框
+            if pinned {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
+                    guard let self, let panel = self.panel else { return }
+                    panel.makeKeyAndOrderFront(nil)
+                    NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+                }
+            }
         }
     }
 

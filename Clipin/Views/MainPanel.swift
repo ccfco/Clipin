@@ -75,6 +75,18 @@ struct MainPanel: View {
                 .overlay(panelWash)
                 .overlay(shellGlow.opacity(0.72))
         )
+        .overlay(alignment: .top) {
+            if viewModel.isPanelPinned {
+                LinearGradient(
+                    colors: [Color.accentColor.opacity(0.65), Color.accentColor.opacity(0.25)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(height: 2)
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: viewModel.isPanelPinned)
         .overlay(alignment: .bottomTrailing) {
             if viewModel.isShowingActions {
                 ActionPalette(

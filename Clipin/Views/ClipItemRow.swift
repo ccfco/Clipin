@@ -40,28 +40,52 @@ private let appIconCache = AppIconCache()
 private let thumbnailCache = ThumbnailCache()
 
 private final class AppIconCache: @unchecked Sendable {
+    private static let maxSize = 100
     private var cache: [String: NSImage] = [:]
+    private var keys: [String] = []   // 尾部 = 最近使用
     private let lock = NSLock()
 
     func icon(for bundleId: String) -> NSImage? {
         lock.lock()
         defer { lock.unlock() }
-        if let cached = cache[bundleId] { return cached }
+        if let cached = cache[bundleId] {
+            touch(bundleId)
+            return cached
+        }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else { return nil }
         let icon = NSWorkspace.shared.icon(forFile: url.path)
-        cache[bundleId] = icon
+        insert(key: bundleId, value: icon)
         return icon
+    }
+
+    private func touch(_ key: String) {
+        keys.removeAll { $0 == key }
+        keys.append(key)
+    }
+
+    private func insert(key: String, value: NSImage) {
+        if cache.count >= Self.maxSize, let lru = keys.first {
+            cache.removeValue(forKey: lru)
+            keys.removeFirst()
+        }
+        cache[key] = value
+        keys.append(key)
     }
 }
 
 private final class ThumbnailCache: @unchecked Sendable {
+    private static let maxSize = 100
     private var cache: [String: NSImage] = [:]
+    private var keys: [String] = []
     private let lock = NSLock()
 
     func thumbnail(for path: String) -> NSImage? {
         lock.lock()
         defer { lock.unlock() }
-        if let cached = cache[path] { return cached }
+        if let cached = cache[path] {
+            touch(path)
+            return cached
+        }
         guard let image = NSImage(contentsOfFile: path) else { return nil }
         let thumbSize: CGFloat = 56
         let thumb = NSImage(size: NSSize(width: thumbSize, height: thumbSize))
@@ -69,8 +93,22 @@ private final class ThumbnailCache: @unchecked Sendable {
         image.draw(in: NSRect(x: 0, y: 0, width: thumbSize, height: thumbSize),
                    from: .zero, operation: .copy, fraction: 1.0)
         thumb.unlockFocus()
-        cache[path] = thumb
+        insert(key: path, value: thumb)
         return thumb
+    }
+
+    private func touch(_ key: String) {
+        keys.removeAll { $0 == key }
+        keys.append(key)
+    }
+
+    private func insert(key: String, value: NSImage) {
+        if cache.count >= Self.maxSize, let lru = keys.first {
+            cache.removeValue(forKey: lru)
+            keys.removeFirst()
+        }
+        cache[key] = value
+        keys.append(key)
     }
 }
 

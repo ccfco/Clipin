@@ -108,6 +108,48 @@ impl Storage {
             conn.execute_batch("PRAGMA user_version = 2;")?;
         }
 
+        if from_version < 3 {
+            // 重建 FTS5 虚拟表，使用 trigram tokenizer 支持任意子串搜索
+            conn.execute_batch(
+                "
+                DROP TRIGGER IF EXISTS clip_items_ai;
+                DROP TRIGGER IF EXISTS clip_items_ad;
+                DROP TRIGGER IF EXISTS clip_items_au;
+                DROP TABLE IF EXISTS clip_fts;
+
+                CREATE VIRTUAL TABLE clip_fts USING fts5(
+                    content,
+                    source_name,
+                    content='clip_items',
+                    content_rowid='rowid',
+                    tokenize='trigram'
+                );
+
+                CREATE TRIGGER clip_items_ai AFTER INSERT ON clip_items BEGIN
+                    INSERT INTO clip_fts(rowid, content, source_name)
+                    VALUES (new.rowid, new.content, new.source_name);
+                END;
+
+                CREATE TRIGGER clip_items_ad AFTER DELETE ON clip_items BEGIN
+                    INSERT INTO clip_fts(clip_fts, rowid, content, source_name)
+                    VALUES ('delete', old.rowid, old.content, old.source_name);
+                END;
+
+                CREATE TRIGGER clip_items_au AFTER UPDATE ON clip_items BEGIN
+                    INSERT INTO clip_fts(clip_fts, rowid, content, source_name)
+                    VALUES ('delete', old.rowid, old.content, old.source_name);
+                    INSERT INTO clip_fts(rowid, content, source_name)
+                    VALUES (new.rowid, new.content, new.source_name);
+                END;
+
+                INSERT INTO clip_fts(rowid, content, source_name)
+                SELECT rowid, content, source_name FROM clip_items;
+
+                PRAGMA user_version = 3;
+                ",
+            )?;
+        }
+
         Ok(())
     }
 
@@ -369,39 +411,76 @@ impl Storage {
         result.unwrap_or_default()
     }
 
+    /// 转义 FTS5 MATCH 查询：wrap 到双引号（phrase query），内部的 " 翻倍
+    fn escape_fts5_query(query: &str) -> String {
+        format!("\"{}\"", query.replace('"', "\"\""))
+    }
+
     pub fn search(&self, query: &str, type_filter: Option<&ClipType>) -> Vec<ClipItem> {
         let conn = self.conn.lock().unwrap();
-        let pattern = format!("%{}%", query);
 
-        let sql = if type_filter.is_some() {
-            "SELECT id, content, clip_type, source_app, source_name,
-                    is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
-             FROM clip_items
-             WHERE content LIKE ?1 AND clip_type = ?2
-             ORDER BY is_pinned DESC, created_at DESC
-             LIMIT 50"
+        // trigram 需要 ≥3 字符；短查询回退 LIKE
+        if query.chars().count() >= 3 {
+            let fts_query = Self::escape_fts5_query(query);
+            let sql = if type_filter.is_some() {
+                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at
+                 FROM clip_items ci
+                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                 WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                 ORDER BY ci.is_pinned DESC, ci.created_at DESC
+                 LIMIT 50"
+            } else {
+                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at
+                 FROM clip_items ci
+                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                 WHERE clip_fts MATCH ?1
+                 ORDER BY ci.is_pinned DESC, ci.created_at DESC
+                 LIMIT 50"
+            };
+            let result = if let Some(t) = type_filter {
+                conn.prepare(sql).and_then(|mut stmt| {
+                    stmt.query_map(params![fts_query, t.as_str()], Self::row_to_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            } else {
+                conn.prepare(sql).and_then(|mut stmt| {
+                    stmt.query_map(params![fts_query], Self::row_to_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            };
+            result.unwrap_or_default()
         } else {
-            "SELECT id, content, clip_type, source_app, source_name,
-                    is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
-             FROM clip_items
-             WHERE content LIKE ?1
-             ORDER BY is_pinned DESC, created_at DESC
-             LIMIT 50"
-        };
-
-        let result = if let Some(t) = type_filter {
-            conn.prepare(sql).and_then(|mut stmt| {
-                stmt.query_map(params![pattern, t.as_str()], Self::row_to_item)
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            })
-        } else {
-            conn.prepare(sql).and_then(|mut stmt| {
-                stmt.query_map(params![pattern], Self::row_to_item)
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            })
-        };
-
-        result.unwrap_or_default()
+            let pattern = format!("%{}%", query);
+            let sql = if type_filter.is_some() {
+                "SELECT id, content, clip_type, source_app, source_name,
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
+                 FROM clip_items
+                 WHERE content LIKE ?1 AND clip_type = ?2
+                 ORDER BY is_pinned DESC, created_at DESC
+                 LIMIT 50"
+            } else {
+                "SELECT id, content, clip_type, source_app, source_name,
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
+                 FROM clip_items
+                 WHERE content LIKE ?1
+                 ORDER BY is_pinned DESC, created_at DESC
+                 LIMIT 50"
+            };
+            let result = if let Some(t) = type_filter {
+                conn.prepare(sql).and_then(|mut stmt| {
+                    stmt.query_map(params![pattern, t.as_str()], Self::row_to_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            } else {
+                conn.prepare(sql).and_then(|mut stmt| {
+                    stmt.query_map(params![pattern], Self::row_to_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            };
+            result.unwrap_or_default()
+        }
     }
 
     pub fn search_list_items(
@@ -410,43 +489,80 @@ impl Storage {
         type_filter: Option<&ClipType>,
     ) -> Vec<ClipListItem> {
         let conn = self.conn.lock().unwrap();
-        let pattern = format!("%{}%", query);
 
-        let sql = if type_filter.is_some() {
-            format!(
-                "SELECT id, substr(content, 1, {preview_chars}), clip_type, source_app,
-                        source_name, is_pinned, created_at, image_path, char_count
-                 FROM clip_items
-                 WHERE content LIKE ?1 AND clip_type = ?2
-                 ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT 50",
-                preview_chars = Self::LIST_PREVIEW_CHARS
-            )
+        if query.chars().count() >= 3 {
+            let fts_query = Self::escape_fts5_query(query);
+            let sql = if type_filter.is_some() {
+                format!(
+                    "SELECT ci.id, substr(ci.content, 1, {p}), ci.clip_type, ci.source_app,
+                            ci.source_name, ci.is_pinned, ci.created_at, ci.image_path, ci.char_count
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                     ORDER BY ci.is_pinned DESC, ci.created_at DESC
+                     LIMIT 50",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            } else {
+                format!(
+                    "SELECT ci.id, substr(ci.content, 1, {p}), ci.clip_type, ci.source_app,
+                            ci.source_name, ci.is_pinned, ci.created_at, ci.image_path, ci.char_count
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1
+                     ORDER BY ci.is_pinned DESC, ci.created_at DESC
+                     LIMIT 50",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            };
+            let result = if let Some(t) = type_filter {
+                conn.prepare(&sql).and_then(|mut stmt| {
+                    stmt.query_map(params![fts_query, t.as_str()], Self::row_to_list_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            } else {
+                conn.prepare(&sql).and_then(|mut stmt| {
+                    stmt.query_map(params![fts_query], Self::row_to_list_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            };
+            result.unwrap_or_default()
         } else {
-            format!(
-                "SELECT id, substr(content, 1, {preview_chars}), clip_type, source_app,
-                        source_name, is_pinned, created_at, image_path, char_count
-                 FROM clip_items
-                 WHERE content LIKE ?1
-                 ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT 50",
-                preview_chars = Self::LIST_PREVIEW_CHARS
-            )
-        };
-
-        let result = if let Some(t) = type_filter {
-            conn.prepare(&sql).and_then(|mut stmt| {
-                stmt.query_map(params![pattern, t.as_str()], Self::row_to_list_item)
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            })
-        } else {
-            conn.prepare(&sql).and_then(|mut stmt| {
-                stmt.query_map(params![pattern], Self::row_to_list_item)
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            })
-        };
-
-        result.unwrap_or_default()
+            let pattern = format!("%{}%", query);
+            let sql = if type_filter.is_some() {
+                format!(
+                    "SELECT id, substr(content, 1, {p}), clip_type, source_app,
+                            source_name, is_pinned, created_at, image_path, char_count
+                     FROM clip_items
+                     WHERE content LIKE ?1 AND clip_type = ?2
+                     ORDER BY is_pinned DESC, created_at DESC
+                     LIMIT 50",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            } else {
+                format!(
+                    "SELECT id, substr(content, 1, {p}), clip_type, source_app,
+                            source_name, is_pinned, created_at, image_path, char_count
+                     FROM clip_items
+                     WHERE content LIKE ?1
+                     ORDER BY is_pinned DESC, created_at DESC
+                     LIMIT 50",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            };
+            let result = if let Some(t) = type_filter {
+                conn.prepare(&sql).and_then(|mut stmt| {
+                    stmt.query_map(params![pattern, t.as_str()], Self::row_to_list_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            } else {
+                conn.prepare(&sql).and_then(|mut stmt| {
+                    stmt.query_map(params![pattern], Self::row_to_list_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            };
+            result.unwrap_or_default()
+        }
     }
 
     pub fn get_item(&self, id: &str) -> Result<ClipItem, ClipinError> {
@@ -634,7 +750,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 2, "新建数据库应为 v2");
+        assert_eq!(storage.schema_version(), 3, "新建数据库应为 v3");
     }
 
     #[test]
@@ -653,7 +769,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 2, "旧数据库应 migrate 到 v2");
+        assert_eq!(storage.schema_version(), 3, "旧数据库应 migrate 到 v3");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -680,7 +796,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 2);
+        assert_eq!(s2.schema_version(), 3);
     }
 
     #[test]
