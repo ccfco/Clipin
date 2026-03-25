@@ -10,8 +10,6 @@ struct PreviewPane: View {
         Group {
             if let item {
                 VStack(spacing: 0) {
-                    header(for: item)
-                    Divider()
                     content(for: item)
                     Divider()
                     infoSection(for: item)
@@ -26,27 +24,6 @@ struct PreviewPane: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
-    }
-
-    private func header(for item: ClipItem) -> some View {
-        HStack(spacing: 10) {
-            Label(typeLabel(item.clipType), systemImage: headerIconName(for: item.clipType))
-                .font(.system(size: 13, weight: .semibold))
-
-            if item.isPinned {
-                Label("Pinned", systemImage: "pin.fill")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Text(relativeDate(item.createdAt))
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
     }
 
     @ViewBuilder
@@ -139,6 +116,9 @@ struct PreviewPane: View {
 
             infoRow("Source", value: item.sourceName ?? "Unknown", icon: sourceAppIcon(for: item))
             infoRow("Type", value: typeLabel(item.clipType))
+            if item.isPinned {
+                infoRow("Status", value: "Pinned")
+            }
             if item.clipType == .text || item.clipType == .url {
                 infoRow("Characters", value: "\(item.charCount)")
                 let lines = item.content.components(separatedBy: .newlines).count
@@ -152,7 +132,7 @@ struct PreviewPane: View {
             if item.firstCopiedAt != item.createdAt {
                 infoRow("First copied", value: Self.absoluteDateString(item.firstCopiedAt))
             }
-            infoRow("Last copied", value: Self.absoluteDateString(item.createdAt))
+            infoRow("Copied", value: relativeDate(item.createdAt))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -214,10 +194,6 @@ struct PreviewPane: View {
         }
     }
 
-    private func absoluteDate(_ timestamp: Int64) -> String {
-        Self.absoluteDateString(timestamp)
-    }
-
     private static let _absoluteDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
@@ -241,14 +217,6 @@ struct PreviewPane: View {
         return Self._relativeDateFormatter.localizedString(for: date, relativeTo: .now)
     }
 
-    private func headerIconName(for type: ClipType) -> String {
-        switch type {
-        case .text: return "doc.text"
-        case .image: return "photo"
-        case .file: return "folder"
-        case .url: return "link"
-        }
-    }
 }
 
 private struct ColorSwatchPreview: View {

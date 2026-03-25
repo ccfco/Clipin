@@ -22,6 +22,7 @@ final class ClipboardViewModel: ObservableObject {
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
     private var debounce: AnyCancellable?
+    private var loadItemTask: Task<Void, Never>?
 
     var onPasteRequested: ((ClipItem) -> Void)?
     var onPastePlainRequested: ((ClipItem) -> Void)?
@@ -61,12 +62,22 @@ final class ClipboardViewModel: ObservableObject {
     // MARK: - Selection
 
     func selectItem(id: String?) {
+        loadItemTask?.cancel()
         selectedItemID = id
         guard let id else {
             selectedItem = nil
             return
         }
-        selectedItem = try? core.getItem(id: id)
+        // 主线程立即更新 ID（选中高亮即时响应），后台加载完整 item（避免 SQLite 阻塞主线程）
+        let core = self.core
+        let capturedId = id
+        loadItemTask = Task {
+            let item = try? await Task.detached(priority: .userInteractive) {
+                try core.getItem(id: capturedId)
+            }.value
+            guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
+            self.selectedItem = item
+        }
     }
 
     func selectNext() {

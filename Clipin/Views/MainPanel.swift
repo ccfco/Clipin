@@ -231,11 +231,6 @@ private struct ItemListView: View {
             .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)
-            .simultaneousGesture(
-                TapGesture(count: 2).onEnded {
-                    onActivate(item)
-                }
-            )
             .contextMenu {
                 Button("Paste") { onActivate(item) }
                 Button(item.isPinned ? "Unpin" : "Pin") { onPin(item) }
