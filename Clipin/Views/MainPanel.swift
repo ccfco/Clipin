@@ -4,25 +4,25 @@ import SwiftUI
 
 private let panelShell = Color(nsColor: NSColor(name: nil) { app in
     app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.10, green: 0.10, blue: 0.15, alpha: 1)
+        ? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1)
         : NSColor(srgbRed: 0.972, green: 0.968, blue: 0.988, alpha: 1)
 })
 
 private let chromeSurface = Color(nsColor: NSColor(name: nil) { app in
     app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.14, green: 0.13, blue: 0.20, alpha: 0.54)
+        ? NSColor(srgbRed: 0.14, green: 0.14, blue: 0.15, alpha: 0.6)
         : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.36)
 })
 
 private let sidebarSurface = Color(nsColor: NSColor(name: nil) { app in
     app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.15, green: 0.14, blue: 0.22, alpha: 0.92)
+        ? NSColor(srgbRed: 0.16, green: 0.16, blue: 0.17, alpha: 0.85)
         : NSColor(srgbRed: 0.944, green: 0.938, blue: 0.974, alpha: 0.96)
 })
 
 private let detailSurface = Color(nsColor: NSColor(name: nil) { app in
     app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.16, green: 0.16, blue: 0.21, alpha: 0.98)
+        ? NSColor(srgbRed: 0.18, green: 0.18, blue: 0.19, alpha: 0.95)
         : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.99)
 })
 
@@ -64,7 +64,7 @@ struct MainPanel: View {
         }
         .frame(width: 800, height: 540)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [panelShell, panelShell.opacity(0.985)],
@@ -74,6 +74,7 @@ struct MainPanel: View {
                 )
                 .overlay(panelWash)
                 .overlay(shellGlow.opacity(0.72))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
         )
         .overlay(alignment: .top) {
             if viewModel.isPanelPinned {
@@ -114,7 +115,7 @@ struct MainPanel: View {
                 )
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 48, y: 24)
         .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .onAppear {
@@ -144,15 +145,18 @@ struct MainPanel: View {
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(sidebarSurface)
-                        .shadow(color: .black.opacity(0.04), radius: 20, y: 10)
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
                 )
 
             PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
+                .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(detailSurface)
-                        .shadow(color: .black.opacity(0.07), radius: 24, y: 12)
+                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5))
+                        .shadow(color: .black.opacity(0.12), radius: 24, y: 12)
                 )
         }
         .padding(.horizontal, 14)
@@ -229,7 +233,10 @@ struct MainPanel: View {
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 12)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+        .background(
+            Color(nsColor: .windowBackgroundColor).opacity(0.4)
+                .overlay(Rectangle().frame(height: 0.5).foregroundColor(Color.primary.opacity(0.05)), alignment: .top)
+        )
     }
 
     private func keyBadge(label: String, key: String, primary: Bool = false) -> some View {
@@ -340,18 +347,16 @@ private struct ItemListView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(
                     isSelected
-                        ? Color.white.opacity(0.58)
+                        ? Color.accentColor.opacity(0.12)
                         : isHovered
-                            ? Color.white.opacity(0.30)
+                            ? Color.primary.opacity(0.06)
                             : Color.clear
                 )
-                .shadow(color: .black.opacity(isSelected ? 0.045 : 0), radius: 14, y: 6)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(
-                            isSelected
-                                ? Color.accentColor.opacity(0.06)
-                                : Color.clear
+                        .strokeBorder(
+                            isSelected ? Color.accentColor.opacity(0.15) : Color.clear,
+                            lineWidth: 0.5
                         )
                 )
                 .padding(.horizontal, 8)

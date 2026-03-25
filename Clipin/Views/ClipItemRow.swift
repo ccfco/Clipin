@@ -155,7 +155,7 @@ struct ClipItemRow: View {
             // 时间 — 右对齐，退场角色
             Text(timeLabel)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(isSelected ? Color.accentColor.opacity(0.60) : Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(isSelected ? Color.primary.opacity(0.45) : Color(nsColor: .tertiaryLabelColor))
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 8)

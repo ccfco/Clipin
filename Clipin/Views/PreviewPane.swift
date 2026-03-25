@@ -17,6 +17,7 @@ private let previewCanvasTint = Color(nsColor: NSColor(name: nil) { app in
 struct PreviewPane: View {
     let item: ClipItem?
     var searchQuery: String = ""
+    @EnvironmentObject var vm: ClipboardViewModel
 
     var body: some View {
         Group {
@@ -53,6 +54,7 @@ struct PreviewPane: View {
                     font: preferredTextFont(for: item.content),
                     searchQuery: searchQuery
                 )
+                .environmentObject(vm)
                 .padding(28)
             }
 
@@ -70,6 +72,7 @@ struct PreviewPane: View {
                     font: preferredTextFont(for: item.content, baseSize: 13.5),
                     searchQuery: searchQuery
                 )
+                .environmentObject(vm)
             }
             .padding(28)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -77,22 +80,18 @@ struct PreviewPane: View {
         case .image:
             ScrollView {
                 if let path = item.imagePath, let image = NSImage(contentsOfFile: path) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(previewCanvasTint)
-                        Image(nsImage: image)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: .infinity, maxHeight: 360)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .padding(18)
-                    }
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: 400)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
                 } else {
                     unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
                 }
             }
             .padding(28)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
         case .file:
             VStack(alignment: .leading, spacing: 16) {
@@ -115,7 +114,8 @@ struct PreviewPane: View {
                 SelectableTextPreview(
                     text: item.content,
                     font: .monospacedSystemFont(ofSize: 12, weight: .regular),
-                    searchQuery: searchQuery
+                    searchQuery: searchQuery,
+                    vm: vm
                 )
                 .frame(minHeight: 80)
             }
@@ -132,7 +132,8 @@ struct PreviewPane: View {
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(previewInfoBackground)
-                    .shadow(color: .white.opacity(0.18), radius: 8, y: 1)
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+                    .shadow(color: .black.opacity(0.1), radius: 12, y: 4)
             )
     }
 
@@ -268,43 +269,24 @@ struct PreviewPane: View {
         return Self._relativeDateFormatter.localizedString(for: date, relativeTo: .now)
     }
 
-    private func textPreviewBody(text: String, font: NSFont, searchQuery: String) -> some View {
-        let hero = isHeroText(text)
+    private struct textPreviewBody: View {
+    let text: String
+    let font: NSFont
+    let searchQuery: String
+    @EnvironmentObject var vm: ClipboardViewModel
 
-        return VStack(alignment: .leading, spacing: 0) {
-            if hero {
-                Spacer(minLength: 6)
-            }
-
-            SelectableTextPreview(
-                text: text,
-                font: font,
-                searchQuery: searchQuery
-            )
-            .frame(
-                maxWidth: hero ? 460 : .infinity,
-                maxHeight: hero ? nil : .infinity,
-                alignment: .topLeading
-            )
-
-            Spacer(minLength: hero ? 0 : 0)
-        }
+    var body: some View {
+        SelectableTextPreview(
+            text: text,
+            font: font,
+            searchQuery: searchQuery,
+            vm: vm
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
-
-    private func preferredTextFont(for text: String, baseSize: CGFloat = 14) -> NSFont {
-        guard isHeroText(text) else {
-            return .systemFont(ofSize: baseSize, weight: .regular)
-        }
-        return .systemFont(ofSize: 22, weight: .medium)
-    }
-
-    private func isHeroText(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        let lineCount = trimmed.split(whereSeparator: \.isNewline).count
-        let looksCodeLike = trimmed.contains("{") || trimmed.contains("}") || trimmed.contains(";") || trimmed.contains("://")
-        return trimmed.count <= 120 && lineCount <= 4 && !looksCodeLike
+}
+    private func preferredTextFont(for text: String, baseSize: CGFloat = 13) -> NSFont {
+        return .systemFont(ofSize: baseSize, weight: .regular)
     }
 
 }
@@ -379,10 +361,46 @@ private struct ColorSwatchPreview: View {
     }
 }
 
+private class PreviewTextView: NSTextView {
+    weak var vm: ClipboardViewModel?
+
+    override func keyDown(with event: NSEvent) {
+        // NSTextView 会吃掉所有按键用于文本编辑和滚动。
+        // 为了保证在右侧大段文本里点选后，依然能无缝上下切换列表条目和回车粘贴，
+        // 必须截获导航键和回车键，将其强制转发给 ViewModel。
+        let keyCode = event.keyCode
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+        if keyCode == 0x7E { // ↑
+            vm?.selectPrev()
+            return
+        }
+        if keyCode == 0x7D { // ↓
+            vm?.selectNext()
+            return
+        }
+        if keyCode == 0x24 { // Return
+            if flags == .shift {
+                vm?.pastePlainSelected()
+            } else if flags.isEmpty {
+                vm?.pasteSelected()
+            }
+            return
+        }
+        if keyCode == 0x35 { // Escape 丢弃焦点
+            window?.makeFirstResponder(nil)
+            return
+        }
+
+        super.keyDown(with: event)
+    }
+}
+
 private struct SelectableTextPreview: NSViewRepresentable {
     let text: String
     let font: NSFont
     var searchQuery: String = ""
+    weak var vm: ClipboardViewModel?
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -391,7 +409,8 @@ private struct SelectableTextPreview: NSViewRepresentable {
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
 
-        let textView = NSTextView()
+        let textView = PreviewTextView()
+        textView.vm = vm
         textView.drawsBackground = false
         textView.isEditable = false
         textView.isSelectable = true

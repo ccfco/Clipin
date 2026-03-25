@@ -223,6 +223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hidePanel() {
         guard let panel else { return }
+        viewModel?.isPanelPinned = false
         viewModel?.hideActionsPalette()
         stopClickOutsideMonitor()
         stopKeyMonitor()
@@ -341,12 +342,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     return nil
                 }
                 // ⌥1-5 — type filter (All/Text/Images/Files/URLs)
-                if flags == .option,
-                   let char = event.charactersIgnoringModifiers,
-                   let digit = char.first?.wholeNumberValue,
-                   (1...5).contains(digit) {
-                    vm.setTypeFilterByIndex(digit - 1)
-                    return nil
+                if flags == .option {
+                    let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4]
+                    if let index = optMapping[event.keyCode] {
+                        vm.setTypeFilterByIndex(index)
+                        return nil
+                    }
                 }
                 return event
             }
@@ -436,39 +437,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.resume()
             return
         }
-        let pinned = viewModel?.isPanelPinned ?? false
-        if !pinned { hidePanel() }
-
-        pasteToTarget(pinned: pinned)
+        executePasteFlow()
     }
 
     private func performPastePlain(_ item: ClipItem) {
         monitor?.pause()
         PasteService.writeAsPlainText(item)
-        let pinned = viewModel?.isPanelPinned ?? false
-        if !pinned { hidePanel() }
-
-        pasteToTarget(pinned: pinned)
+        executePasteFlow()
     }
 
-    /// 激活目标 app 并模拟 Cmd+V；pinned 模式下粘贴后重新聚焦面板
-    private func pasteToTarget(pinned: Bool) {
-        // pinned 模式：用当前最前台的非 Clipin app（用户可能已切到别处）
-        let targetApp: NSRunningApplication?
-        if pinned {
-            let front = NSWorkspace.shared.frontmostApplication
-            targetApp = (front?.bundleIdentifier != Bundle.main.bundleIdentifier) ? front : previousApp
-        } else {
-            targetApp = previousApp
+    /// 根源解决 Pinned 模式下粘贴错乱的问题：
+    /// 原先使用全局 `CGEvent.post(tap: .cghidEventTap)` 发送模拟按键时，HID 会根据当前的全局 Key Window 路由事件。
+    /// 因为 Pinned 模式下面板仍是 Key Window，如果切换应用变慢，按键就会弹回给搜索框自己。
+    /// 此处的根源解法是：获取准确的目标 app PID，利用 `CGEvent.postToPid` 进行进程级精准投递！
+    /// 这样无论面板是否还是 Key Window，应用都能精准收到按键，无需任何闪烁/消失的补丁。
+    private func executePasteFlow() {
+        let pinned = viewModel?.isPanelPinned ?? false
+        let targetApp = pinned ? previousApp : previousApp
+
+        if !pinned {
+            hidePanel()
         }
+
+        // 激活目标并精准投递粘贴事件
         targetApp?.activate()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            PasteService.simulatePaste()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+            // 精准打击：只把 Cmd+V 发给目标进程，彻底杜绝发给 Clipin 自己的可能！
+            PasteService.simulatePaste(to: targetApp?.processIdentifier)
             self?.monitor?.resume()
-            // pinned 模式：粘贴后重新聚焦面板和搜索框
+
             if pinned {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.10) { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    // Pinned 模式下，粘贴完毕后只需把面板的输入焦点夺回来，面板一直都在！
                     guard let self, let panel = self.panel else { return }
                     panel.makeKeyAndOrderFront(nil)
                     NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
@@ -480,9 +481,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func performCopy(_ item: ClipItem) {
         monitor?.pause()
         PasteService.writeToClipboard(item)
-        hidePanel()
+        let pinned = viewModel?.isPanelPinned ?? false
+        if !pinned { hidePanel() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.monitor?.resume()
+            if pinned {
+                NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+            }
         }
     }
 }

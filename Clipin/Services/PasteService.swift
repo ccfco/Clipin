@@ -51,15 +51,20 @@ enum PasteService {
     }
 
     /// 模拟 Cmd+V 按键
-    static func simulatePaste() {
+    static func simulatePaste(to pid: pid_t? = nil) {
         let source = CGEventSource(stateID: .hidSystemState)
 
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)  // V key
         keyDown?.flags = .maskCommand
-        keyDown?.post(tap: .cghidEventTap)
-
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
         keyUp?.flags = .maskCommand
-        keyUp?.post(tap: .cghidEventTap)
+
+        if let pid = pid {
+            keyDown?.postToPid(pid)
+            keyUp?.postToPid(pid)
+        } else {
+            keyDown?.post(tap: .cghidEventTap)
+            keyUp?.post(tap: .cghidEventTap)
+        }
     }
 }
