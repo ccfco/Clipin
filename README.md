@@ -22,7 +22,7 @@
 
 - **Instant search** — Filter clipboard history by keyword with highlight, supports Chinese and English
 - **Keyboard-first** — Navigate with arrow keys, paste with Enter, and quick-paste the first 9 visible items with always-on ⌘1-9 badges
-- **Compact action palette** — Press ⌘K for a focused command sheet with full keyboard control
+- **Compact action palette** — Press ⌘K for a focused command sheet, then keep typing to filter actions without polluting the main search box
 - **System Quick Look** — Press `Space` on an idle search box or `⌘Y` while filtering for a full-size native preview without leaving the keyboard flow
 - **Layered escape flow** — Press `Esc` to clear active search/type filters first, then close the panel once you're back at the full list
 - **Smart dedup** — Repeated copies are merged, tracking copy count and timestamps
@@ -91,6 +91,7 @@ xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build
 | `⌘⌫` | Delete item |
 | `⌘O` | Open URL / file |
 | `⌘K` | Toggle action palette |
+| `Type while ⌘K is open` | Filter actions inside the palette |
 | `Tab` / `⇧Tab` | Cycle type filter forward / backward |
 | `⌘,` | Open settings |
 | `⎋` | Clear search/type filters first, then close the panel |

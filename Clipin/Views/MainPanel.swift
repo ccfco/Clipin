@@ -101,7 +101,8 @@ struct MainPanel: View {
                             }
                         }
                     ),
-                    actions: viewModel.paletteActions,
+                    query: viewModel.actionQuery,
+                    actions: viewModel.filteredPaletteActions,
                     selectedIndex: $viewModel.selectedActionIndex,
                     onSelect: { index in
                         viewModel.executePaletteAction(at: index)

@@ -295,11 +295,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     vm.navigatePalette(delta: 1); return nil
                 case 0x24 where flags.isEmpty:  // Return（无修饰键）
                     vm.executeSelectedPaletteAction(); return nil
+                case 0x33 where flags.isEmpty:  // Delete / Backspace
+                    vm.removeLastActionQueryCharacter()
+                    return nil
+                case 0x30:  // Tab / Shift-Tab 在动作面板内不应泄漏到类型筛选
+                    return nil
                 case 0x35:  // Escape
                     vm.hideActionsPalette(restoreFocus: true)
                     return nil
                 default:
-                    break  // 其他键（如字符输入）透传给搜索框
+                    if shouldRouteEventToPalette(event, flags: flags),
+                       let text = event.characters {
+                        vm.appendActionQuery(text)
+                        return nil
+                    }
+                    break
                 }
             }
 
@@ -440,6 +450,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         hidePanel()
+    }
+
+    private func shouldRouteEventToPalette(_ event: NSEvent, flags: NSEvent.ModifierFlags) -> Bool {
+        guard !flags.contains(.command),
+              !flags.contains(.control),
+              !flags.contains(.option),
+              !flags.contains(.function) else {
+            return false
+        }
+
+        guard let text = event.characters, !text.isEmpty else { return false }
+        return text.unicodeScalars.allSatisfy { scalar in
+            !CharacterSet.controlCharacters.contains(scalar)
+        }
     }
 
     private func openSettingsWindow() {

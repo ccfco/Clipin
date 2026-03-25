@@ -26,6 +26,7 @@ struct PaletteAction: Identifiable {
     let title: String
     let systemImage: String
     let badge: String
+    let keywords: [String]
     let section: PaletteActionSection
     let isDestructive: Bool
     let handler: () -> Void
@@ -34,6 +35,7 @@ struct PaletteAction: Identifiable {
         _ title: String,
         systemImage: String,
         badge: String,
+        keywords: [String] = [],
         section: PaletteActionSection = .secondary,
         isDestructive: Bool = false,
         handler: @escaping () -> Void
@@ -41,6 +43,7 @@ struct PaletteAction: Identifiable {
         self.title = title
         self.systemImage = systemImage
         self.badge = badge
+        self.keywords = keywords
         self.section = section
         self.isDestructive = isDestructive
         self.handler = handler
@@ -54,6 +57,7 @@ struct PaletteAction: Identifiable {
 
 struct ActionPalette: View {
     @Binding var isPresented: Bool
+    let query: String
     let actions: [PaletteAction]
     @Binding var selectedIndex: Int
     let onSelect: (Int) -> Void
@@ -91,12 +95,18 @@ struct ActionPalette: View {
 
     private var palettePanel: some View {
         VStack(alignment: .leading, spacing: 12) {
+            paletteHeader
+
             ForEach(Array(groupedActionIndices.enumerated()), id: \.offset) { _, group in
                 VStack(spacing: 4) {
                     ForEach(group, id: \.self) { index in
                         actionRow(action: actions[index], index: index)
                     }
                 }
+            }
+
+            if actions.isEmpty {
+                emptyState
             }
         }
         .padding(10)
@@ -119,6 +129,42 @@ struct ActionPalette: View {
         .shadow(color: .black.opacity(0.12), radius: 34, y: 18)
         .shadow(color: .black.opacity(0.04), radius: 10, y: 3)
         .onAppear { selectedIndex = 0 }
+    }
+
+    private var paletteHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                Text(query.isEmpty ? "Search actions" : query)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(query.isEmpty ? .tertiary : .primary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text("Esc")
+                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                    )
+            }
+
+            if !query.isEmpty {
+                Text("\(actions.count) action\(actions.count == 1 ? "" : "s")")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 4)
+        .padding(.bottom, 2)
     }
 
     private func actionRow(action: PaletteAction, index: Int) -> some View {
@@ -170,6 +216,27 @@ struct ActionPalette: View {
         }
         .animation(.easeOut(duration: 0.08), value: isSelected)
     }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "command")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(.tertiary)
+
+            Text("No actions found")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            Text("Keep typing to narrow down available actions, or press Escape to close.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 220)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+    }
 }
 
 // MARK: - ActionPaletteBuilder
@@ -181,35 +248,35 @@ struct ActionPaletteBuilder {
 
         var list: [PaletteAction] = []
 
-        list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", section: .primary) {
+        list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", keywords: ["insert", "send"], section: .primary) {
             viewModel.pasteSelected()
         })
 
         if selected.clipType == .text || selected.clipType == .url {
-            list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", badge: "⇧↵", section: .primary) {
+            list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", badge: "⇧↵", keywords: ["plain", "text only", "strip formatting"], section: .primary) {
                 viewModel.pastePlainSelected()
             })
         }
 
-        list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", section: .primary) {
+        list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", keywords: ["copy", "clipboard", "yank"], section: .primary) {
             viewModel.copySelected()
         })
 
-        list.append(PaletteAction("Quick Look", systemImage: "space", badge: viewModel.selectedQuickLookKey, section: .primary) {
+        list.append(PaletteAction("Quick Look", systemImage: "space", badge: viewModel.selectedQuickLookKey, keywords: ["preview", "look"], section: .primary) {
             viewModel.quickLookSelected()
         })
 
-        list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P") {
+        list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P", keywords: ["favorite", "keep", "stay"]) {
             viewModel.togglePinSelected()
         })
 
         if selected.clipType == .url || selected.clipType == .file {
-            list.append(PaletteAction("Open", systemImage: "arrow.up.right.square", badge: "⌘O") {
+            list.append(PaletteAction("Open", systemImage: "arrow.up.right.square", badge: "⌘O", keywords: ["launch", "reveal", "visit"]) {
                 viewModel.openSelected()
             })
         }
 
-        list.append(PaletteAction("Delete", systemImage: "trash", badge: "⌘⌫", section: .destructive, isDestructive: true) {
+        list.append(PaletteAction("Delete", systemImage: "trash", badge: "⌘⌫", keywords: ["remove", "trash"], section: .destructive, isDestructive: true) {
             viewModel.deleteSelected()
         })
 
