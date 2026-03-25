@@ -208,10 +208,11 @@ final class ClipboardViewModel: ObservableObject {
                 NSWorkspace.shared.open(url)
             }
         case .file:
-            let urls = FileClipboardContent.paths(from: item.content).map(URL.init(fileURLWithPath:))
-            for url in urls {
-                NSWorkspace.shared.open(url)
-            }
+            let urls = FileClipboardContent.paths(from: item.content)
+                .map(URL.init(fileURLWithPath:))
+                .filter { FileManager.default.fileExists(atPath: $0.path) }
+            guard !urls.isEmpty else { return }
+            NSWorkspace.shared.activateFileViewerSelecting(urls)
         default:
             break
         }
@@ -348,6 +349,35 @@ final class ClipboardViewModel: ObservableObject {
 
     var selectedQuickLookKey: String {
         canTriggerQuickLookWithSpace ? "Space" : "⌘Y"
+    }
+
+    var canOpenSelectedItem: Bool {
+        guard let item = selectedListItem else { return false }
+        return item.clipType == .url || item.clipType == .file
+    }
+
+    var selectedOpenLabel: String {
+        guard let item = selectedListItem else { return "Open" }
+        switch item.clipType {
+        case .url:
+            return "Open URL"
+        case .file:
+            return "Reveal in Finder"
+        default:
+            return "Open"
+        }
+    }
+
+    var selectedOpenSystemImage: String {
+        guard let item = selectedListItem else { return "arrow.up.right.square" }
+        switch item.clipType {
+        case .url:
+            return "safari"
+        case .file:
+            return "folder"
+        default:
+            return "arrow.up.right.square"
+        }
     }
 
     // MARK: - Private

@@ -270,8 +270,8 @@ struct ActionPaletteBuilder {
             viewModel.togglePinSelected()
         })
 
-        if selected.clipType == .url || selected.clipType == .file {
-            list.append(PaletteAction("Open", systemImage: "arrow.up.right.square", badge: "⌘O", keywords: ["launch", "reveal", "visit"]) {
+        if viewModel.canOpenSelectedItem {
+            list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, badge: "⌘O", keywords: ["launch", "reveal", "finder", "visit", "browser", "show"]) {
                 viewModel.openSelected()
             })
         }

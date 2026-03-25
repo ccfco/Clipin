@@ -369,7 +369,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.refreshQuickLookIfNeeded()
                 return nil
 
-            // ⌘O — open URL/file
+            // ⌘O — open URL / reveal copied files in Finder
             case 0x1F where flags == .command:
                 vm.openSelected()
                 return nil

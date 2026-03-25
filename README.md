@@ -27,7 +27,7 @@
 - **Layered escape flow** — Press `Esc` to clear active search/type filters first, then close the panel once you're back at the full list
 - **Smart dedup** — Repeated copies are merged, tracking copy count and timestamps
 - **Rich preview** — Right pane shows full content, metadata, image thumbnails, search highlights, and hex color swatches
-- **Finder multi-file aware** — Copy multiple files at once and Clipin preserves, previews, reopens, and pastes the full selection
+- **Finder multi-file aware** — Copy multiple files at once and Clipin preserves, previews, reveals in Finder, and pastes the full selection
 - **Color detection** — Hex colors (#RGB / #RRGGBB) are shown with a color swatch, RGB, and HSL values
 - **Pin important items** — Pinned entries stay at the top, never expire
 - **Type filtering** — Filter by Text, Image, File, or URL
@@ -89,7 +89,7 @@ xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build
 | `⌘1`–`⌘9` | Quick paste the first 9 visible items in the current list |
 | `⌘⇧P` | Toggle pin |
 | `⌘⌫` | Delete item |
-| `⌘O` | Open URL / file |
+| `⌘O` | Open URL / reveal copied files in Finder |
 | `⌘K` | Toggle action palette |
 | `Type while ⌘K is open` | Filter actions inside the palette |
 | `Tab` / `⇧Tab` | Cycle type filter forward / backward |

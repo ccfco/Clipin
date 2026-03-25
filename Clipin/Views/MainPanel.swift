@@ -218,6 +218,11 @@ struct MainPanel: View {
                         .padding(.leading, 10)
                 }
 
+                if viewModel.canOpenSelectedItem {
+                    keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
+                        .padding(.leading, 10)
+                }
+
                 Spacer()
 
                 Button { viewModel.toggleActionsPalette() } label: {
