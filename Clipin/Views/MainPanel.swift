@@ -32,7 +32,7 @@ struct MainPanel: View {
 
                 Divider()
 
-                PreviewPane(item: viewModel.selectedItem)
+                PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(nsColor: .windowBackgroundColor))
             }
@@ -153,9 +153,17 @@ private struct ItemListView: View {
     let onPin: (ClipListItem) -> Void
     let onDelete: (ClipListItem) -> Void
 
-    /// 按视觉顺序展平后的 ID 列表，用于计算 ⌘1-9 序号
-    private var flatIDs: [String] {
-        sections.flatMap(\.items).map(\.id)
+    /// 预计算 id -> 序号索引，O(n) 构建，O(1) 查找
+    private var shortcutIndex: [String: Int] {
+        var map: [String: Int] = [:]
+        var i = 0
+        for section in sections {
+            for item in section.items {
+                if i < 9 { map[item.id] = i + 1 }
+                i += 1
+            }
+        }
+        return map
     }
 
     var body: some View {
@@ -215,10 +223,9 @@ private struct ItemListView: View {
     }
 
     private func row(for item: ClipListItem) -> some View {
-        let globalIndex = flatIDs.firstIndex(of: item.id)
-        let shortcutNumber = globalIndex.flatMap { $0 < 9 ? $0 + 1 : nil }
+        let number = shortcutIndex[item.id]
 
-        return ClipItemRow(item: item, isSelected: selection.wrappedValue == item.id, shortcutNumber: shortcutNumber, searchQuery: searchQuery)
+        return ClipItemRow(item: item, isSelected: selection.wrappedValue == item.id, shortcutNumber: number, searchQuery: searchQuery)
             .tag(item.id)
             .id(item.id)
             .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))

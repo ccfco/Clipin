@@ -4,6 +4,7 @@ import AppKit
 /// 右侧预览面板
 struct PreviewPane: View {
     let item: ClipItem?
+    var searchQuery: String = ""
 
     var body: some View {
         Group {
@@ -54,7 +55,8 @@ struct PreviewPane: View {
         case .text:
             SelectableTextPreview(
                 text: item.content,
-                font: .monospacedSystemFont(ofSize: 13, weight: .regular)
+                font: .monospacedSystemFont(ofSize: 13, weight: .regular),
+                searchQuery: searchQuery
             )
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -70,7 +72,8 @@ struct PreviewPane: View {
 
                 SelectableTextPreview(
                     text: item.content,
-                    font: .monospacedSystemFont(ofSize: 12, weight: .regular)
+                    font: .monospacedSystemFont(ofSize: 12, weight: .regular),
+                    searchQuery: searchQuery
                 )
             }
             .padding(20)
@@ -111,7 +114,8 @@ struct PreviewPane: View {
 
                 SelectableTextPreview(
                     text: item.content,
-                    font: .monospacedSystemFont(ofSize: 12, weight: .regular)
+                    font: .monospacedSystemFont(ofSize: 12, weight: .regular),
+                    searchQuery: searchQuery
                 )
                 .frame(minHeight: 80)
             }
@@ -228,6 +232,7 @@ struct PreviewPane: View {
 private struct SelectableTextPreview: NSViewRepresentable {
     let text: String
     let font: NSFont
+    var searchQuery: String = ""
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -240,7 +245,7 @@ private struct SelectableTextPreview: NSViewRepresentable {
         textView.drawsBackground = false
         textView.isEditable = false
         textView.isSelectable = true
-        textView.isRichText = false
+        textView.isRichText = true
         textView.usesFindBar = true
         textView.allowsUndo = false
         textView.textContainerInset = NSSize(width: 0, height: 0)
@@ -265,10 +270,29 @@ private struct SelectableTextPreview: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
-        textView.font = font
 
-        if textView.string != text {
-            textView.string = text
+        let textColor = NSColor.labelColor
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
+        let attributed = NSMutableAttributedString(string: text, attributes: attrs)
+
+        // 搜索高亮
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty {
+            let nsText = text as NSString
+            var searchRange = NSRange(location: 0, length: nsText.length)
+            let highlightBg = NSColor.controlAccentColor.withAlphaComponent(0.25)
+            while searchRange.location < nsText.length {
+                let found = nsText.range(of: query, options: .caseInsensitive, range: searchRange)
+                guard found.location != NSNotFound else { break }
+                attributed.addAttribute(.backgroundColor, value: highlightBg, range: found)
+                searchRange.location = found.location + found.length
+                searchRange.length = nsText.length - searchRange.location
+            }
+        }
+
+        // 只在内容或高亮变化时更新，避免不必要的重绘
+        if textView.attributedString() != attributed {
+            textView.textStorage?.setAttributedString(attributed)
             textView.setSelectedRange(NSRange(location: 0, length: 0))
         }
     }
