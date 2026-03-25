@@ -236,9 +236,9 @@ private struct ItemListView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(
                     isSelected
-                        ? Color.accentColor.opacity(0.12)
+                        ? Color.accentColor.opacity(0.18)
                         : isHovered
-                            ? Color.primary.opacity(0.04)
+                            ? Color.primary.opacity(0.05)
                             : Color.clear
                 )
                 .padding(.horizontal, 6)

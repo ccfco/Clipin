@@ -148,7 +148,7 @@ struct PreviewPane: View {
         if item.copyCount > 1 { rightItems.append(("Copies", "\(item.copyCount)", nil)) }
         rightItems.append(("Copied", relativeDate(item.createdAt), nil))
 
-        return HStack(alignment: .top, spacing: 0) {
+        return HStack(alignment: .top, spacing: 20) {
             infoColumn(items: leftItems)
             infoColumn(items: rightItems)
         }

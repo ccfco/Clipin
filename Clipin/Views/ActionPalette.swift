@@ -84,12 +84,17 @@ struct ActionPalette: View {
 
     @State private var selectedIndex = 0
 
+    private func dismiss() {
+        isPresented = false
+        NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+    }
+
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             // 点击遮罩关闭
             Color.clear
                 .contentShape(Rectangle())
-                .onTapGesture { isPresented = false }
+                .onTapGesture { dismiss() }
 
             palettePanel
                 .padding(.horizontal, 14)
@@ -111,9 +116,9 @@ struct ActionPalette: View {
                 onSubmit: {
                     guard selectedIndex < actions.count else { return }
                     actions[selectedIndex].handler()
-                    isPresented = false
+                    dismiss()
                 },
-                onEscape: { isPresented = false }
+                onEscape: { dismiss() }
             )
             .frame(width: 0, height: 0)
 
@@ -174,7 +179,7 @@ struct ActionPalette: View {
         .onTapGesture {
             selectedIndex = index
             action.handler()
-            isPresented = false
+            dismiss()
         }
         .onHover { hovered in
             if hovered { selectedIndex = index }

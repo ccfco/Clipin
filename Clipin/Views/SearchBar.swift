@@ -28,6 +28,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
         field.placeholderString = placeholder
         field.focusRingType = .none
         field.delegate = context.coordinator
+        context.coordinator.field = field
         DispatchQueue.main.async {
             field.window?.makeFirstResponder(field)
         }
@@ -48,7 +49,25 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: InterceptingTextFieldView
-        init(_ p: InterceptingTextFieldView) { parent = p }
+        weak var field: InterceptingTextField?
+        private var observer: Any?
+
+        init(_ p: InterceptingTextFieldView) {
+            parent = p
+            super.init()
+            observer = NotificationCenter.default.addObserver(
+                forName: .clipinRestoreSearchFocus,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                guard let f = self?.field else { return }
+                f.window?.makeFirstResponder(f)
+            }
+        }
+
+        deinit {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
 
         func controlTextDidChange(_ obj: Notification) {
             guard let f = obj.object as? NSTextField else { return }
@@ -93,13 +112,14 @@ struct SearchBar: View {
 
             InterceptingTextFieldView(
                 text: $query,
-                placeholder: "Search clipboard history...",
+                placeholder: "Search...",
                 onNavigate: onNavigate,
                 onSubmit: onSubmit,
                 onEscape: onEscape,
                 onTab: { cycleTypeFilter() }
             )
             .frame(height: 18)
+            .layoutPriority(-1)  // 让 pills 优先获得空间，textfield 填充剩余
 
             // 类型过滤 pill tabs
             filterPills
