@@ -23,7 +23,8 @@
 - **Instant search** — Filter clipboard history by keyword with highlight, supports Chinese and English
 - **Keyboard-first** — Navigate with arrow keys, paste with Enter, ⌘1-9 for quick access
 - **Smart dedup** — Repeated copies are merged, tracking copy count and timestamps
-- **Rich preview** — Right pane shows full content, metadata, image thumbnails, and search highlights
+- **Rich preview** — Right pane shows full content, metadata, image thumbnails, search highlights, and hex color swatches
+- **Color detection** — Hex colors (#RGB / #RRGGBB) are shown with a color swatch, RGB, and HSL values
 - **Pin important items** — Pinned entries stay at the top, never expire
 - **Type filtering** — Filter by Text, Image, File, or URL
 - **Plain text paste** — ⇧Enter strips formatting
