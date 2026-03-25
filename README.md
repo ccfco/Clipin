@@ -20,13 +20,16 @@
 
 ## Features
 
-- **Instant search** — Filter clipboard history by keyword, supports Chinese and English
+- **Instant search** — Filter clipboard history by keyword with highlight, supports Chinese and English
 - **Keyboard-first** — Navigate with arrow keys, paste with Enter, ⌘1-9 for quick access
 - **Smart dedup** — Repeated copies are merged, tracking copy count and timestamps
-- **Rich preview** — Right pane shows full content, metadata, and image previews
+- **Rich preview** — Right pane shows full content, metadata, image thumbnails, and search highlights
 - **Pin important items** — Pinned entries stay at the top, never expire
 - **Type filtering** — Filter by Text, Image, File, or URL
 - **Plain text paste** — ⇧Enter strips formatting
+- **Copy without paste** — ⌘C puts item back on clipboard without pasting
+- **Context menu** — Right-click items for Paste, Pin/Unpin, Delete
+- **Smooth animations** — Fade in/out panel transitions
 - **Long-term storage** — Keep clipboard history for 1–5 years with configurable retention
 - **Privacy-first** — All data stored locally in SQLite, nothing leaves your machine
 
@@ -72,6 +75,7 @@ xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build
 | `↑` `↓` | Navigate items |
 | `↵` | Paste selected item |
 | `⇧↵` | Paste as plain text |
+| `⌘C` | Copy to clipboard (without pasting) |
 | `⌘1`–`⌘9` | Quick paste by position |
 | `⌘⇧P` | Toggle pin |
 | `⌘⌫` | Delete item |
