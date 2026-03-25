@@ -4,6 +4,9 @@ import AppKit
 /// bundle identifier → app icon 缓存，避免每次渲染都查 NSWorkspace
 private let appIconCache = AppIconCache()
 
+/// 图片缩略图缓存，避免每次渲染都从磁盘加载
+private let thumbnailCache = ThumbnailCache()
+
 private final class AppIconCache: @unchecked Sendable {
     private var cache: [String: NSImage] = [:]
     private let lock = NSLock()
@@ -19,6 +22,27 @@ private final class AppIconCache: @unchecked Sendable {
     }
 }
 
+private final class ThumbnailCache: @unchecked Sendable {
+    private var cache: [String: NSImage] = [:]
+    private let lock = NSLock()
+
+    func thumbnail(for path: String) -> NSImage? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = cache[path] { return cached }
+        guard let image = NSImage(contentsOfFile: path) else { return nil }
+        // 缩放到 56pt（2x retina），避免缓存原图占用过多内存
+        let thumbSize: CGFloat = 56
+        let thumb = NSImage(size: NSSize(width: thumbSize, height: thumbSize))
+        thumb.lockFocus()
+        image.draw(in: NSRect(x: 0, y: 0, width: thumbSize, height: thumbSize),
+                   from: .zero, operation: .copy, fraction: 1.0)
+        thumb.unlockFocus()
+        cache[path] = thumb
+        return thumb
+    }
+}
+
 /// 列表中的单行剪贴板项
 struct ClipItemRow: View {
     let item: ClipListItem
@@ -30,7 +54,7 @@ struct ClipItemRow: View {
         HStack(spacing: 10) {
             // 图片类型显示缩略图，其他类型显示图标
             if item.clipType == .image, let path = item.imagePath,
-               let nsImage = NSImage(contentsOfFile: path) {
+               let nsImage = thumbnailCache.thumbnail(for: path) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
