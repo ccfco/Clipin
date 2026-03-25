@@ -20,7 +20,7 @@ private final class InterceptingTextField: NSTextField {
     var onNavigate: ((Int) -> Void)?
     var onSubmit: (() -> Void)?
     var onEscape: (() -> Void)?
-    var onTab: (() -> Void)?
+    var onTab: ((Bool) -> Void)?
 }
 
 /// SwiftUI 包装层
@@ -30,7 +30,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
     var onNavigate: (Int) -> Void
     var onSubmit: () -> Void
     var onEscape: () -> Void
-    var onTab: () -> Void = {}
+    var onTab: (Bool) -> Void = { _ in }
 
     func makeNSView(context: Context) -> InterceptingTextField {
         let field = InterceptingTextField()
@@ -105,7 +105,9 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
             case #selector(NSResponder.cancelOperation(_:)):
                 field.onEscape?(); return true
             case #selector(NSResponder.insertTab(_:)):
-                field.onTab?(); return true
+                field.onTab?(false); return true
+            case #selector(NSResponder.insertBacktab(_:)):
+                field.onTab?(true); return true
             default:
                 return false
             }
@@ -122,6 +124,7 @@ struct SearchBar: View {
     var onNavigate: (Int) -> Void = { _ in }
     var onSubmit: () -> Void = {}
     var onEscape: () -> Void = {}
+    var onCycleTypeFilter: (Bool) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -135,7 +138,7 @@ struct SearchBar: View {
                 onNavigate: onNavigate,
                 onSubmit: onSubmit,
                 onEscape: onEscape,
-                onTab: { cycleTypeFilter() }
+                onTab: onCycleTypeFilter
             )
             .frame(height: 18)
             .layoutPriority(-1)  // 让 pills 优先获得空间，textfield 填充剩余
@@ -198,14 +201,4 @@ struct SearchBar: View {
         .animation(.easeOut(duration: 0.15), value: isActive)
     }
 
-    /// Tab 键循环切换：All → Text → Images → Files → URLs → All
-    private func cycleTypeFilter() {
-        switch typeFilter {
-        case nil:    typeFilter = .text
-        case .text:  typeFilter = .image
-        case .image: typeFilter = .file
-        case .file:  typeFilter = .url
-        case .url:   typeFilter = nil
-        }
-    }
 }

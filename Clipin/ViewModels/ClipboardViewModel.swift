@@ -208,6 +208,22 @@ final class ClipboardViewModel: ObservableObject {
         }
     }
 
+    func cycleTypeFilter(reverse: Bool = false) {
+        let filters: [ClipType?] = [nil, .text, .image, .file, .url]
+        guard let currentIndex = filters.firstIndex(where: { $0 == typeFilter }) else {
+            typeFilter = nil
+            return
+        }
+
+        let nextIndex: Int
+        if reverse {
+            nextIndex = currentIndex == 0 ? filters.count - 1 : currentIndex - 1
+        } else {
+            nextIndex = (currentIndex + 1) % filters.count
+        }
+        typeFilter = filters[nextIndex]
+    }
+
     func togglePinSelected() {
         guard let selectedItemID else { return }
         _ = try? core.togglePin(id: selectedItemID)

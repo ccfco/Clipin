@@ -132,7 +132,10 @@ struct MainPanel: View {
                 else { viewModel.selectPrev() }
             },
             onSubmit: { viewModel.pasteSelected() },
-            onEscape: { viewModel.close() }
+            onEscape: { viewModel.close() },
+            onCycleTypeFilter: { reverse in
+                viewModel.cycleTypeFilter(reverse: reverse)
+            }
         )
         .padding(.horizontal, 2)
         .padding(.top, 6)

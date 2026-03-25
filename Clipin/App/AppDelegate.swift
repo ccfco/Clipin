@@ -286,6 +286,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             switch event.keyCode {
+            // Tab / Shift-Tab — 全局循环筛选（不依赖搜索框焦点）
+            case 0x30 where flags.isEmpty:
+                vm.cycleTypeFilter()
+                return nil
+            case 0x30 where flags == .shift:
+                vm.cycleTypeFilter(reverse: true)
+                return nil
+
             // ↑↓ — 项目导航（全局生效，不受焦点影响）
             // 注意：不要使用 flags.isEmpty，箭头键自带 .numericPad 等隐藏修饰符
             case 0x7E:

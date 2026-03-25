@@ -86,7 +86,7 @@ xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build
 | `⌘⌫` | Delete item |
 | `⌘O` | Open URL / file |
 | `⌘K` | Toggle action palette |
-| `Tab` | Cycle type filter (All → Text → Images → Files → URLs) |
+| `Tab` / `⇧Tab` | Cycle type filter forward / backward |
 | `⌘,` | Open settings |
 | `⎋` | Close panel |
 
