@@ -20,6 +20,7 @@ final class ClipboardViewModel: ObservableObject {
     @Published var isShowingActions = false
     @Published var selectedActionIndex = 0
     @Published private(set) var paletteActions: [PaletteAction] = []
+    @Published var isPanelPinned: Bool = false
 
     func navigatePalette(delta: Int) {
         let count = paletteActions.count
@@ -193,6 +194,19 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func close() { onCloseRequested?() }
+
+    func togglePanelPin() { isPanelPinned.toggle() }
+
+    func setTypeFilterByIndex(_ index: Int) {
+        switch index {
+        case 0: typeFilter = nil
+        case 1: typeFilter = .text
+        case 2: typeFilter = .image
+        case 3: typeFilter = .file
+        case 4: typeFilter = .url
+        default: break
+        }
+    }
 
     func togglePinSelected() {
         guard let selectedItemID else { return }

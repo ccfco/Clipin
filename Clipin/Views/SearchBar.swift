@@ -165,29 +165,34 @@ struct SearchBar: View {
 
     private var filterPills: some View {
         HStack(spacing: 3) {
-            pill(label: "All", filter: nil)
-            pill(label: "Text", filter: .text)
-            pill(label: "Images", filter: .image)
-            pill(label: "Files", filter: .file)
-            pill(label: "URLs", filter: .url)
+            pill(label: "All",    filter: nil,    shortcut: "⌥1")
+            pill(label: "Text",   filter: .text,  shortcut: "⌥2")
+            pill(label: "Images", filter: .image, shortcut: "⌥3")
+            pill(label: "Files",  filter: .file,  shortcut: "⌥4")
+            pill(label: "URLs",   filter: .url,   shortcut: "⌥5")
         }
     }
 
-    private func pill(label: String, filter: ClipType?) -> some View {
+    private func pill(label: String, filter: ClipType?, shortcut: String) -> some View {
         let isActive = typeFilter == filter
 
         return Button {
             typeFilter = filter
         } label: {
-            Text(label)
-                .font(.system(size: 12, weight: isActive ? .semibold : .regular))
-                .foregroundStyle(isActive ? Color.white : Color.secondary.opacity(0.88))
-                .padding(.horizontal, 9)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(isActive ? Color.accentColor.opacity(0.96) : Color.clear)
-                )
+            HStack(spacing: 3) {
+                Text(label)
+                    .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                    .foregroundStyle(isActive ? Color.white : Color.secondary.opacity(0.88))
+                Text(shortcut)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(isActive ? Color.white.opacity(0.65) : Color(nsColor: .quaternaryLabelColor))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isActive ? Color.accentColor.opacity(0.96) : Color.clear)
+            )
         }
         .buttonStyle(.plain)
         .animation(.easeOut(duration: 0.15), value: isActive)

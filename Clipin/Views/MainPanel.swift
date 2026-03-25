@@ -196,18 +196,26 @@ struct MainPanel: View {
                 Spacer()
             }
 
+            Button { viewModel.togglePanelPin() } label: {
+                Image(systemName: viewModel.isPanelPinned ? "lock.fill" : "lock.open")
+                    .font(.system(size: 12))
+                    .foregroundStyle(viewModel.isPanelPinned ? Color.accentColor : Color.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(viewModel.isPanelPinned ? "Auto-Close  ⌘⇧L" : "Keep Open  ⌘⇧L")
+
             Button { onOpenSettings() } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
-            .padding(.leading, 12)
+            .padding(.leading, 8)
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 12)
-        .background(chromeSurface.opacity(0.001))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
     }
 
     private func keyBadge(label: String, key: String, primary: Bool = false) -> some View {
@@ -292,7 +300,7 @@ private struct ItemListView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 10, weight: .medium))
+            .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.tertiary)
             .tracking(0.35)
             .padding(.horizontal, 16)

@@ -92,18 +92,16 @@ struct ClipItemRow: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Pin 标记 — 仅选中/hover 时可见
+            // Pin 标记 — 仅 hover/selected 时可见
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
                     .foregroundStyle(isSelected ? Color.accentColor.opacity(0.58) : Color(nsColor: .tertiaryLabelColor))
-                    .opacity(isSelected || isHovered ? 1 : 0.3)
+                    .opacity(isSelected || isHovered ? 1 : 0)
             }
 
-            // ⌘N 快捷键徽章
-            // ⌘1-3 默认半显（opacity: 0.4），让用户发现最快路径；其余 hover/selected 才显
+            // ⌘N 快捷键徽章 — 仅 hover/selected 时可见
             if let n = shortcutNumber {
-                let alwaysVisible = n <= 3
                 Text("⌘\(n)")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(isSelected ? Color.accentColor.opacity(0.64) : Color(nsColor: .quaternaryLabelColor))
@@ -113,12 +111,12 @@ struct ClipItemRow: View {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(isSelected ? Color.white.opacity(0.54) : Color.white.opacity(0.18))
                     )
-                    .opacity(isSelected || isHovered ? 1 : (alwaysVisible ? 0.4 : 0))
+                    .opacity(isSelected || isHovered ? 1 : 0)
             }
 
             // 时间 — 右对齐，退场角色
             Text(timeLabel)
-                .font(.system(size: 10.5, design: .monospaced))
+                .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(isSelected ? Color.accentColor.opacity(0.60) : Color(nsColor: .tertiaryLabelColor))
         }
         .padding(.horizontal, 13)

@@ -247,7 +247,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startClickOutsideMonitor() {
         guard clickOutsideMonitor == nil else { return }
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.hidePanel()
+            guard let self, !(self.viewModel?.isPanelPinned ?? false) else { return }
+            self.hidePanel()
         }
     }
 
@@ -325,6 +326,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.openSettingsWindow()
                 return nil
 
+            // ⌘⇧L — toggle stay (keep open) mode
+            case 0x25 where flags == [.command, .shift]:
+                vm.togglePanelPin()
+                return nil
+
             default:
                 // ⌘1-9 — quick paste by index
                 if flags == .command,
@@ -332,6 +338,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                    let digit = char.first?.wholeNumberValue,
                    (1...9).contains(digit) {
                     vm.pasteItemAt(index: digit - 1)
+                    return nil
+                }
+                // ⌥1-5 — type filter (All/Text/Images/Files/URLs)
+                if flags == .option,
+                   let char = event.charactersIgnoringModifiers,
+                   let digit = char.first?.wholeNumberValue,
+                   (1...5).contains(digit) {
+                    vm.setTypeFilterByIndex(digit - 1)
                     return nil
                 }
                 return event
@@ -422,7 +436,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.resume()
             return
         }
-        hidePanel()
+        let pinned = viewModel?.isPanelPinned ?? false
+        if !pinned { hidePanel() }
 
         previousApp?.activate()
 
@@ -435,7 +450,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func performPastePlain(_ item: ClipItem) {
         monitor?.pause()
         PasteService.writeAsPlainText(item)
-        hidePanel()
+        let pinned = viewModel?.isPanelPinned ?? false
+        if !pinned { hidePanel() }
 
         previousApp?.activate()
 
