@@ -41,11 +41,7 @@ struct MainPanel: View {
         .frame(width: 760, height: 520)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.10), radius: 18, y: 10)
+        .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
         .onAppear {
             viewModel.loadItems()
         }

@@ -119,9 +119,9 @@ struct SearchBar: View {
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.vertical, 7)
+            .background(Color(nsColor: .windowBackgroundColor).opacity(0.75))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             Menu {
                 Button("All Types") { typeFilter = nil }
@@ -138,16 +138,16 @@ struct SearchBar: View {
                         .font(.system(size: 9))
                 }
                 .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color(nsColor: .controlBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .padding(.vertical, 7)
+                .background(Color(nsColor: .windowBackgroundColor).opacity(0.75))
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var filterLabel: String {

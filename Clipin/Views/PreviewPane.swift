@@ -11,7 +11,6 @@ struct PreviewPane: View {
             if let item {
                 VStack(spacing: 0) {
                     content(for: item)
-                    Divider()
                     infoSection(for: item)
                 }
             } else {
@@ -109,12 +108,7 @@ struct PreviewPane: View {
 
     private func infoSection(for item: ClipItem) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Information")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-
+            VStack(alignment: .leading, spacing: 10) {
                 infoRow("Source", value: item.sourceName ?? "Unknown", icon: sourceAppIcon(for: item))
                 infoRow("Type", value: typeLabel(item.clipType))
                 if item.clipType == .image, let path = item.imagePath {
@@ -148,26 +142,28 @@ struct PreviewPane: View {
                 infoRow("Copied", value: relativeDate(item.createdAt))
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxHeight: 180)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+        .frame(maxHeight: 170)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private func infoRow(_ label: String, value: String, icon: NSImage? = nil) -> some View {
-        HStack {
+        HStack(alignment: .center, spacing: 8) {
             Text(label)
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
             Spacer()
             if let icon {
                 Image(nsImage: icon)
                     .resizable()
-                    .frame(width: 16, height: 16)
+                    .frame(width: 14, height: 14)
             }
             Text(value)
-                .font(.system(size: 12))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.primary)
                 .textSelection(.enabled)
         }
     }
