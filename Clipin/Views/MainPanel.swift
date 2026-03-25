@@ -23,36 +23,29 @@ struct MainPanel: View {
                 onEscape: { viewModel.close() }
             )
 
-            // 搜索栏底部细线
-            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
-
             HStack(spacing: 0) {
+                // 左栏：controlBackgroundColor（极浅灰，macOS 系统 sidebar 标准色）
                 itemList
                     .frame(width: 260)
-                    .background(Color.primary.opacity(0.04))
+                    .background(Color(nsColor: .controlBackgroundColor))
 
-                // 左右分栏竖向分隔线（参考 ChatGPT 可见度）
-                Rectangle().fill(Color.primary.opacity(0.1)).frame(width: 1)
-
+                // 右栏：textBackgroundColor（纯白，macOS 内容区标准色）
                 PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color(nsColor: .textBackgroundColor))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            // action bar 顶部细线
-            Rectangle().fill(Color.primary.opacity(0.08)).frame(height: 0.5)
 
             bottomBar
         }
         .frame(width: 760, height: 520)
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.96))
-        .background(.ultraThinMaterial)
+        // 纯实色白背景，不受桌面颜色污染
+        .background(Color(nsColor: .textBackgroundColor))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        // 多层阴影叠加：宽散射 + 中层 + 贴边，制造卡片深度感
         .shadow(color: .black.opacity(0.04), radius: 64, y: 16)
         .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
         .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
@@ -155,7 +148,7 @@ struct MainPanel: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.primary.opacity(0.04))
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var pinLabel: String {
