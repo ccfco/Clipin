@@ -135,14 +135,18 @@ struct PreviewPane: View {
             infoRow("Type", value: typeLabel(item.clipType))
             if item.clipType == .text || item.clipType == .url {
                 infoRow("Characters", value: "\(item.charCount)")
+                let lines = item.content.components(separatedBy: .newlines).count
+                infoRow("Lines", value: "\(lines)")
+                let words = item.content.split { $0.isWhitespace || $0.isNewline }.count
+                infoRow("Words", value: "\(words)")
             }
             if item.copyCount > 1 {
                 infoRow("Times copied", value: "\(item.copyCount)")
             }
             if item.firstCopiedAt != item.createdAt {
-                infoRow("First copied", value: absoluteDate(item.firstCopiedAt))
+                infoRow("First copied", value: Self.absoluteDateString(item.firstCopiedAt))
             }
-            infoRow("Last copied", value: absoluteDate(item.createdAt))
+            infoRow("Last copied", value: Self.absoluteDateString(item.createdAt))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -205,18 +209,30 @@ struct PreviewPane: View {
     }
 
     private func absoluteDate(_ timestamp: Int64) -> String {
-        let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000.0)
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .medium
-        return formatter.string(from: date)
+        Self.absoluteDateString(timestamp)
     }
+
+    private static let _absoluteDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .medium
+        return f
+    }()
+
+    private static func absoluteDateString(_ timestamp: Int64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000.0)
+        return _absoluteDateFormatter.string(from: date)
+    }
+
+    private static let _relativeDateFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .short
+        return f
+    }()
 
     private func relativeDate(_ timestamp: Int64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000.0)
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: .now)
+        return Self._relativeDateFormatter.localizedString(for: date, relativeTo: .now)
     }
 
     private func headerIconName(for type: ClipType) -> String {
