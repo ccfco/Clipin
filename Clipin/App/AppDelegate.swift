@@ -173,6 +173,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showPanel() {
+        guard let panel else { return }
         let front = NSWorkspace.shared.frontmostApplication
         if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
             previousApp = front
@@ -181,16 +182,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.typeFilter = nil
         viewModel?.targetAppName = previousApp?.localizedName
         viewModel?.loadItems()
-        panel?.makeKeyAndOrderFront(nil)
+
+        // 从略微缩小 + 透明开始，动画到正常状态
+        panel.alphaValue = 0
+        panel.makeKeyAndOrderFront(nil)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1
+        }
+
         startClickOutsideMonitor()
         startKeyMonitor()
     }
 
     private func hidePanel() {
-        panel?.orderOut(nil)
+        guard let panel else { return }
         stopClickOutsideMonitor()
         stopKeyMonitor()
-        previousApp?.activate()
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.12
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            panel.orderOut(nil)
+            panel.alphaValue = 1  // 重置，下次 show 前的初始状态
+            self?.previousApp?.activate()
+        })
     }
 
     private func startClickOutsideMonitor() {
