@@ -73,3 +73,11 @@ impl From<rusqlite::Error> for ClipinError {
         }
     }
 }
+
+impl From<std::io::Error> for ClipinError {
+    fn from(e: std::io::Error) -> Self {
+        ClipinError::StorageError {
+            message: e.to_string(),
+        }
+    }
+}

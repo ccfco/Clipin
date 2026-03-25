@@ -1,7 +1,7 @@
 use crate::models::*;
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha256};
-use std::sync::Mutex;
+use std::{collections::HashSet, fs, io::ErrorKind, sync::Mutex};
 use uuid::Uuid;
 
 pub struct Storage {
@@ -119,6 +119,99 @@ impl Storage {
         format!("{:x}", hasher.finalize())
     }
 
+    fn content_hash_bytes(bytes: &[u8], clip_type: &ClipType) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(clip_type.as_str().as_bytes());
+        hasher.update(b":");
+        hasher.update(bytes);
+        format!("{:x}", hasher.finalize())
+    }
+
+    fn hash_for_item(
+        content: &str,
+        clip_type: &ClipType,
+        image_path: Option<&str>,
+    ) -> Result<String, ClipinError> {
+        match clip_type {
+            ClipType::Image => {
+                if let Some(path) = image_path {
+                    let bytes = fs::read(path)?;
+                    Ok(Self::content_hash_bytes(&bytes, clip_type))
+                } else {
+                    Ok(Self::content_hash(content, clip_type))
+                }
+            }
+            _ => Ok(Self::content_hash(content, clip_type)),
+        }
+    }
+
+    fn load_image_paths_for_hash(conn: &Connection, hash: &str) -> Result<Vec<String>, ClipinError> {
+        let mut stmt =
+            conn.prepare("SELECT image_path FROM clip_items WHERE hash = ?1 AND image_path IS NOT NULL")?;
+        let rows = stmt.query_map(params![hash], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    fn load_image_paths_for_item(conn: &Connection, id: &str) -> Result<Vec<String>, ClipinError> {
+        let mut stmt =
+            conn.prepare("SELECT image_path FROM clip_items WHERE id = ?1 AND image_path IS NOT NULL")?;
+        let rows = stmt.query_map(params![id], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    fn load_image_paths_before(
+        conn: &Connection,
+        timestamp: i64,
+    ) -> Result<Vec<String>, ClipinError> {
+        let mut stmt = conn.prepare(
+            "SELECT image_path
+             FROM clip_items
+             WHERE is_pinned = 0 AND created_at < ?1 AND image_path IS NOT NULL",
+        )?;
+        let rows = stmt.query_map(params![timestamp], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    fn load_trimmed_image_paths(
+        conn: &Connection,
+        keep_latest: i32,
+    ) -> Result<Vec<String>, ClipinError> {
+        let mut stmt = conn.prepare(
+            "
+            SELECT image_path
+            FROM clip_items
+            WHERE is_pinned = 0
+              AND image_path IS NOT NULL
+              AND id IN (
+                  SELECT id
+                  FROM clip_items
+                  WHERE is_pinned = 0
+                  ORDER BY created_at DESC
+                  LIMIT -1 OFFSET ?1
+              )
+            ",
+        )?;
+        let rows = stmt.query_map(params![keep_latest], |row| row.get::<_, String>(0))?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    fn remove_image_files(paths: Vec<String>, keep_path: Option<&str>) {
+        let keep_path = keep_path.map(str::to_string);
+        let mut unique_paths = HashSet::new();
+
+        for path in paths {
+            if keep_path.as_deref() == Some(path.as_str()) || !unique_paths.insert(path.clone()) {
+                continue;
+            }
+
+            if let Err(err) = fs::remove_file(&path) {
+                if err.kind() != ErrorKind::NotFound {
+                    eprintln!("⚠️ Failed to remove image file {}: {}", path, err);
+                }
+            }
+        }
+    }
+
     pub fn save_item(
         &self,
         content: &str,
@@ -127,13 +220,8 @@ impl Storage {
         source_name: Option<&str>,
         image_path: Option<&str>,
     ) -> Result<ClipItem, ClipinError> {
-        let conn = self.conn.lock().unwrap();
-        // 图片用 image_path 计算 hash（content 固定为 "image"，否则所有图片 hash 相同）
-        let hash_input = match clip_type {
-            ClipType::Image => image_path.unwrap_or(content),
-            _ => content,
-        };
-        let hash = Self::content_hash(hash_input, clip_type);
+        let mut conn = self.conn.lock().unwrap();
+        let hash = Self::hash_for_item(content, clip_type, image_path)?;
         let now = chrono::Utc::now().timestamp_millis();
         let char_count = content.chars().count() as i32;
 
@@ -151,11 +239,12 @@ impl Storage {
             None => (now, 1, false),
         };
 
-        // 删除旧记录，插入新记录（保持最新 created_at 在顶部）
-        conn.execute("DELETE FROM clip_items WHERE hash = ?1", params![hash])?;
+        let old_image_paths = Self::load_image_paths_for_hash(&conn, &hash)?;
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM clip_items WHERE hash = ?1", params![hash])?;
 
         let id = Uuid::new_v4().to_string();
-        conn.execute(
+        tx.execute(
             "INSERT INTO clip_items (id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, hash, copy_count, first_copied_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
@@ -173,6 +262,8 @@ impl Storage {
                 first_copied_at,
             ],
         )?;
+        tx.commit()?;
+        Self::remove_image_files(old_image_paths, image_path);
 
         Ok(ClipItem {
             id,
@@ -392,10 +483,12 @@ impl Storage {
 
     pub fn delete_item(&self, id: &str) -> Result<(), ClipinError> {
         let conn = self.conn.lock().unwrap();
+        let image_paths = Self::load_image_paths_for_item(&conn, id)?;
         let affected = conn.execute("DELETE FROM clip_items WHERE id = ?1", params![id])?;
         if affected == 0 {
             return Err(ClipinError::NotFound { id: id.to_string() });
         }
+        Self::remove_image_files(image_paths, None);
         Ok(())
     }
 
@@ -410,14 +503,16 @@ impl Storage {
         is_pinned: bool,
         created_at: i64,
     ) -> Result<ClipItem, ClipinError> {
-        let conn = self.conn.lock().unwrap();
-        let hash = Self::content_hash(content, clip_type);
-        conn.execute("DELETE FROM clip_items WHERE hash = ?1", params![hash])?;
+        let mut conn = self.conn.lock().unwrap();
+        let hash = Self::hash_for_item(content, clip_type, image_path)?;
+        let old_image_paths = Self::load_image_paths_for_hash(&conn, &hash)?;
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM clip_items WHERE hash = ?1", params![hash])?;
 
         let id = Uuid::new_v4().to_string();
         let char_count = content.chars().count() as i32;
 
-        conn.execute(
+        tx.execute(
             "INSERT INTO clip_items (id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, hash, copy_count, first_copied_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?7)",
             params![
@@ -425,6 +520,8 @@ impl Storage {
                 is_pinned as i32, created_at, image_path, char_count, hash
             ],
         )?;
+        tx.commit()?;
+        Self::remove_image_files(old_image_paths, image_path);
 
         Ok(ClipItem {
             id,
@@ -443,10 +540,14 @@ impl Storage {
 
     pub fn clear_unpinned_before(&self, timestamp: i64) -> Result<i32, ClipinError> {
         let conn = self.conn.lock().unwrap();
+        let image_paths = Self::load_image_paths_before(&conn, timestamp)?;
         let affected = conn.execute(
             "DELETE FROM clip_items WHERE is_pinned = 0 AND created_at < ?1",
             params![timestamp],
         )?;
+        if affected > 0 {
+            Self::remove_image_files(image_paths, None);
+        }
         Ok(affected as i32)
     }
 
@@ -454,6 +555,7 @@ impl Storage {
     pub fn trim_unpinned(&self, keep_latest: i32) -> Result<i32, ClipinError> {
         let conn = self.conn.lock().unwrap();
         let keep_latest = keep_latest.max(0);
+        let image_paths = Self::load_trimmed_image_paths(&conn, keep_latest)?;
         let affected = conn.execute(
             "
             DELETE FROM clip_items
@@ -468,6 +570,9 @@ impl Storage {
             ",
             params![keep_latest],
         )?;
+        if affected > 0 {
+            Self::remove_image_files(image_paths, None);
+        }
         Ok(affected as i32)
     }
 

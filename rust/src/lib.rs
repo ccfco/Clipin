@@ -60,7 +60,7 @@ impl ClipinCore {
             .get_list_items(limit, offset, type_filter.as_ref())
     }
 
-    /// FTS5 全文搜索
+    /// 搜索历史记录
     pub fn search(&self, query: String, type_filter: Option<ClipType>) -> Vec<ClipItem> {
         self.storage.search(&query, type_filter.as_ref())
     }
@@ -130,9 +130,9 @@ impl ClipinCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, path::PathBuf};
 
-    fn setup_core() -> Arc<ClipinCore> {
+    fn setup_core_with_image_dir() -> (Arc<ClipinCore>, PathBuf) {
         let tmp = tempfile::tempdir().unwrap();
         let db_path = tmp.path().join("test.db");
         let img_dir = tmp.path().join("images");
@@ -143,7 +143,17 @@ mod tests {
         let img = img_dir.to_string_lossy().to_string();
         std::mem::forget(tmp);
 
-        ClipinCore::new(db, img).unwrap()
+        (ClipinCore::new(db, img).unwrap(), img_dir)
+    }
+
+    fn setup_core() -> Arc<ClipinCore> {
+        setup_core_with_image_dir().0
+    }
+
+    fn write_image(dir: &PathBuf, name: &str, bytes: &[u8]) -> String {
+        let path = dir.join(name);
+        fs::write(&path, bytes).unwrap();
+        path.to_string_lossy().to_string()
     }
 
     #[test]
@@ -303,5 +313,87 @@ mod tests {
         let items = core.get_items(10, 0, None);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].content, "pinned");
+    }
+
+    #[test]
+    fn test_image_dedup_uses_image_contents() {
+        let (core, img_dir) = setup_core_with_image_dir();
+        let first_path = write_image(&img_dir, "first.png", b"same-image-data");
+        let second_path = write_image(&img_dir, "second.png", b"same-image-data");
+
+        core.save_item(
+            "image".into(),
+            ClipType::Image,
+            None,
+            None,
+            Some(first_path.clone()),
+        )
+        .unwrap();
+        core.save_item(
+            "image".into(),
+            ClipType::Image,
+            None,
+            None,
+            Some(second_path.clone()),
+        )
+        .unwrap();
+
+        let items = core.get_items(10, 0, Some(ClipType::Image));
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].copy_count, 2);
+        assert_eq!(items[0].image_path.as_deref(), Some(second_path.as_str()));
+        assert!(!PathBuf::from(first_path).exists());
+        assert!(PathBuf::from(second_path).exists());
+    }
+
+    #[test]
+    fn test_import_distinct_images_do_not_collide() {
+        let (core, img_dir) = setup_core_with_image_dir();
+        let first_path = write_image(&img_dir, "import-1.png", b"image-one");
+        let second_path = write_image(&img_dir, "import-2.png", b"image-two");
+
+        core.import_item(
+            "image".into(),
+            ClipType::Image,
+            None,
+            None,
+            Some(first_path),
+            false,
+            1_000,
+        )
+        .unwrap();
+        core.import_item(
+            "image".into(),
+            ClipType::Image,
+            None,
+            None,
+            Some(second_path),
+            false,
+            2_000,
+        )
+        .unwrap();
+
+        let items = core.get_items(10, 0, Some(ClipType::Image));
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn test_delete_item_removes_image_file() {
+        let (core, img_dir) = setup_core_with_image_dir();
+        let image_path = write_image(&img_dir, "delete-me.png", b"delete-me");
+
+        let item = core
+            .save_item(
+                "image".into(),
+                ClipType::Image,
+                None,
+                None,
+                Some(image_path.clone()),
+            )
+            .unwrap();
+
+        core.delete_item(item.id).unwrap();
+
+        assert!(!PathBuf::from(image_path).exists());
     }
 }

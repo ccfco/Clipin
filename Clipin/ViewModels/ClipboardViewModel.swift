@@ -18,6 +18,50 @@ final class ClipboardViewModel: ObservableObject {
     @Published private(set) var sections: [ClipSection] = []
     @Published var targetAppName: String?
     @Published var isShowingActions = false
+    @Published var selectedActionIndex = 0
+    @Published private(set) var paletteActions: [PaletteAction] = []
+
+    func navigatePalette(delta: Int) {
+        let count = paletteActions.count
+        guard count > 0 else { return }
+        selectedActionIndex = max(0, min(count - 1, selectedActionIndex + delta))
+    }
+
+    func executeSelectedPaletteAction() {
+        executePaletteAction(at: selectedActionIndex)
+    }
+
+    func executePaletteAction(at index: Int) {
+        guard index >= 0, index < paletteActions.count else { return }
+        let action = paletteActions[index]
+        action.handler()
+
+        if isShowingActions {
+            hideActionsPalette(restoreFocus: true)
+        }
+    }
+
+    func toggleActionsPalette() {
+        isShowingActions ? hideActionsPalette(restoreFocus: true) : showActionsPalette()
+    }
+
+    func showActionsPalette() {
+        let actions = ActionPaletteBuilder.actions(for: self)
+        guard !actions.isEmpty else { return }
+        paletteActions = actions
+        selectedActionIndex = 0
+        isShowingActions = true
+    }
+
+    func hideActionsPalette(restoreFocus: Bool = false) {
+        isShowingActions = false
+        paletteActions = []
+        selectedActionIndex = 0
+
+        if restoreFocus {
+            NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+        }
+    }
 
     private let core: ClipinCore
     private var items: [ClipListItem] = []
@@ -41,6 +85,10 @@ final class ClipboardViewModel: ObservableObject {
     // MARK: - Load
 
     func loadItems(selectLatest: Bool = false) {
+        if isShowingActions {
+            hideActionsPalette()
+        }
+
         let currentSelectionID = selectLatest ? nil : selectedItemID
 
         if searchQuery.isEmpty {
@@ -73,7 +121,7 @@ final class ClipboardViewModel: ObservableObject {
         let core = self.core
         let capturedId = id
         loadItemTask = Task {
-            let item = try? await Task.detached(priority: .userInteractive) {
+            let item = try? await Task.detached(priority: .userInitiated) {
                 try core.getItem(id: capturedId)
             }.value
             guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
@@ -163,6 +211,10 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func deleteItem(id: String) {
+        if isShowingActions {
+            hideActionsPalette()
+        }
+
         // 删除前记住相邻项，删除后自动选中
         var nextSelectionID: String?
         if selectedItemID == id, let idx = flatOrder.firstIndex(where: { $0.id == id }) {

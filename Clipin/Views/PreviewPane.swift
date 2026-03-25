@@ -1,6 +1,18 @@
 import SwiftUI
 import AppKit
 
+private let previewInfoBackground = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.21, green: 0.20, blue: 0.27, alpha: 0.34)
+        : NSColor(srgbRed: 0.963, green: 0.958, blue: 0.986, alpha: 0.62)
+})
+
+private let previewCanvasTint = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.20, green: 0.19, blue: 0.27, alpha: 0.16)
+        : NSColor(srgbRed: 0.980, green: 0.976, blue: 0.994, alpha: 0.78)
+})
+
 /// 右侧预览面板
 struct PreviewPane: View {
     let item: ClipItem?
@@ -12,7 +24,10 @@ struct PreviewPane: View {
                 VStack(spacing: 0) {
                     content(for: item)
                     infoSection(for: item)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
                 }
+                .padding(.top, 4)
             } else {
                 placeholder(
                     icon: "doc.text.magnifyingglass",
@@ -33,13 +48,12 @@ struct PreviewPane: View {
                     .padding(20)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
-                SelectableTextPreview(
+                textPreviewBody(
                     text: item.content,
-                    font: .monospacedSystemFont(ofSize: 12, weight: .regular),
+                    font: preferredTextFont(for: item.content),
                     searchQuery: searchQuery
                 )
-                .padding(24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(28)
             }
 
         case .url:
@@ -51,28 +65,33 @@ struct PreviewPane: View {
                     }
                 }
 
-                SelectableTextPreview(
+                textPreviewBody(
                     text: item.content,
-                    font: .monospacedSystemFont(ofSize: 12, weight: .regular),
+                    font: preferredTextFont(for: item.content, baseSize: 13.5),
                     searchQuery: searchQuery
                 )
             }
-            .padding(24)
+            .padding(28)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
         case .image:
             ScrollView {
                 if let path = item.imagePath, let image = NSImage(contentsOfFile: path) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: 360)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(previewCanvasTint)
+                        Image(nsImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: 360)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .padding(18)
+                    }
                 } else {
                     unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
                 }
             }
-            .padding(24)
+            .padding(28)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
         case .file:
@@ -85,7 +104,7 @@ struct PreviewPane: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(url.lastPathComponent)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                         Text(url.deletingLastPathComponent().path)
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
@@ -100,62 +119,65 @@ struct PreviewPane: View {
                 )
                 .frame(minHeight: 80)
             }
-            .padding(24)
+            .padding(28)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
     private func infoSection(for item: ClipItem) -> some View {
-        VStack(spacing: 0) {
-            Divider()
-            infoGrid(for: item)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxHeight: 130)
-        .background(Color(nsColor: .controlBackgroundColor))
+        infoGrid(for: item)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(previewInfoBackground)
+                    .shadow(color: .white.opacity(0.18), radius: 8, y: 1)
+            )
     }
 
     private func infoGrid(for item: ClipItem) -> some View {
-        // 构建左右两列的 info 条目
-        var leftItems: [(String, String, NSImage?)] = []
-        var rightItems: [(String, String, NSImage?)] = []
+        // 收集所有 info 条目，然后均匀分两列（ceil(n/2) 在左，floor(n/2) 在右）
+        var all: [(String, String, NSImage?)] = []
 
-        leftItems.append(("Source", item.sourceName ?? "Unknown", sourceAppIcon(for: item)))
-        leftItems.append(("Type", typeLabel(item.clipType), nil))
-        if item.isPinned { leftItems.append(("Status", "Pinned", nil)) }
+        all.append(("Source", item.sourceName ?? "Unknown", sourceAppIcon(for: item)))
+        all.append(("Type", typeLabel(item.clipType), nil))
+        if item.isPinned { all.append(("Status", "Pinned", nil)) }
 
         if item.clipType == .image, let path = item.imagePath {
             if let image = NSImage(contentsOfFile: path),
                let rep = image.representations.first {
                 let w = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
                 let h = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
-                rightItems.append(("Dimensions", "\(w) × \(h)", nil))
+                all.append(("Dimensions", "\(w) × \(h)", nil))
             }
             if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
                let bytes = attrs[.size] as? Int64 {
-                rightItems.append(("File size", ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file), nil))
+                all.append(("File size", ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file), nil))
             }
         }
 
         if item.clipType == .text || item.clipType == .url {
             let words = item.content.split { $0.isWhitespace || $0.isNewline }.count
-            rightItems.append(("Words", "\(words)", nil))
-            rightItems.append(("Characters", "\(item.charCount)", nil))
+            all.append(("Words", "\(words)", nil))
+            all.append(("Characters", "\(item.charCount)", nil))
         }
 
-        if item.copyCount > 1 { rightItems.append(("Copies", "\(item.copyCount)", nil)) }
-        rightItems.append(("Copied", relativeDate(item.createdAt), nil))
+        if item.copyCount > 1 { all.append(("Copies", "\(item.copyCount)", nil)) }
+        all.append(("Copied", relativeDate(item.createdAt), nil))
 
-        return HStack(alignment: .top, spacing: 20) {
+        let mid = (all.count + 1) / 2
+        let leftItems  = Array(all[..<mid])
+        let rightItems = all.count > mid ? Array(all[mid...]) : []
+
+        return HStack(alignment: .top, spacing: 24) {
             infoColumn(items: leftItems)
             infoColumn(items: rightItems)
         }
     }
 
     private func infoColumn(items: [(String, String, NSImage?)]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, entry in
                 infoRow(entry.0, value: entry.1, icon: entry.2)
             }
@@ -164,20 +186,24 @@ struct PreviewPane: View {
     }
 
     private func infoRow(_ label: String, value: String, icon: NSImage? = nil) -> some View {
-        HStack(alignment: .center, spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(label)
-                .font(.system(size: 10))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.tertiary)
-            Spacer()
-            if let icon {
-                Image(nsImage: icon)
-                    .resizable()
-                    .frame(width: 13, height: 13)
+
+            HStack(spacing: 6) {
+                if let icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .frame(width: 13, height: 13)
+                        .opacity(0.78)
+                }
+
+                Text(value)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.primary.opacity(0.72))
+                    .textSelection(.enabled)
             }
-            Text(value)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
         }
     }
 
@@ -187,7 +213,7 @@ struct PreviewPane: View {
                 .font(.system(size: 30))
                 .foregroundStyle(.tertiary)
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: 14, weight: .semibold))
             Text(subtitle)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
@@ -242,6 +268,45 @@ struct PreviewPane: View {
         return Self._relativeDateFormatter.localizedString(for: date, relativeTo: .now)
     }
 
+    private func textPreviewBody(text: String, font: NSFont, searchQuery: String) -> some View {
+        let hero = isHeroText(text)
+
+        return VStack(alignment: .leading, spacing: 0) {
+            if hero {
+                Spacer(minLength: 6)
+            }
+
+            SelectableTextPreview(
+                text: text,
+                font: font,
+                searchQuery: searchQuery
+            )
+            .frame(
+                maxWidth: hero ? 460 : .infinity,
+                maxHeight: hero ? nil : .infinity,
+                alignment: .topLeading
+            )
+
+            Spacer(minLength: hero ? 0 : 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func preferredTextFont(for text: String, baseSize: CGFloat = 14) -> NSFont {
+        guard isHeroText(text) else {
+            return .systemFont(ofSize: baseSize, weight: .regular)
+        }
+        return .systemFont(ofSize: 22, weight: .medium)
+    }
+
+    private func isHeroText(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let lineCount = trimmed.split(whereSeparator: \.isNewline).count
+        let looksCodeLike = trimmed.contains("{") || trimmed.contains("}") || trimmed.contains(";") || trimmed.contains("://")
+        return trimmed.count <= 120 && lineCount <= 4 && !looksCodeLike
+    }
+
 }
 
 private struct ColorSwatchPreview: View {
@@ -256,7 +321,7 @@ private struct ColorSwatchPreview: View {
         VStack(alignment: .leading, spacing: 20) {
             ZStack {
                 // 浅灰底，当颜色有透明度时可见
-                Color(nsColor: .controlBackgroundColor)
+                previewCanvasTint
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(color)
@@ -358,7 +423,7 @@ private struct SelectableTextPreview: NSViewRepresentable {
 
         let textColor = NSColor.labelColor
         let para = NSMutableParagraphStyle()
-        para.lineSpacing = 4
+        para.lineSpacing = 6
         let attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: textColor,

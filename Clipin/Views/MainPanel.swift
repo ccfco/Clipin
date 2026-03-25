@@ -1,5 +1,51 @@
 import SwiftUI
 
+// MARK: - 品牌色（Raycast 风格淡紫，深浅色自适应）
+
+private let panelShell = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.10, green: 0.10, blue: 0.15, alpha: 1)
+        : NSColor(srgbRed: 0.972, green: 0.968, blue: 0.988, alpha: 1)
+})
+
+private let chromeSurface = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.14, green: 0.13, blue: 0.20, alpha: 0.54)
+        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.36)
+})
+
+private let sidebarSurface = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.15, green: 0.14, blue: 0.22, alpha: 0.92)
+        : NSColor(srgbRed: 0.944, green: 0.938, blue: 0.974, alpha: 0.96)
+})
+
+private let detailSurface = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.16, green: 0.16, blue: 0.21, alpha: 0.98)
+        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.99)
+})
+
+private let shellGlow = LinearGradient(
+    colors: [
+        Color.white.opacity(0.20),
+        Color.white.opacity(0.05),
+        Color.clear
+    ],
+    startPoint: .topLeading,
+    endPoint: .bottomTrailing
+)
+
+private let panelWash = LinearGradient(
+    colors: [
+        Color.white.opacity(0.18),
+        Color.white.opacity(0.05),
+        Color.clear
+    ],
+    startPoint: .top,
+    endPoint: .bottom
+)
+
 /// 主面板 — 偏原生 macOS 的双栏布局
 struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
@@ -12,65 +58,95 @@ struct MainPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 搜索栏：白色背景 + 底部阴影 → 浮在列表上方
-            SearchBar(
-                query: $viewModel.searchQuery,
-                typeFilter: $viewModel.typeFilter,
-                onNavigate: { delta in
-                    if delta > 0 { viewModel.selectNext() }
-                    else { viewModel.selectPrev() }
-                },
-                onSubmit: { viewModel.pasteSelected() },
-                onEscape: { viewModel.close() }
-            )
-            .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
-            .zIndex(1)
-
-            HStack(spacing: 0) {
-                // 左栏 sidebar：base 层，灰色背景
-                itemList
-                    .frame(width: 260)
-                    .background(Color(nsColor: .controlBackgroundColor))
-
-                // 右栏内容：compositingGroup + 左侧阴影 → 浮在 sidebar 上方
-                PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .textBackgroundColor))
-                    .compositingGroup()
-                    .shadow(color: .black.opacity(0.1), radius: 14, x: -10, y: 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .zIndex(0)
-
-            // action bar：灰色背景 + 顶部阴影 → 浮在内容上方
+            headerBar
+            contentArea
             bottomBar
-            .shadow(color: .black.opacity(0.05), radius: 8, y: -3)
-            .zIndex(1)
         }
-        .frame(width: 760, height: 520)
-        // 纯实色白背景，不受桌面颜色污染
-        .background(Color(nsColor: .textBackgroundColor))
-        .overlay(alignment: .bottomLeading) {
+        .frame(width: 800, height: 540)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [panelShell, panelShell.opacity(0.985)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(panelWash)
+                .overlay(shellGlow.opacity(0.72))
+        )
+        .overlay(alignment: .bottomTrailing) {
             if viewModel.isShowingActions {
                 ActionPalette(
-                    isPresented: $viewModel.isShowingActions,
-                    actions: ActionPaletteBuilder.actions(for: viewModel)
+                    isPresented: Binding(
+                        get: { viewModel.isShowingActions },
+                        set: { presented in
+                            if presented {
+                                viewModel.showActionsPalette()
+                            } else {
+                                viewModel.hideActionsPalette(restoreFocus: true)
+                            }
+                        }
+                    ),
+                    actions: viewModel.paletteActions,
+                    selectedIndex: $viewModel.selectedActionIndex,
+                    onSelect: { index in
+                        viewModel.executePaletteAction(at: index)
+                    }
                 )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .transition(
+                    .asymmetric(
+                        insertion: .scale(scale: 0.98, anchor: .bottomTrailing).combined(with: .opacity),
+                        removal: .opacity
+                    )
+                )
             }
         }
-        .animation(.easeOut(duration: 0.12), value: viewModel.isShowingActions)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.04), radius: 64, y: 16)
-        .shadow(color: .black.opacity(0.1), radius: 20, y: 8)
-        .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+        .shadow(color: .black.opacity(0.16), radius: 48, y: 24)
+        .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .onAppear {
             viewModel.loadItems()
         }
+    }
+
+    private var headerBar: some View {
+        SearchBar(
+            query: $viewModel.searchQuery,
+            typeFilter: $viewModel.typeFilter,
+            onNavigate: { delta in
+                if delta > 0 { viewModel.selectNext() }
+                else { viewModel.selectPrev() }
+            },
+            onSubmit: { viewModel.pasteSelected() },
+            onEscape: { viewModel.close() }
+        )
+        .padding(.horizontal, 2)
+        .padding(.top, 6)
+    }
+
+    private var contentArea: some View {
+        HStack(spacing: 14) {
+            itemList
+                .frame(width: 292)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(sidebarSurface)
+                        .shadow(color: .black.opacity(0.04), radius: 20, y: 10)
+                )
+
+            PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(detailSurface)
+                        .shadow(color: .black.opacity(0.07), radius: 24, y: 12)
+                )
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var itemList: some View {
@@ -95,7 +171,6 @@ struct MainPanel: View {
     private var bottomBar: some View {
         HStack(spacing: 0) {
             if viewModel.selectedListItem != nil {
-                // 主操作：可点击的 key badge
                 Button { viewModel.pasteSelected() } label: {
                     keyBadge(
                         label: viewModel.targetAppName.map { "Paste to \($0)" } ?? "Paste",
@@ -110,8 +185,7 @@ struct MainPanel: View {
 
                 Spacer()
 
-                // Actions — 点击 or ⌘K 打开 palette
-                Button { viewModel.isShowingActions.toggle() } label: {
+                Button { viewModel.toggleActionsPalette() } label: {
                     keyBadge(label: "Actions", key: "⌘K")
                 }
                 .buttonStyle(.plain)
@@ -131,25 +205,33 @@ struct MainPanel: View {
             .padding(.leading, 12)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .padding(.top, 6)
+        .padding(.bottom, 12)
+        .background(chromeSurface.opacity(0.001))
     }
 
     private func keyBadge(label: String, key: String, primary: Bool = false) -> some View {
         HStack(spacing: 5) {
             Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(primary ? Color.primary : Color.secondary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(primary ? Color.white : Color.secondary)
             Text(key)
-                .font(.system(size: 10, weight: .medium, design: .rounded))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                .foregroundStyle(primary ? Color.white.opacity(0.82) : Color(nsColor: .tertiaryLabelColor))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(Color.primary.opacity(0.06))
+                        .fill(primary ? Color.white.opacity(0.14) : Color.primary.opacity(0.06))
                 )
         }
+        .padding(.horizontal, primary ? 12 : 0)
+        .padding(.vertical, primary ? 7 : 0)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(primary ? Color.accentColor.opacity(0.94) : Color.clear)
+        )
+        .shadow(color: primary ? Color.accentColor.opacity(0.16) : .clear, radius: 12, y: 4)
     }
 }
 
@@ -210,12 +292,12 @@ private struct ItemListView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 10, weight: .medium))
             .foregroundStyle(.tertiary)
-            .tracking(0.5)
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 3)
+            .tracking(0.35)
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -233,15 +315,24 @@ private struct ItemListView: View {
         )
         .id(item.id)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(
                     isSelected
-                        ? Color.accentColor.opacity(0.18)
+                        ? Color.white.opacity(0.58)
                         : isHovered
-                            ? Color.primary.opacity(0.05)
+                            ? Color.white.opacity(0.30)
                             : Color.clear
                 )
-                .padding(.horizontal, 6)
+                .shadow(color: .black.opacity(isSelected ? 0.045 : 0), radius: 14, y: 6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(
+                            isSelected
+                                ? Color.accentColor.opacity(0.06)
+                                : Color.clear
+                        )
+                )
+                .padding(.horizontal, 8)
         )
         .animation(.easeOut(duration: 0.1), value: isSelected)
         .animation(.easeOut(duration: 0.08), value: isHovered)

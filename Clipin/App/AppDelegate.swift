@@ -223,7 +223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hidePanel() {
         guard let panel else { return }
-        viewModel?.isShowingActions = false
+        viewModel?.hideActionsPalette()
         stopClickOutsideMonitor()
         stopKeyMonitor()
 
@@ -235,10 +235,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            guard let self, self.hideGeneration == expectedGeneration else { return }
-            panel.orderOut(nil)
-            panel.alphaValue = 1
-            self.previousApp?.activate()
+            Task { @MainActor [weak self] in
+                guard let self, self.hideGeneration == expectedGeneration else { return }
+                panel.orderOut(nil)
+                panel.alphaValue = 1
+                self.previousApp?.activate()
+            }
         })
     }
 
@@ -263,6 +265,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let vm = self.viewModel else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            // Palette 模式：优先拦截导航键，不让其到达搜索框
+            if vm.isShowingActions {
+                switch event.keyCode {
+                case 0x7E:  // ↑
+                    vm.navigatePalette(delta: -1); return nil
+                case 0x7D:  // ↓
+                    vm.navigatePalette(delta: 1); return nil
+                case 0x24 where flags.isEmpty:  // Return（无修饰键）
+                    vm.executeSelectedPaletteAction(); return nil
+                case 0x35:  // Escape
+                    vm.hideActionsPalette(restoreFocus: true)
+                    return nil
+                default:
+                    break  // 其他键（如字符输入）透传给搜索框
+                }
+            }
 
             switch event.keyCode {
             // ⇧Return — paste as plain text
@@ -297,7 +316,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             // ⌘K — toggle actions palette
             case 0x28 where flags == .command:
-                vm.isShowingActions.toggle()
+                vm.toggleActionsPalette()
                 return nil
 
             // ⌘, — open settings

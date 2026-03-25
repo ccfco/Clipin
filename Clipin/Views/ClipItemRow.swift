@@ -87,8 +87,8 @@ struct ClipItemRow: View {
             typeIndicator
 
             Text(highlightedDisplayText)
-                .font(.system(size: 13))
-                .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                .font(.system(size: 13.5, weight: isSelected ? .medium : .regular))
+                .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.92))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -96,7 +96,7 @@ struct ClipItemRow: View {
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.7) : Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.58) : Color(nsColor: .tertiaryLabelColor))
                     .opacity(isSelected || isHovered ? 1 : 0.3)
             }
 
@@ -106,23 +106,23 @@ struct ClipItemRow: View {
                 let alwaysVisible = n <= 3
                 Text("⌘\(n)")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.7) : Color(nsColor: .quaternaryLabelColor))
+                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.64) : Color(nsColor: .quaternaryLabelColor))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.06))
+                            .fill(isSelected ? Color.white.opacity(0.54) : Color.white.opacity(0.18))
                     )
                     .opacity(isSelected || isHovered ? 1 : (alwaysVisible ? 0.4 : 0))
             }
 
             // 时间 — 右对齐，退场角色
             Text(timeLabel)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(isSelected ? Color.accentColor.opacity(0.6) : Color(nsColor: .tertiaryLabelColor))
+                .font(.system(size: 10.5, design: .monospaced))
+                .foregroundStyle(isSelected ? Color.accentColor.opacity(0.60) : Color(nsColor: .tertiaryLabelColor))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 13)
+        .padding(.vertical, 8)
         .animation(.easeOut(duration: 0.1), value: isSelected)
     }
 
@@ -146,7 +146,7 @@ struct ClipItemRow: View {
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                .foregroundStyle(isSelected ? Color.accentColor.opacity(0.72) : Color.secondary)
                 .frame(width: 24, height: 24)
         }
     }
@@ -177,7 +177,7 @@ struct ClipItemRow: View {
         while searchStart < text.endIndex,
               let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
             if let attrRange = Range(range, in: result) {
-                result[attrRange].backgroundColor = .accentColor.opacity(0.25)
+                result[attrRange].backgroundColor = .accentColor.opacity(0.17)
                 result[attrRange].foregroundColor = .primary
             }
             searchStart = range.upperBound

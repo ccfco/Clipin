@@ -1,142 +1,123 @@
 import SwiftUI
 import AppKit
 
+private let paletteBackground = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.19, green: 0.18, blue: 0.27, alpha: 0.54)
+        : NSColor(srgbRed: 0.994, green: 0.992, blue: 1.0, alpha: 0.54)
+})
+
+private let paletteHighlight = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.35, green: 0.32, blue: 0.46, alpha: 0.18)
+        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.46)
+})
+
 // MARK: - PaletteAction
+
+enum PaletteActionSection: Int {
+    case primary
+    case secondary
+    case destructive
+}
 
 struct PaletteAction: Identifiable {
     let id = UUID()
     let title: String
+    let systemImage: String
     let badge: String
+    let section: PaletteActionSection
     let isDestructive: Bool
     let handler: () -> Void
 
-    init(_ title: String, badge: String, isDestructive: Bool = false, handler: @escaping () -> Void) {
+    init(
+        _ title: String,
+        systemImage: String,
+        badge: String,
+        section: PaletteActionSection = .secondary,
+        isDestructive: Bool = false,
+        handler: @escaping () -> Void
+    ) {
         self.title = title
+        self.systemImage = systemImage
         self.badge = badge
+        self.section = section
         self.isDestructive = isDestructive
         self.handler = handler
     }
 }
 
-// MARK: - Invisible keyboard field
-
-/// 透明 NSTextField，仅用于捕获键盘事件（与 SearchBar 中的 InterceptingTextField 同模式）
-private final class PaletteKeyField: NSTextField {
-    var onNavigate: ((Int) -> Void)?
-    var onSubmit: (() -> Void)?
-    var onEscape: (() -> Void)?
-}
-
-private struct PaletteKeyFieldView: NSViewRepresentable {
-    var onNavigate: (Int) -> Void
-    var onSubmit: () -> Void
-    var onEscape: () -> Void
-
-    func makeNSView(context: Context) -> PaletteKeyField {
-        let field = PaletteKeyField()
-        field.isBordered = false
-        field.backgroundColor = .clear
-        field.isEditable = false
-        field.isSelectable = false
-        field.focusRingType = .none
-        field.delegate = context.coordinator
-        DispatchQueue.main.async {
-            field.window?.makeFirstResponder(field)
-        }
-        return field
-    }
-
-    func updateNSView(_ nsView: PaletteKeyField, context: Context) {
-        nsView.onNavigate = onNavigate
-        nsView.onSubmit = onSubmit
-        nsView.onEscape = onEscape
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: PaletteKeyFieldView
-        init(_ p: PaletteKeyFieldView) { parent = p }
-
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-            guard let field = control as? PaletteKeyField else { return false }
-            switch selector {
-            case #selector(NSResponder.moveDown(_:)):
-                field.onNavigate?(1); return true
-            case #selector(NSResponder.moveUp(_:)):
-                field.onNavigate?(-1); return true
-            case #selector(NSResponder.insertNewline(_:)):
-                field.onSubmit?(); return true
-            case #selector(NSResponder.cancelOperation(_:)):
-                field.onEscape?(); return true
-            default:
-                return false
-            }
-        }
-    }
-}
-
 // MARK: - ActionPalette
+//
+// 键盘导航完全由 AppDelegate.keyMonitor 负责（palette 开启时拦截 ↑↓/Enter/Escape），
+// 此视图只负责渲染和鼠标交互。
 
 struct ActionPalette: View {
     @Binding var isPresented: Bool
     let actions: [PaletteAction]
+    @Binding var selectedIndex: Int
+    let onSelect: (Int) -> Void
 
-    @State private var selectedIndex = 0
-
-    private func dismiss() {
-        isPresented = false
-        NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+    private var groupedActionIndices: [[Int]] {
+        var groups: [[Int]] = []
+        for (index, action) in actions.enumerated() {
+            if let last = groups.indices.last,
+               let firstIndex = groups[last].first,
+               actions[firstIndex].section == action.section {
+                groups[last].append(index)
+            } else {
+                groups.append([index])
+            }
+        }
+        return groups
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            // 点击遮罩关闭
+        ZStack(alignment: .bottomTrailing) {
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture { dismiss() }
 
             palettePanel
-                .padding(.horizontal, 14)
-                .padding(.bottom, 48) // 悬在 bottomBar 上方
+                .padding(.trailing, 18)
+                .padding(.bottom, 62)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+    }
+
+    private func dismiss() {
+        isPresented = false
     }
 
     private var palettePanel: some View {
-        VStack(spacing: 0) {
-            // 不可见键盘捕获 field
-            PaletteKeyFieldView(
-                onNavigate: { delta in
-                    let newIndex = selectedIndex + delta
-                    if newIndex >= 0, newIndex < actions.count {
-                        selectedIndex = newIndex
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(groupedActionIndices.enumerated()), id: \.offset) { _, group in
+                VStack(spacing: 4) {
+                    ForEach(group, id: \.self) { index in
+                        actionRow(action: actions[index], index: index)
                     }
-                },
-                onSubmit: {
-                    guard selectedIndex < actions.count else { return }
-                    actions[selectedIndex].handler()
-                    dismiss()
-                },
-                onEscape: { dismiss() }
-            )
-            .frame(width: 0, height: 0)
-
-            ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
-                actionRow(action: action, index: index)
-                if index < actions.count - 1 {
-                    Divider().opacity(0.4).padding(.horizontal, 10)
                 }
             }
         }
-        .padding(.vertical, 6)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        .padding(10)
+        .frame(width: 372, alignment: .leading)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(paletteBackground)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [paletteHighlight, Color.clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
         )
-        .shadow(color: .black.opacity(0.12), radius: 16, y: -4)
-        .shadow(color: .black.opacity(0.06), radius: 4, y: -1)
+        .shadow(color: .black.opacity(0.12), radius: 34, y: 18)
+        .shadow(color: .black.opacity(0.04), radius: 10, y: 3)
         .onAppear { selectedIndex = 0 }
     }
 
@@ -144,42 +125,45 @@ struct ActionPalette: View {
         let isSelected = selectedIndex == index
 
         return HStack(spacing: 0) {
-            Text(action.title)
-                .font(.system(size: 13))
-                .foregroundStyle(
-                    action.isDestructive
-                        ? (isSelected ? Color.white : Color.red)
-                        : (isSelected ? Color.white : Color.primary)
-                )
+            Label {
+                Text(action.title)
+                    .font(.system(size: 15, weight: .medium))
+            } icon: {
+                Image(systemName: action.systemImage)
+                    .font(.system(size: 15, weight: .semibold))
+            }
+            .foregroundStyle(
+                action.isDestructive
+                    ? (isSelected ? Color.white : Color.red)
+                    : (isSelected ? Color.white : Color.primary)
+            )
+
             Spacer()
+
             Text(action.badge)
                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(
-                    isSelected ? Color.white.opacity(0.7) : Color.secondary
-                )
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
+                .foregroundStyle(isSelected ? Color.white.opacity(0.68) : Color.secondary.opacity(0.88))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
                 .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(isSelected ? Color.white.opacity(0.15) : Color.primary.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isSelected ? Color.white.opacity(0.14) : Color.white.opacity(0.08))
                 )
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
         .background(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(
                     isSelected
-                        ? (action.isDestructive ? Color.red : Color.accentColor)
+                        ? (action.isDestructive ? Color.red.opacity(0.84) : Color.accentColor.opacity(0.78))
                         : Color.clear
                 )
-                .padding(.horizontal, 4)
         )
         .contentShape(Rectangle())
         .onTapGesture {
             selectedIndex = index
-            action.handler()
-            dismiss()
+            onSelect(index)
         }
         .onHover { hovered in
             if hovered { selectedIndex = index }
@@ -190,42 +174,38 @@ struct ActionPalette: View {
 
 // MARK: - ActionPaletteBuilder
 
-/// 根据 viewModel 当前选中 item 构建操作列表
 struct ActionPaletteBuilder {
     @MainActor
     static func actions(for viewModel: ClipboardViewModel) -> [PaletteAction] {
-        guard viewModel.selectedListItem != nil else { return [] }
+        guard let selected = viewModel.selectedListItem else { return [] }
 
         var list: [PaletteAction] = []
 
-        list.append(PaletteAction("Paste", badge: "↵") {
+        list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", section: .primary) {
             viewModel.pasteSelected()
         })
 
-        if let item = viewModel.selectedItem,
-           item.clipType == .text || item.clipType == .url {
-            list.append(PaletteAction("Paste as Plain Text", badge: "⇧↵") {
+        if selected.clipType == .text || selected.clipType == .url {
+            list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", badge: "⇧↵", section: .primary) {
                 viewModel.pastePlainSelected()
             })
         }
 
-        list.append(PaletteAction("Copy to Clipboard", badge: "⌘C") {
+        list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", section: .primary) {
             viewModel.copySelected()
         })
 
-        let isPinned = viewModel.selectedListItem?.isPinned == true
-        list.append(PaletteAction(isPinned ? "Unpin" : "Pin", badge: "⌘⇧P") {
+        list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P") {
             viewModel.togglePinSelected()
         })
 
-        if let item = viewModel.selectedItem,
-           item.clipType == .url || item.clipType == .file {
-            list.append(PaletteAction("Open", badge: "⌘O") {
+        if selected.clipType == .url || selected.clipType == .file {
+            list.append(PaletteAction("Open", systemImage: "arrow.up.right.square", badge: "⌘O") {
                 viewModel.openSelected()
             })
         }
 
-        list.append(PaletteAction("Delete", badge: "⌘⌫", isDestructive: true) {
+        list.append(PaletteAction("Delete", systemImage: "trash", badge: "⌘⌫", section: .destructive, isDestructive: true) {
             viewModel.deleteSelected()
         })
 

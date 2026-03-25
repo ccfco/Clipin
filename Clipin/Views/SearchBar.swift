@@ -1,6 +1,18 @@
 import SwiftUI
 import AppKit
 
+private let searchBgInner = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.18, green: 0.17, blue: 0.25, alpha: 0.72)
+        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.88)
+})
+
+private let searchBgOuter = Color(nsColor: NSColor(name: nil) { app in
+    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        ? NSColor(srgbRed: 0.13, green: 0.12, blue: 0.19, alpha: 0.20)
+        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.14)
+})
+
 // MARK: - Key-intercepting NSTextField
 
 /// NSTextField 子类：拦截 ↑↓/Return/Escape/Tab，传给回调而非默认文本行为
@@ -50,23 +62,30 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: InterceptingTextFieldView
         weak var field: InterceptingTextField?
-        private var observer: Any?
+        private var isObservingRestoreFocus = false
 
         init(_ p: InterceptingTextFieldView) {
             parent = p
             super.init()
-            observer = NotificationCenter.default.addObserver(
-                forName: .clipinRestoreSearchFocus,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                guard let f = self?.field else { return }
-                f.window?.makeFirstResponder(f)
-            }
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(restoreSearchFocus),
+                name: .clipinRestoreSearchFocus,
+                object: nil
+            )
+            isObservingRestoreFocus = true
         }
 
         deinit {
-            if let observer { NotificationCenter.default.removeObserver(observer) }
+            if isObservingRestoreFocus {
+                NotificationCenter.default.removeObserver(self, name: .clipinRestoreSearchFocus, object: nil)
+            }
+        }
+
+        @MainActor
+        @objc private func restoreSearchFocus() {
+            guard let field else { return }
+            field.window?.makeFirstResponder(field)
         }
 
         func controlTextDidChange(_ obj: Notification) {
@@ -133,13 +152,15 @@ struct SearchBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(searchBgInner)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .white.opacity(0.18), radius: 6, y: 1)
+        .shadow(color: .black.opacity(0.03), radius: 10, y: 6)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(searchBgOuter)
     }
 
     private var filterPills: some View {
@@ -159,13 +180,13 @@ struct SearchBar: View {
             typeFilter = filter
         } label: {
             Text(label)
-                .font(.system(size: 11, weight: isActive ? .semibold : .regular))
-                .foregroundStyle(isActive ? Color.white : Color.secondary)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                .foregroundStyle(isActive ? Color.white : Color.secondary.opacity(0.88))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
                 .background(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(isActive ? Color.accentColor : Color.clear)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(isActive ? Color.accentColor.opacity(0.96) : Color.clear)
                 )
         }
         .buttonStyle(.plain)

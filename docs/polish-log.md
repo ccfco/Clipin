@@ -49,3 +49,39 @@ Acceptance:
 - `cd rust && cargo test --lib`
 - `xcodegen generate`
 - `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build`
+
+## 2026-03-25
+
+### Palette architecture, hierarchy cleanup, and Cmd+K responsiveness
+
+- Moved action-palette state into `ClipboardViewModel` so opening, navigating, executing, and dismissing the palette all use one source of truth instead of ad-hoc view mutations.
+- Rebuilt the `⌘K` palette as a compact anchored card with fixed width, semantic action groups, cached actions, and keyboard navigation that no longer depends on preview detail loading.
+- Removed the full-panel animation path for palette toggling and tightened the main shell into distinct header, content, and footer surfaces so the current selection stays primary and the chrome stops competing with content.
+- Softened the left-list selection treatment, reduced full-window purple tinting, and kept the preview card visually above the shell without turning the actions panel into a second screen.
+
+Acceptance:
+
+- `cd rust && cargo test --lib`
+- `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build`
+
+### Rust toolchain alignment for macOS deployment target
+
+- Added a repository `rust-toolchain.toml` pinned to `stable` so local shells, Xcode build scripts, and future CI runs resolve the same Rust standard library baseline.
+- Updated `scripts/build-rust.sh` to invoke Cargo and rustc through `rustup` instead of whichever Homebrew binary happens to be first on `PATH`.
+- Eliminated the `built for newer macOS version (26.0) than being linked (15.0)` linker warnings caused by mixing an Xcode deployment target of 15.0 with a Homebrew Rust standard library built for macOS 26.0.
+
+Acceptance:
+
+- `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build`
+
+### Soft-surface UI pass inspired by ChatGPT for Mac and App Store
+
+- Removed the remaining visible dividers and card strokes from the main shell, replacing them with softer surface contrast, shadow depth, and white-space separation.
+- Tuned the search bar, sidebar rows, bottom action area, and preview metadata region toward a calmer macOS look where sections feel embedded in one window rather than boxed into separate panels.
+- Reworked the `⌘K` action palette into a lighter glassier sheet with higher transparency, grouped spacing instead of separators, and a single strong focus state instead of row-by-row chrome.
+- Followed up with a de-bloom pass after visual review: reduced the milky white glow on the shell, widened the window, pushed the sidebar darker than the preview canvas, and made text previews read more like content than code.
+- Increased the hierarchy contrast instead of adding lines: stronger sidebar tint, cleaner white preview surface, slightly larger typography in list/footer/filter pills, and more decisive metadata contrast in the preview footer.
+
+Acceptance:
+
+- `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build`

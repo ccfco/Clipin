@@ -22,6 +22,7 @@
 
 - **Instant search** — Filter clipboard history by keyword with highlight, supports Chinese and English
 - **Keyboard-first** — Navigate with arrow keys, paste with Enter, ⌘1-9 for quick access
+- **Compact action palette** — Press ⌘K for a focused command sheet with full keyboard control
 - **Smart dedup** — Repeated copies are merged, tracking copy count and timestamps
 - **Rich preview** — Right pane shows full content, metadata, image thumbnails, search highlights, and hex color swatches
 - **Color detection** — Hex colors (#RGB / #RRGGBB) are shown with a color swatch, RGB, and HSL values
@@ -42,12 +43,15 @@
 
 ### Build from Source
 
-Requires: Rust 1.75+, Xcode 16+, [xcodegen](https://github.com/yonaskolb/XcodeGen)
+Requires: rustup-managed Rust stable, Xcode 16+, [xcodegen](https://github.com/yonaskolb/XcodeGen)
 
 ```bash
 # Clone
 git clone https://github.com/user/Clipin.git
 cd Clipin
+
+# Install the repository Rust toolchain
+rustup toolchain install stable
 
 # Build Rust core + generate Swift bindings
 ./scripts/build-rust.sh
@@ -81,6 +85,7 @@ xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build
 | `⌘⇧P` | Toggle pin |
 | `⌘⌫` | Delete item |
 | `⌘O` | Open URL / file |
+| `⌘K` | Toggle action palette |
 | `Tab` | Cycle type filter (All → Text → Images → Files → URLs) |
 | `⌘,` | Open settings |
 | `⎋` | Close panel |
