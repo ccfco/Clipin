@@ -33,7 +33,7 @@
 - **Context menu** — Right-click items for Paste, Pin/Unpin, Delete
 - **Smooth animations** — Fade in/out panel transitions
 - **Long-term storage** — Keep clipboard history for 1–5 years with configurable retention
-- **Privacy-first** — All data stored locally in SQLite, nothing leaves your machine
+- **Privacy-first** — All data stored locally in SQLite, and concealed/transient clipboard payloads are skipped automatically
 
 ## Screenshot
 
