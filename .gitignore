@@ -14,3 +14,7 @@ DerivedData/
 
 # Build
 .build/
+
+# Claude Code local state
+.claude/
+AGENTS.md
