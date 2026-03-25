@@ -3,11 +3,12 @@ import AppKit
 
 // MARK: - Key-intercepting NSTextField
 
-/// NSTextField 子类：拦截 ↑↓/Return/Escape，传给回调而非默认文本行为
+/// NSTextField 子类：拦截 ↑↓/Return/Escape/Tab，传给回调而非默认文本行为
 private final class InterceptingTextField: NSTextField {
     var onNavigate: ((Int) -> Void)?
     var onSubmit: (() -> Void)?
     var onEscape: (() -> Void)?
+    var onTab: (() -> Void)?
 }
 
 /// SwiftUI 包装层
@@ -17,6 +18,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
     var onNavigate: (Int) -> Void
     var onSubmit: () -> Void
     var onEscape: () -> Void
+    var onTab: () -> Void = {}
 
     func makeNSView(context: Context) -> InterceptingTextField {
         let field = InterceptingTextField()
@@ -40,6 +42,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
         nsView.onNavigate = onNavigate
         nsView.onSubmit = onSubmit
         nsView.onEscape = onEscape
+        nsView.onTab = onTab
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -68,6 +71,9 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
                 return true
             case #selector(NSResponder.cancelOperation(_:)):
                 field.onEscape?()
+                return true
+            case #selector(NSResponder.insertTab(_:)):
+                field.onTab?()
                 return true
             default:
                 return false
@@ -98,7 +104,8 @@ struct SearchBar: View {
                     placeholder: "Type to filter entries...",
                     onNavigate: onNavigate,
                     onSubmit: onSubmit,
-                    onEscape: onEscape
+                    onEscape: onEscape,
+                    onTab: { cycleTypeFilter() }
                 )
                 .frame(height: 18)
 
@@ -158,6 +165,17 @@ struct SearchBar: View {
         case .image: return "Images"
         case .file:  return "Files"
         case .url:   return "URLs"
+        }
+    }
+
+    /// Tab 键循环切换：All → Text → Images → Files → URLs → All
+    private func cycleTypeFilter() {
+        switch typeFilter {
+        case nil:    typeFilter = .text
+        case .text:  typeFilter = .image
+        case .image: typeFilter = .file
+        case .file:  typeFilter = .url
+        case .url:   typeFilter = nil
         }
     }
 }
