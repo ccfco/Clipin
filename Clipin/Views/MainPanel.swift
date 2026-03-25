@@ -199,6 +199,12 @@ struct MainPanel: View {
                 keyBadge(label: "Plain Text", key: "⇧↵")
                     .padding(.leading, 10)
 
+                keyBadge(
+                    label: viewModel.selectedQuickPasteLabel,
+                    key: viewModel.selectedQuickPasteKey
+                )
+                .padding(.leading, 10)
+
                 Spacer()
 
                 Button { viewModel.toggleActionsPalette() } label: {

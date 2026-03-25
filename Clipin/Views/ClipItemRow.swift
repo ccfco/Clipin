@@ -138,18 +138,25 @@ struct ClipItemRow: View {
                     .opacity(isSelected || isHovered ? 1 : 0)
             }
 
-            // ⌘N 快捷键徽章 — 仅 hover/selected 时可见
+            // ⌘N 快捷键徽章 — 前 9 项默认可见，帮助用户形成编号映射
             if let n = shortcutNumber {
                 Text("⌘\(n)")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.64) : Color(nsColor: .quaternaryLabelColor))
+                    .foregroundStyle(
+                        isSelected
+                            ? Color.accentColor.opacity(0.7)
+                            : Color.secondary.opacity(0.78)
+                    )
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(isSelected ? Color.white.opacity(0.54) : Color.white.opacity(0.18))
+                            .fill(
+                                isSelected
+                                    ? Color.white.opacity(0.6)
+                                    : Color.primary.opacity(isHovered ? 0.08 : 0.05)
+                            )
                     )
-                    .opacity(isSelected || isHovered ? 1 : 0)
             }
 
             // 时间 — 右对齐，退场角色

@@ -21,7 +21,7 @@
 ## Features
 
 - **Instant search** — Filter clipboard history by keyword with highlight, supports Chinese and English
-- **Keyboard-first** — Navigate with arrow keys, paste with Enter, ⌘1-9 for quick access
+- **Keyboard-first** — Navigate with arrow keys, paste with Enter, and quick-paste the first 9 visible items with always-on ⌘1-9 badges
 - **Compact action palette** — Press ⌘K for a focused command sheet with full keyboard control
 - **Smart dedup** — Repeated copies are merged, tracking copy count and timestamps
 - **Rich preview** — Right pane shows full content, metadata, image thumbnails, search highlights, and hex color swatches
@@ -81,7 +81,7 @@ xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build
 | `↵` | Paste selected item |
 | `⇧↵` | Paste as plain text |
 | `⌘C` | Copy to clipboard (without pasting) |
-| `⌘1`–`⌘9` | Quick paste by position |
+| `⌘1`–`⌘9` | Quick paste the first 9 visible items in the current list |
 | `⌘⇧P` | Toggle pin |
 | `⌘⌫` | Delete item |
 | `⌘O` | Open URL / file |
