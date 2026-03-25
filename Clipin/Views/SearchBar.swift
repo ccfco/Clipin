@@ -120,7 +120,7 @@ struct SearchBar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background(Color(nsColor: .controlBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             Menu {
@@ -147,7 +147,7 @@ struct SearchBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(Color(nsColor: .textBackgroundColor))
     }
 
     private var filterLabel: String {

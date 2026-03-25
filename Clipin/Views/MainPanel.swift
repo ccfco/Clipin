@@ -12,6 +12,7 @@ struct MainPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // 搜索栏：白色背景 + 底部阴影 → 浮在列表上方
             SearchBar(
                 query: $viewModel.searchQuery,
                 typeFilter: $viewModel.typeFilter,
@@ -22,21 +23,29 @@ struct MainPanel: View {
                 onSubmit: { viewModel.pasteSelected() },
                 onEscape: { viewModel.close() }
             )
+            .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
+            .zIndex(1)
 
             HStack(spacing: 0) {
-                // 左栏：controlBackgroundColor（极浅灰，macOS 系统 sidebar 标准色）
+                // 左栏 sidebar：base 层，灰色背景
                 itemList
                     .frame(width: 260)
                     .background(Color(nsColor: .controlBackgroundColor))
 
-                // 右栏：textBackgroundColor（纯白，macOS 内容区标准色）
+                // 右栏内容：compositingGroup + 左侧阴影 → 浮在 sidebar 上方
                 PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(nsColor: .textBackgroundColor))
+                    .compositingGroup()
+                    .shadow(color: .black.opacity(0.1), radius: 14, x: -10, y: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .zIndex(0)
 
+            // action bar：灰色背景 + 顶部阴影 → 浮在内容上方
             bottomBar
+            .shadow(color: .black.opacity(0.05), radius: 8, y: -3)
+            .zIndex(1)
         }
         .frame(width: 760, height: 520)
         // 纯实色白背景，不受桌面颜色污染
