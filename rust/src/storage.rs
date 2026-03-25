@@ -89,6 +89,18 @@ impl Storage {
         //     ")?;
         // }
 
+        if from_version < 2 {
+            conn.execute_batch(
+                "
+                ALTER TABLE clip_items ADD COLUMN copy_count INTEGER NOT NULL DEFAULT 1;
+                ALTER TABLE clip_items ADD COLUMN first_copied_at INTEGER NOT NULL DEFAULT 0;
+                -- 回填：first_copied_at = created_at for existing rows
+                UPDATE clip_items SET first_copied_at = created_at WHERE first_copied_at = 0;
+                PRAGMA user_version = 2;
+                ",
+            )?;
+        }
+
         Ok(())
     }
 
@@ -110,27 +122,43 @@ impl Storage {
     ) -> Result<ClipItem, ClipinError> {
         let conn = self.conn.lock().unwrap();
         let hash = Self::content_hash(content, clip_type);
-
-        // 去重：相同内容删除旧记录（保留最新）
-        conn.execute("DELETE FROM clip_items WHERE hash = ?1", params![hash])?;
-
-        let id = Uuid::new_v4().to_string();
         let now = chrono::Utc::now().timestamp_millis();
         let char_count = content.chars().count() as i32;
 
+        // 去重：查找已有记录，保留 first_copied_at 和累加 copy_count
+        let existing: Option<(i64, i32, bool)> = conn
+            .query_row(
+                "SELECT first_copied_at, copy_count, is_pinned FROM clip_items WHERE hash = ?1",
+                params![hash],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .ok();
+
+        let (first_copied_at, copy_count, is_pinned) = match existing {
+            Some((first, count, pinned)) => (first, count + 1, pinned),
+            None => (now, 1, false),
+        };
+
+        // 删除旧记录，插入新记录（保持最新 created_at 在顶部）
+        conn.execute("DELETE FROM clip_items WHERE hash = ?1", params![hash])?;
+
+        let id = Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT INTO clip_items (id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, hash)
-             VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, ?7, ?8, ?9)",
+            "INSERT INTO clip_items (id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, hash, copy_count, first_copied_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 id,
                 content,
                 clip_type.as_str(),
                 source_app,
                 source_name,
+                is_pinned,
                 now,
                 image_path,
                 char_count,
                 hash,
+                copy_count,
+                first_copied_at,
             ],
         )?;
 
@@ -140,10 +168,12 @@ impl Storage {
             clip_type: clip_type.clone(),
             source_app: source_app.map(String::from),
             source_name: source_name.map(String::from),
-            is_pinned: false,
+            is_pinned,
             created_at: now,
             image_path: image_path.map(String::from),
             char_count,
+            copy_count,
+            first_copied_at,
         })
     }
 
@@ -159,7 +189,7 @@ impl Storage {
         if let Some(t) = type_filter {
             filter_val = t.as_str().to_string();
             sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count
+                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
                  FROM clip_items WHERE clip_type = ?1
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?2 OFFSET ?3"
@@ -167,7 +197,7 @@ impl Storage {
         } else {
             filter_val = String::new();
             sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count
+                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
                  FROM clip_items
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?2 OFFSET ?3"
@@ -242,14 +272,14 @@ impl Storage {
 
         let sql = if type_filter.is_some() {
             "SELECT id, content, clip_type, source_app, source_name,
-                    is_pinned, created_at, image_path, char_count
+                    is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
              FROM clip_items
              WHERE content LIKE ?1 AND clip_type = ?2
              ORDER BY is_pinned DESC, created_at DESC
              LIMIT 50"
         } else {
             "SELECT id, content, clip_type, source_app, source_name,
-                    is_pinned, created_at, image_path, char_count
+                    is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
              FROM clip_items
              WHERE content LIKE ?1
              ORDER BY is_pinned DESC, created_at DESC
@@ -319,7 +349,7 @@ impl Storage {
     pub fn get_item(&self, id: &str) -> Result<ClipItem, ClipinError> {
         let conn = self.conn.lock().unwrap();
         conn.query_row(
-            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count
+            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
              FROM clip_items
              WHERE id = ?1",
             params![id],
@@ -376,8 +406,8 @@ impl Storage {
         let char_count = content.chars().count() as i32;
 
         conn.execute(
-            "INSERT INTO clip_items (id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, hash)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO clip_items (id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, hash, copy_count, first_copied_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?7)",
             params![
                 id, content, clip_type.as_str(), source_app, source_name,
                 is_pinned as i32, created_at, image_path, char_count, hash
@@ -394,6 +424,8 @@ impl Storage {
             created_at,
             image_path: image_path.map(String::from),
             char_count,
+            copy_count: 1,
+            first_copied_at: created_at,
         })
     }
 
@@ -451,6 +483,8 @@ impl Storage {
             created_at: row.get(6)?,
             image_path: row.get(7)?,
             char_count: row.get(8)?,
+            copy_count: row.get(9)?,
+            first_copied_at: row.get(10)?,
         })
     }
 
@@ -483,7 +517,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 1, "新建数据库应为 v1");
+        assert_eq!(storage.schema_version(), 2, "新建数据库应为 v2");
     }
 
     #[test]
@@ -502,7 +536,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 1, "旧数据库应 migrate 到 v1");
+        assert_eq!(storage.schema_version(), 2, "旧数据库应 migrate 到 v2");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -529,7 +563,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 1);
+        assert_eq!(s2.schema_version(), 2);
     }
 
     #[test]

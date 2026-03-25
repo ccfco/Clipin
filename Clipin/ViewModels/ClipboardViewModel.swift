@@ -16,6 +16,7 @@ final class ClipboardViewModel: ObservableObject {
     @Published var searchQuery: String = ""
     @Published var typeFilter: ClipType?
     @Published private(set) var sections: [ClipSection] = []
+    @Published var targetAppName: String?
 
     private let core: ClipinCore
     private var items: [ClipListItem] = []
@@ -86,6 +87,14 @@ final class ClipboardViewModel: ObservableObject {
             return
         }
         selectItem(id: flatOrder[max(idx - 1, 0)].id)
+    }
+
+    /// 按视觉顺序的第 index 项（0-based）直接粘贴
+    func pasteItemAt(index: Int) {
+        guard index >= 0, index < flatOrder.count else { return }
+        let id = flatOrder[index].id
+        guard let item = try? core.getItem(id: id) else { return }
+        onPasteRequested?(item)
     }
 
     // MARK: - Actions

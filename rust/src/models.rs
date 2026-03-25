@@ -39,6 +39,8 @@ pub struct ClipItem {
     pub created_at: i64,
     pub image_path: Option<String>,
     pub char_count: i32,
+    pub copy_count: i32,
+    pub first_copied_at: i64,
 }
 
 /// 列表使用的轻量摘要记录，避免长文本拖慢整个面板

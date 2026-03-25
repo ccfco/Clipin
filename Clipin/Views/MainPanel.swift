@@ -65,14 +65,20 @@ struct MainPanel: View {
             onActivate: { item in
                 viewModel.selectItem(id: item.id)
                 viewModel.pasteSelected()
-            }
+            },
+            onPin: { viewModel.togglePin(id: $0.id) },
+            onDelete: { viewModel.deleteItem(id: $0.id) }
         )
     }
 
     private var bottomBar: some View {
         HStack(spacing: 6) {
             if viewModel.selectedListItem != nil {
-                ShortcutHint(keys: ["↵"], label: "Paste")
+                if let appName = viewModel.targetAppName {
+                    ShortcutHint(keys: ["↵"], label: "Paste to \(appName)")
+                } else {
+                    ShortcutHint(keys: ["↵"], label: "Paste")
+                }
                 ShortcutHint(keys: ["⇧", "↵"], label: "Plain")
                 ShortcutHint(keys: ["⌘", "⇧", "P"], label: pinLabel)
                 ShortcutHint(keys: ["⌘", "⌫"], label: "Delete")
@@ -137,6 +143,13 @@ private struct ItemListView: View {
     let sections: [ClipSection]
     let selection: Binding<String?>
     let onActivate: (ClipListItem) -> Void
+    let onPin: (ClipListItem) -> Void
+    let onDelete: (ClipListItem) -> Void
+
+    /// 按视觉顺序展平后的 ID 列表，用于计算 ⌘1-9 序号
+    private var flatIDs: [String] {
+        sections.flatMap(\.items).map(\.id)
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -166,7 +179,10 @@ private struct ItemListView: View {
     }
 
     private func row(for item: ClipListItem) -> some View {
-        ClipItemRow(item: item, isSelected: selection.wrappedValue == item.id)
+        let globalIndex = flatIDs.firstIndex(of: item.id)
+        let shortcutNumber = globalIndex.flatMap { $0 < 9 ? $0 + 1 : nil }
+
+        return ClipItemRow(item: item, isSelected: selection.wrappedValue == item.id, shortcutNumber: shortcutNumber)
             .tag(item.id)
             .id(item.id)
             .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
@@ -177,5 +193,11 @@ private struct ItemListView: View {
                     onActivate(item)
                 }
             )
+            .contextMenu {
+                Button("Paste") { onActivate(item) }
+                Button(item.isPinned ? "Unpin" : "Pin") { onPin(item) }
+                Divider()
+                Button("Delete", role: .destructive) { onDelete(item) }
+            }
     }
 }

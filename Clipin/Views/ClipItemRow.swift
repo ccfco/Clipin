@@ -4,17 +4,28 @@ import SwiftUI
 struct ClipItemRow: View {
     let item: ClipListItem
     let isSelected: Bool
+    var shortcutNumber: Int? = nil
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: iconName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(iconColor)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(iconBackground)
-                )
+            // 图片类型显示缩略图，其他类型显示图标
+            if item.clipType == .image, let path = item.imagePath,
+               let nsImage = NSImage(contentsOfFile: path) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            } else {
+                Image(systemName: iconName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(iconBackground)
+                    )
+            }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(displayText)
@@ -36,6 +47,18 @@ struct ClipItemRow: View {
             }
 
             Spacer(minLength: 8)
+
+            if let n = shortcutNumber {
+                Text("⌘\(n)")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color(nsColor: .quaternaryLabelColor).opacity(0.15))
+                    )
+            }
 
             if item.isPinned {
                 Image(systemName: "pin.fill")

@@ -179,6 +179,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         viewModel?.searchQuery = ""
         viewModel?.typeFilter = nil
+        viewModel?.targetAppName = previousApp?.localizedName
         viewModel?.loadItems()
         panel?.makeKeyAndOrderFront(nil)
         startClickOutsideMonitor()
@@ -236,6 +237,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
 
             default:
+                // ⌘1-9 — quick paste by index
+                if flags == .command,
+                   let char = event.charactersIgnoringModifiers,
+                   let digit = char.first?.wholeNumberValue,
+                   (1...9).contains(digit) {
+                    vm.pasteItemAt(index: digit - 1)
+                    return nil
+                }
+                return event
                 return event
             }
         }

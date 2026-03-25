@@ -132,7 +132,13 @@ struct PreviewPane: View {
             if item.clipType == .text || item.clipType == .url {
                 infoRow("Characters", value: "\(item.charCount)")
             }
-            infoRow("Copied", value: absoluteDate(item.createdAt))
+            if item.copyCount > 1 {
+                infoRow("Times copied", value: "\(item.copyCount)")
+            }
+            if item.firstCopiedAt != item.createdAt {
+                infoRow("First copied", value: absoluteDate(item.firstCopiedAt))
+            }
+            infoRow("Last copied", value: absoluteDate(item.createdAt))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
