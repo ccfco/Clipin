@@ -61,7 +61,6 @@ final class SettingsStore: ObservableObject {
 
     private let defaults = UserDefaults.standard
     private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
 
     private enum Keys {
         static let retentionDays = "settings.retentionDays"

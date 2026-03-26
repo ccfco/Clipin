@@ -37,62 +37,7 @@ enum ArchiveService {
             throw ArchiveError.cancelled
         }
 
-        let items = core.getItems(limit: Int32.max, offset: 0, typeFilter: nil)
-        var exportedItems: [ArchiveItem] = []
-        var skippedCount = 0
-
-        for item in items {
-            if item.clipType == .image {
-                guard let imagePath = item.imagePath,
-                      let imageData = try? Data(contentsOf: URL(fileURLWithPath: imagePath)) else {
-                    skippedCount += 1
-                    continue
-                }
-
-                exportedItems.append(
-                    ArchiveItem(
-                        content: item.content,
-                        clipType: archiveType(for: item.clipType),
-                        sourceApp: item.sourceApp,
-                        sourceName: item.sourceName,
-                        isPinned: item.isPinned,
-                        createdAt: item.createdAt,
-                        imageDataBase64: imageData.base64EncodedString()
-                    )
-                )
-                continue
-            }
-
-            exportedItems.append(
-                ArchiveItem(
-                    content: item.content,
-                    clipType: archiveType(for: item.clipType),
-                    sourceApp: item.sourceApp,
-                    sourceName: item.sourceName,
-                    isPinned: item.isPinned,
-                    createdAt: item.createdAt,
-                    imageDataBase64: nil
-                )
-            )
-        }
-
-        let archive = ClipboardArchive(
-            schemaVersion: 1,
-            exportedAt: Date(),
-            items: exportedItems
-        )
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(archive)
-        try data.write(to: url, options: .atomic)
-
-        return ArchiveExportResult(
-            url: url,
-            exportedCount: exportedItems.count,
-            skippedCount: skippedCount
-        )
+        return try writeArchive(to: url, core: core)
     }
 
     @MainActor
@@ -156,6 +101,7 @@ enum ArchiveService {
     }
 
     /// 将全部条目写入指定 URL，不弹出文件面板，供自动备份复用。
+    @MainActor
     static func writeArchive(to url: URL, core: ClipinCore) throws -> ArchiveExportResult {
         let items = core.getItems(limit: Int32.max, offset: 0, typeFilter: nil)
         var exportedItems: [ArchiveItem] = []

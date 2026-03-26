@@ -302,40 +302,22 @@ struct SettingsView: View {
                         Text("Backup folder")
                             .font(.system(size: 12, weight: .medium))
 
-                        HStack(spacing: 8) {
-                            if let path = settings.autoBackupFolderPath {
-                                Text(abbreviatedPath(path))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            } else {
-                                Text("Not configured")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.tertiary)
-                            }
-
-                            Spacer()
-
-                            Button("Choose…") { chooseBackupFolder() }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-
-                            if settings.autoBackupFolderPath != nil {
-                                Button("Use iCloud") { useICloudDrive() }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                            }
+                        if let path = settings.autoBackupFolderPath {
+                            Text(abbreviatedPath(path))
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
                         }
 
-                        if settings.autoBackupFolderPath == nil {
-                            HStack(spacing: 8) {
-                                Button("Choose Folder…") { chooseBackupFolder() }
-                                    .buttonStyle(.bordered)
-
-                                Button("Use iCloud Drive") { useICloudDrive() }
-                                    .buttonStyle(.bordered)
+                        HStack(spacing: 8) {
+                            Button(settings.autoBackupFolderPath == nil ? "Choose Folder…" : "Change…") {
+                                chooseBackupFolder()
                             }
+                            .buttonStyle(.bordered)
+
+                            Button("Use iCloud Drive") { useICloudDrive() }
+                                .buttonStyle(.bordered)
                         }
                     }
 

@@ -30,7 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var permissionWindow: NSWindow?
     private lazy var cleanupService = CleanupService(core: appState.core, settings: settings)
-    private lazy var autoBackupService = AutoBackupService(core: appState.core, settings: settings)
+    private let autoBackupService = AutoBackupService.shared
     private var previousApp: NSRunningApplication?
     private var clickOutsideMonitor: Any?
     private var keyMonitor: Any?
@@ -46,6 +46,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupSettingsObservers()
         runCleanupAndReload()
         checkPermissionOnLaunch()
+        _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
     }
 
     // MARK: - Menu Bar

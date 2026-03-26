@@ -5,6 +5,7 @@ import Foundation
 /// iCloud Drive 会自动同步该文件，实现被动跨设备同步。
 @MainActor
 final class AutoBackupService: ObservableObject {
+    static let shared = AutoBackupService(core: AppState.shared.core, settings: SettingsStore.shared)
     static let backupFilename = "clipin-backup.json"
 
     @Published private(set) var lastBackupAt: Date?
@@ -61,7 +62,7 @@ final class AutoBackupService: ObservableObject {
             }
 
         case .every15min, .every1hour:
-            let interval = settings.autoBackupInterval.timerInterval!
+            guard let interval = settings.autoBackupInterval.timerInterval else { return }
             timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.performBackup(folderURL: folderURL) }
             }
@@ -75,8 +76,7 @@ final class AutoBackupService: ObservableObject {
     private func scheduleDebounced(folderURL: URL) {
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(10))
-            guard !Task.isCancelled else { return }
+            do { try await Task.sleep(for: .seconds(10)) } catch { return }
             self?.performBackup(folderURL: folderURL)
         }
     }
@@ -95,8 +95,8 @@ final class AutoBackupService: ObservableObject {
     // MARK: - 手动触发
 
     func backupNow() {
-        guard let folderPath = settings.autoBackupFolderPath else { return }
-        let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
-        performBackup(folderURL: folderURL)
+        guard settings.autoBackupEnabled,
+              let folderPath = settings.autoBackupFolderPath else { return }
+        performBackup(folderURL: URL(fileURLWithPath: folderPath, isDirectory: true))
     }
 }
