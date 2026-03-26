@@ -8,7 +8,8 @@ final class SettingsStore: ObservableObject {
 
     @Published var retentionDays: Int {
         didSet {
-            let clamped = max(1, min(retentionDays, 365))
+            // 0 = 永久保留，否则最少 1 天
+            let clamped = retentionDays <= 0 ? 0 : max(1, retentionDays)
             guard retentionDays == clamped else {
                 retentionDays = clamped
                 return
@@ -19,7 +20,8 @@ final class SettingsStore: ObservableObject {
 
     @Published var maxHistoryItems: Int {
         didSet {
-            let clamped = max(50, min(maxHistoryItems, 5_000))
+            // 0 = 不限数量，否则最少 50
+            let clamped = maxHistoryItems <= 0 ? 0 : max(50, maxHistoryItems)
             guard maxHistoryItems == clamped else {
                 maxHistoryItems = clamped
                 return

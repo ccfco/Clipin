@@ -89,33 +89,80 @@ struct SettingsView: View {
         }
     }
 
+    private static let retentionOptions: [(label: String, days: Int)] = [
+        ("7 days", 7),
+        ("30 days", 30),
+        ("90 days", 90),
+        ("1 year", 365),
+        ("3 years", 1095),
+        ("Forever", 0),
+    ]
+
+    private static let maxItemsOptions: [(label: String, count: Int)] = [
+        ("500", 500),
+        ("1K", 1_000),
+        ("5K", 5_000),
+        ("10K", 10_000),
+        ("50K", 50_000),
+        ("Unlimited", 0),
+    ]
+
+    /// 将非预设值归到最近的预设选项
+    private var normalizedRetentionDays: Binding<Int> {
+        Binding(
+            get: {
+                let v = settings.retentionDays
+                return Self.retentionOptions.map(\.days).contains(v)
+                    ? v
+                    : Self.retentionOptions.map(\.days).min(by: { abs($0 - v) < abs($1 - v) }) ?? 30
+            },
+            set: { settings.retentionDays = $0 }
+        )
+    }
+
+    private var normalizedMaxItems: Binding<Int> {
+        Binding(
+            get: {
+                let v = settings.maxHistoryItems
+                return Self.maxItemsOptions.map(\.count).contains(v)
+                    ? v
+                    : Self.maxItemsOptions.map(\.count).min(by: { abs($0 - v) < abs($1 - v) }) ?? 500
+            },
+            set: { settings.maxHistoryItems = $0 }
+        )
+    }
+
     private var retentionSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
-                Stepper(value: Binding(
-                    get: { settings.retentionDays },
-                    set: { settings.retentionDays = $0 }
-                ), in: 1...365) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Keep unpinned history for \(settings.retentionDays) day\(settings.retentionDays == 1 ? "" : "s")")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Pinned items are preserved.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Keep unpinned history for")
+                        .font(.system(size: 13, weight: .medium))
+                    Picker("", selection: normalizedRetentionDays) {
+                        ForEach(Self.retentionOptions, id: \.days) { option in
+                            Text(option.label).tag(option.days)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    Text("Pinned items are always preserved.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                 }
 
-                Stepper(value: Binding(
-                    get: { settings.maxHistoryItems },
-                    set: { settings.maxHistoryItems = $0 }
-                ), in: 50...5_000, step: 50) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Cap unpinned history at \(settings.maxHistoryItems) items")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Oldest unpinned items are trimmed first.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Max unpinned items")
+                        .font(.system(size: 13, weight: .medium))
+                    Picker("", selection: normalizedMaxItems) {
+                        ForEach(Self.maxItemsOptions, id: \.count) { option in
+                            Text(option.label).tag(option.count)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    Text("Oldest unpinned items are trimmed first.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
                 }
 
                 Divider()

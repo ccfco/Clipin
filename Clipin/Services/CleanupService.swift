@@ -15,14 +15,28 @@ struct CleanupService {
 
     @MainActor
     func runNow(referenceDate: Date = .now) throws -> CleanupResult {
-        let cutoffDate = Calendar.current.date(byAdding: .day, value: -settings.retentionDays, to: referenceDate)
-            ?? referenceDate
-        let cutoffMillis = Int64(cutoffDate.timeIntervalSince1970 * 1000)
-        let maxItems = Int32(settings.maxHistoryItems)
+        let retentionDays = settings.retentionDays
+        let maxItems = settings.maxHistoryItems
         let core = self.core
 
-        let removedByAge = Int(try core.clearUnpinnedBefore(timestamp: cutoffMillis))
-        let removedByCount = Int(try core.trimUnpinned(keepLatest: maxItems))
+        // retentionDays == 0 表示永久保留，跳过按时间清理
+        let removedByAge: Int
+        if retentionDays > 0 {
+            let cutoffDate = Calendar.current.date(byAdding: .day, value: -retentionDays, to: referenceDate)
+                ?? referenceDate
+            let cutoffMillis = Int64(cutoffDate.timeIntervalSince1970 * 1000)
+            removedByAge = Int(try core.clearUnpinnedBefore(timestamp: cutoffMillis))
+        } else {
+            removedByAge = 0
+        }
+
+        // maxItems == 0 表示不限数量，跳过按数量清理
+        let removedByCount: Int
+        if maxItems > 0 {
+            removedByCount = Int(try core.trimUnpinned(keepLatest: Int32(maxItems)))
+        } else {
+            removedByCount = 0
+        }
 
         return CleanupResult(
             removedByAge: removedByAge,
