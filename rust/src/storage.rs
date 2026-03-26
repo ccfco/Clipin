@@ -329,34 +329,29 @@ impl Storage {
         type_filter: Option<&ClipType>,
     ) -> Vec<ClipItem> {
         let conn = self.conn.lock().unwrap();
-        let (sql, filter_val);
+        let sql;
 
-        if let Some(t) = type_filter {
-            filter_val = t.as_str().to_string();
+        let result = if let Some(t) = type_filter {
+            let filter_val = t.as_str().to_string();
             sql = format!(
                 "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
                  FROM clip_items WHERE clip_type = ?1
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?2 OFFSET ?3"
             );
-        } else {
-            filter_val = String::new();
-            sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
-                 FROM clip_items
-                 ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT ?2 OFFSET ?3"
-            );
-        }
-
-        let result = if type_filter.is_some() {
             conn.prepare(&sql).and_then(|mut stmt| {
                 stmt.query_map(params![filter_val, limit, offset], Self::row_to_item)
                     .map(|rows| rows.filter_map(|r| r.ok()).collect())
             })
         } else {
+            sql = format!(
+                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
+                 FROM clip_items
+                 ORDER BY is_pinned DESC, created_at DESC
+                 LIMIT ?1 OFFSET ?2"
+            );
             conn.prepare(&sql).and_then(|mut stmt| {
-                stmt.query_map(params!["", limit, offset], Self::row_to_item)
+                stmt.query_map(params![limit, offset], Self::row_to_item)
                     .map(|rows| rows.filter_map(|r| r.ok()).collect())
             })
         };
@@ -371,10 +366,10 @@ impl Storage {
         type_filter: Option<&ClipType>,
     ) -> Vec<ClipListItem> {
         let conn = self.conn.lock().unwrap();
-        let (sql, filter_val);
+        let sql;
 
-        if let Some(t) = type_filter {
-            filter_val = t.as_str().to_string();
+        let result = if let Some(t) = type_filter {
+            let filter_val = t.as_str().to_string();
             sql = format!(
                 "SELECT id, substr(content, 1, {preview_chars}), clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count
@@ -384,26 +379,21 @@ impl Storage {
                  LIMIT ?2 OFFSET ?3",
                 preview_chars = Self::LIST_PREVIEW_CHARS
             );
-        } else {
-            filter_val = String::new();
-            sql = format!(
-                "SELECT id, substr(content, 1, {preview_chars}), clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count
-                 FROM clip_items
-                 ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT ?2 OFFSET ?3",
-                preview_chars = Self::LIST_PREVIEW_CHARS
-            );
-        }
-
-        let result = if type_filter.is_some() {
             conn.prepare(&sql).and_then(|mut stmt| {
                 stmt.query_map(params![filter_val, limit, offset], Self::row_to_list_item)
                     .map(|rows| rows.filter_map(|r| r.ok()).collect())
             })
         } else {
+            sql = format!(
+                "SELECT id, substr(content, 1, {preview_chars}), clip_type, source_app, source_name,
+                        is_pinned, created_at, image_path, char_count
+                 FROM clip_items
+                 ORDER BY is_pinned DESC, created_at DESC
+                 LIMIT ?1 OFFSET ?2",
+                preview_chars = Self::LIST_PREVIEW_CHARS
+            );
             conn.prepare(&sql).and_then(|mut stmt| {
-                stmt.query_map(params!["", limit, offset], Self::row_to_list_item)
+                stmt.query_map(params![limit, offset], Self::row_to_list_item)
                     .map(|rows| rows.filter_map(|r| r.ok()).collect())
             })
         };

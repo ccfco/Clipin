@@ -24,6 +24,7 @@ struct ShortcutRecorder: NSViewRepresentable {
 
 final class ShortcutRecorderField: NSTextField {
     var onShortcutChange: ((HotKeyShortcut) -> Void)?
+    private var currentDisplayString = ""
     private var isCapturing = false {
         didSet { updateAppearance() }
     }
@@ -66,6 +67,7 @@ final class ShortcutRecorderField: NSTextField {
         let resigned = super.resignFirstResponder()
         if resigned {
             isCapturing = false
+            stringValue = currentDisplayString
         }
         return resigned
     }
@@ -91,8 +93,9 @@ final class ShortcutRecorderField: NSTextField {
     }
 
     func update(shortcut: HotKeyShortcut) {
+        currentDisplayString = shortcut.displayString
         if !isCapturing {
-            stringValue = shortcut.displayString
+            stringValue = currentDisplayString
         }
     }
 
