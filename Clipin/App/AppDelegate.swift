@@ -147,7 +147,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Monitoring
 
     private func startMonitoring() {
-        let monitor = ClipboardMonitor(core: appState.core)
+        let monitor = ClipboardMonitor(core: appState.core, settings: settings)
         monitor.onNewItem = { [weak self] in
             self?.runCleanupAndReload(selectLatest: true)
         }
