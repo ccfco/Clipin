@@ -64,7 +64,7 @@ struct MainPanel: View {
         }
         .frame(width: 800, height: 540)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [panelShell, panelShell.opacity(0.985)],
@@ -74,7 +74,7 @@ struct MainPanel: View {
                 )
                 .overlay(panelWash)
                 .overlay(shellGlow.opacity(0.72))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
         )
         .overlay(alignment: .top) {
             if viewModel.isPanelPinned {
@@ -116,7 +116,7 @@ struct MainPanel: View {
                 )
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 48, y: 24)
         .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .onAppear {
@@ -151,9 +151,9 @@ struct MainPanel: View {
             itemList
                 .frame(width: 292)
                 .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(sidebarSurface)
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5))
+                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5))
                         .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
                 )
 
@@ -161,9 +161,9 @@ struct MainPanel: View {
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .fill(detailSurface)
-                        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5))
+                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5))
                         .shadow(color: .black.opacity(0.12), radius: 24, y: 12)
                 )
         }

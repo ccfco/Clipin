@@ -145,9 +145,9 @@ struct PreviewPane: View {
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(previewInfoBackground)
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
                     .shadow(color: .black.opacity(0.1), radius: 12, y: 4)
             )
     }
@@ -351,10 +351,10 @@ private struct ColorSwatchPreview: View {
             ZStack {
                 // 浅灰底，当颜色有透明度时可见
                 previewCanvasTint
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(color)
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             }
             .frame(height: 120)

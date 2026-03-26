@@ -158,7 +158,7 @@ struct SearchBar: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(searchBgInner)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .shadow(color: .white.opacity(0.18), radius: 6, y: 1)
         .shadow(color: .black.opacity(0.03), radius: 10, y: 6)
         .padding(.horizontal, 14)

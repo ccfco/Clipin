@@ -191,6 +191,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.viewModel?.loadItems()
             }
             .store(in: &cancellables)
+
+        settings.$appearanceOverride
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { override in
+                switch override {
+                case .system: NSApp.appearance = nil
+                case .light:  NSApp.appearance = NSAppearance(named: .aqua)
+                case .dark:   NSApp.appearance = NSAppearance(named: .darkAqua)
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Show / Hide

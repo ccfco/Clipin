@@ -2,6 +2,20 @@ import Combine
 import Foundation
 import ServiceManagement
 
+enum AppearanceOverride: String, CaseIterable {
+    case system = "system"
+    case light  = "light"
+    case dark   = "dark"
+
+    var displayName: String {
+        switch self {
+        case .system: return NSLocalizedString("System", comment: "")
+        case .light:  return NSLocalizedString("Light", comment: "")
+        case .dark:   return NSLocalizedString("Dark", comment: "")
+        }
+    }
+}
+
 @MainActor
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
@@ -56,6 +70,10 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(autoBackupInterval.rawValue, forKey: Keys.autoBackupInterval) }
     }
 
+    @Published var appearanceOverride: AppearanceOverride {
+        didSet { defaults.set(appearanceOverride.rawValue, forKey: Keys.appearanceOverride) }
+    }
+
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginNote: String?
 
@@ -70,6 +88,7 @@ final class SettingsStore: ObservableObject {
         static let autoBackupEnabled = "settings.autoBackupEnabled"
         static let autoBackupFolderPath = "settings.autoBackupFolderPath"
         static let autoBackupInterval = "settings.autoBackupInterval"
+        static let appearanceOverride = "settings.appearanceOverride"
     }
 
     private init() {
@@ -81,6 +100,8 @@ final class SettingsStore: ObservableObject {
             ?? .default
         let storedInterval = defaults.string(forKey: Keys.autoBackupInterval)
             .flatMap { AutoBackupInterval(rawValue: $0) } ?? .weekly
+        let storedAppearance = defaults.string(forKey: Keys.appearanceOverride)
+            .flatMap { AppearanceOverride(rawValue: $0) } ?? .system
 
         self.retentionDays = storedRetention
         self.maxHistoryItems = storedMaxItems
@@ -89,6 +110,7 @@ final class SettingsStore: ObservableObject {
         self.autoBackupEnabled = defaults.bool(forKey: Keys.autoBackupEnabled)
         self.autoBackupFolderPath = defaults.string(forKey: Keys.autoBackupFolderPath)
         self.autoBackupInterval = storedInterval
+        self.appearanceOverride = storedAppearance
         refreshLaunchAtLoginStatus()
     }
 

@@ -100,6 +100,22 @@ struct SettingsView: View {
 
                 Divider()
 
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Appearance")
+                        .font(.system(size: 13, weight: .medium))
+                    Spacer()
+                    Picker("", selection: $settings.appearanceOverride) {
+                        ForEach(AppearanceOverride.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
+                }
+
+                Divider()
+
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(
                         "Launch Clipin at login",
