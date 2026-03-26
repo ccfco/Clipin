@@ -73,6 +73,7 @@ final class ShortcutRecorderField: NSTextField {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard isCapturing else { return false }
         keyDown(with: event)
         return true
     }
