@@ -2,6 +2,12 @@ import AppKit
 import SwiftUI
 import Combine
 
+/// NSHostingView 默认 acceptsFirstMouse = false，导致点击普通 NSWindow 里的 SwiftUI 控件
+/// 需要两次点击（第一次激活窗口，第二次才触发动作）。子类化覆盖后，首次点击直接触发动作。
+private final class ClipinHostingView<V: View>: NSHostingView<V> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
 private final class ClipinPanel: NSPanel {
@@ -543,7 +549,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isMovableByWindowBackground = true
             newWindow.hasShadow = true
             newWindow.isReleasedWhenClosed = false
-            newWindow.contentView = NSHostingView(
+            newWindow.contentView = ClipinHostingView(
                 rootView: SettingsView(settings: settings, autoBackup: autoBackupService, core: appState.core)
             )
             settingsWindow = newWindow

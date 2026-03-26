@@ -48,7 +48,7 @@ struct SettingsView: View {
     let core: ClipinCore
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var selectedTab: SettingsTab = .general
+    @State private var selectedTab: SettingsTab? = .general
     @State private var notice: SettingsNotice?
     @State private var dismissTask: Task<Void, Never>?
     @State private var now: Date = .now
@@ -65,6 +65,7 @@ struct SettingsView: View {
                 sidebar
                 Divider().opacity(colorScheme == .dark ? 0.3 : 0.5)
                 contentArea
+                    .animation(.spring(response: 0.3, dampingFraction: 0.82), value: selectedTab)
             }
         }
         .frame(width: 680, height: 600)
@@ -94,57 +95,37 @@ struct SettingsView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        ZStack(alignment: .topLeading) {
+        List(SettingsTab.allCases, id: \.self, selection: $selectedTab) { tab in
+            Label {
+                Text(tab.title)
+                    .font(.system(size: 13))
+            } icon: {
+                Image(systemName: tab.icon)
+                    .foregroundStyle(tab.accent)
+            }
+            .tag(tab)
+        }
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .overlay(Rectangle().fill(glass.sidebarTint))
-
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(SettingsTab.allCases) { tab in
-                    sidebarRow(tab)
-                }
-                Spacer()
-            }
-            .padding(.top, 20)
-            .padding(.horizontal, 8)
-        }
+        )
         .frame(width: 180)
-    }
-
-    private func sidebarRow(_ tab: SettingsTab) -> some View {
-        let isSelected = selectedTab == tab
-        return Button { selectedTab = tab } label: {
-            HStack(spacing: 10) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isSelected ? Color.white : tab.accent)
-                    .frame(width: 20)
-                Text(tab.title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? Color.white : Color.primary)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? Color.accentColor.opacity(0.88) : Color.clear)
-            )
-        }
-        .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.12), value: isSelected)
     }
 
     // MARK: - Content Area
 
     private var contentArea: some View {
-        ScrollView {
+        let tab = selectedTab ?? .general
+        return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(selectedTab.title)
+                Text(tab.title)
                     .font(.system(size: 20, weight: .semibold))
                     .padding(.bottom, 2)
 
-                switch selectedTab {
+                switch tab {
                 case .general:    generalContent
                 case .privacy:    privacyContent
                 case .retention:  retentionContent
