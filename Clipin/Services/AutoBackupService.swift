@@ -18,9 +18,13 @@ final class AutoBackupService: ObservableObject {
     private var changeObserver: Any?
     private var debounceTask: Task<Void, Never>?
 
+    // lastBackupAt 持久化到 UserDefaults，App 重启后能判断是否逾期
+    private static let lastBackupKey = "autoBackup.lastBackupAt"
+
     init(core: ClipinCore, settings: SettingsStore) {
         self.core = core
         self.settings = settings
+        self.lastBackupAt = UserDefaults.standard.object(forKey: Self.lastBackupKey) as? Date
 
         // 任意备份相关设置变化时重新配置
         settings.$autoBackupEnabled
@@ -36,7 +40,6 @@ final class AutoBackupService: ObservableObject {
     // MARK: - 配置
 
     private func reconfigure() {
-        // 清除旧配置
         timer?.invalidate()
         timer = nil
         if let observer = changeObserver {
@@ -61,14 +64,29 @@ final class AutoBackupService: ObservableObject {
                 self?.scheduleDebounced(folderURL: folderURL)
             }
 
-        case .every15min, .every1hour:
-            guard let interval = settings.autoBackupInterval.timerInterval else { return }
-            timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.performBackup(folderURL: folderURL) }
+        case .daily, .weekly, .monthly:
+            guard let checkInterval = settings.autoBackupInterval.checkInterval else { return }
+
+            // App 启动时立即检查是否逾期，避免等完整间隔才触发第一次
+            if isBackupOverdue() {
+                performBackup(folderURL: folderURL)
             }
-            // 启用后立即执行一次
-            performBackup(folderURL: folderURL)
+
+            // 用远小于备份间隔的频率轮询，确保不漏触发
+            timer = Timer.scheduledTimer(withTimeInterval: checkInterval, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    guard let self, self.isBackupOverdue() else { return }
+                    self.performBackup(folderURL: folderURL)
+                }
+            }
         }
+    }
+
+    // MARK: - 逾期判断
+
+    private func isBackupOverdue() -> Bool {
+        guard let interval = settings.autoBackupInterval.backupInterval else { return false }
+        return Date().timeIntervalSince(lastBackupAt ?? .distantPast) >= interval
     }
 
     // MARK: - 执行备份
@@ -87,6 +105,7 @@ final class AutoBackupService: ObservableObject {
             _ = try ArchiveService.writeArchive(to: fileURL, core: core)
             lastBackupAt = Date()
             lastBackupError = nil
+            UserDefaults.standard.set(lastBackupAt, forKey: Self.lastBackupKey)
         } catch {
             lastBackupError = error.localizedDescription
         }

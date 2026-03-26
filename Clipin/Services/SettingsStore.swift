@@ -80,7 +80,7 @@ final class SettingsStore: ObservableObject {
             .flatMap { try? decoder.decode(HotKeyShortcut.self, from: $0) }
             ?? .default
         let storedInterval = defaults.string(forKey: Keys.autoBackupInterval)
-            .flatMap { AutoBackupInterval(rawValue: $0) } ?? .every15min
+            .flatMap { AutoBackupInterval(rawValue: $0) } ?? .weekly
 
         self.retentionDays = storedRetention
         self.maxHistoryItems = storedMaxItems
@@ -124,24 +124,37 @@ final class SettingsStore: ObservableObject {
 }
 
 enum AutoBackupInterval: String, CaseIterable {
-    case onChange    = "onChange"
-    case every15min  = "every15min"
-    case every1hour  = "every1hour"
+    case onChange = "onChange"
+    case daily    = "daily"
+    case weekly   = "weekly"
+    case monthly  = "monthly"
 
     var displayName: String {
         switch self {
-        case .onChange:    return NSLocalizedString("On Clipboard Change", comment: "")
-        case .every15min:  return NSLocalizedString("Every 15 Minutes", comment: "")
-        case .every1hour:  return NSLocalizedString("Every Hour", comment: "")
+        case .onChange: return NSLocalizedString("On Clipboard Change", comment: "")
+        case .daily:    return NSLocalizedString("Daily", comment: "")
+        case .weekly:   return NSLocalizedString("Weekly", comment: "")
+        case .monthly:  return NSLocalizedString("Monthly", comment: "")
         }
     }
 
-    /// nil = 触发型（onChange），非 nil = 固定秒数
-    var timerInterval: TimeInterval? {
+    /// 两次备份之间的最小间隔。nil = onChange 触发型，不使用定时器
+    var backupInterval: TimeInterval? {
         switch self {
-        case .onChange:   return nil
-        case .every15min: return 15 * 60
-        case .every1hour: return 60 * 60
+        case .onChange: return nil
+        case .daily:    return 24 * 60 * 60
+        case .weekly:   return 7 * 24 * 60 * 60
+        case .monthly:  return 30 * 24 * 60 * 60
+        }
+    }
+
+    /// 定时检查"是否逾期"的轮询间隔，远小于 backupInterval 以保证不漏触发
+    var checkInterval: TimeInterval? {
+        switch self {
+        case .onChange: return nil
+        case .daily:    return 60 * 60          // 每小时检查
+        case .weekly:   return 6 * 60 * 60      // 每 6 小时检查
+        case .monthly:  return 24 * 60 * 60     // 每天检查
         }
     }
 }
