@@ -7,6 +7,14 @@ import Combine
 private final class ClipinPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// Stay 模式下面板失去 key window 时的回调
+    var onResignKey: (() -> Void)?
+
+    override func resignKey() {
+        super.resignKey()
+        onResignKey?()
+    }
 }
 
 @MainActor
@@ -123,6 +131,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
         panel.becomesKeyOnlyIfNeeded = false
+        panel.onResignKey = { [weak self] in
+            self?.handlePanelResignKey()
+        }
 
         if let screen = NSScreen.main {
             let f = screen.visibleFrame
@@ -184,7 +195,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func togglePanel() {
         guard let panel else { return }
         if panel.isVisible {
-            hidePanel()
+            if viewModel?.isPanelPinned == true {
+                // Pinned 模式下热键不关闭面板，而是夺回键盘焦点
+                panel.makeKeyAndOrderFront(nil)
+                NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+            } else {
+                hidePanel()
+            }
         } else {
             showPanel()
         }
@@ -256,6 +273,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         })
     }
 
+    /// Stay 模式下面板失去 key window 时，短暂延迟后自动夺回焦点。
+    /// 延迟是为了让用户的鼠标点击先完成（目标输入框获得焦点、frontmostApplication 更新）。
+    private func handlePanelResignKey() {
+        guard viewModel?.isPanelPinned == true, let panel else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self,
+                  self.viewModel?.isPanelPinned == true,
+                  panel.isVisible else { return }
+            panel.makeKeyAndOrderFront(nil)
+            NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+        }
+    }
+
     private func startClickOutsideMonitor() {
         guard clickOutsideMonitor == nil else { return }
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -271,7 +301,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - App Switch Observer (Pinned 模式下追踪目标应用)
+    // MARK: - App Switch Observer (Pinned 模式下提前更新底栏目标应用名)
 
     private func startAppSwitchObserver() {
         guard appSwitchObserver == nil else { return }
@@ -542,14 +572,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         executePasteFlow()
     }
 
-    /// 根源解决 Pinned 模式下粘贴错乱的问题：
-    /// 原先使用全局 `CGEvent.post(tap: .cghidEventTap)` 发送模拟按键时，HID 会根据当前的全局 Key Window 路由事件。
-    /// 因为 Pinned 模式下面板仍是 Key Window，如果切换应用变慢，按键就会弹回给搜索框自己。
-    /// 此处的根源解法是：获取准确的目标 app PID，利用 `CGEvent.postToPid` 进行进程级精准投递！
-    /// 这样无论面板是否还是 Key Window，应用都能精准收到按键，无需任何闪烁/消失的补丁。
+    /// 粘贴投递采用 `CGEvent.postToPid` 进程级精准投递，无论面板是否 Key Window 都能正确送达。
+    /// Pinned 模式下通过 `resolveTargetApp()` 实时查询前台应用，支持用户切换目标后粘贴。
+    /// Pinned 模式下实时查询当前前台应用作为粘贴目标（LSUIElement app 不会成为 frontmostApplication）；
+    /// 非 Pinned 模式使用 showPanel 时快照的 previousApp（面板关闭后需要回到原应用）。
+    private func resolveTargetApp() -> NSRunningApplication? {
+        let pinned = viewModel?.isPanelPinned ?? false
+        if pinned {
+            let front = NSWorkspace.shared.frontmostApplication
+            if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
+                return front
+            }
+        }
+        return previousApp
+    }
+
     private func executePasteFlow() {
         let pinned = viewModel?.isPanelPinned ?? false
-        let targetApp = previousApp
+        let targetApp = resolveTargetApp()
 
         if !pinned {
             hidePanel()
@@ -565,9 +605,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             if pinned {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                    // Pinned 模式下，粘贴完毕后只需把面板的输入焦点夺回来，面板一直都在！
                     guard let self, let panel = self.panel else { return }
                     panel.makeKeyAndOrderFront(nil)
+                    // 更新底栏目标应用名（下次粘贴的目标可能已变）
+                    self.viewModel?.targetAppName = self.resolveTargetApp()?.localizedName
                     NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
                 }
             }
