@@ -140,7 +140,7 @@ Clipin/
 
 ---
 
-<details>
+<details id="english">
 <summary><strong>English</strong></summary>
 
 ## What is Clipin?
