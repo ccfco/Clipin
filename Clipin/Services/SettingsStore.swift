@@ -43,6 +43,19 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(skipTransientContent, forKey: Keys.skipTransientContent) }
     }
 
+    @Published var autoBackupEnabled: Bool {
+        didSet { defaults.set(autoBackupEnabled, forKey: Keys.autoBackupEnabled) }
+    }
+
+    /// 用户选择的备份文件夹绝对路径，nil 表示未配置
+    @Published var autoBackupFolderPath: String? {
+        didSet { defaults.set(autoBackupFolderPath, forKey: Keys.autoBackupFolderPath) }
+    }
+
+    @Published var autoBackupInterval: AutoBackupInterval {
+        didSet { defaults.set(autoBackupInterval.rawValue, forKey: Keys.autoBackupInterval) }
+    }
+
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginNote: String?
 
@@ -55,6 +68,9 @@ final class SettingsStore: ObservableObject {
         static let maxHistoryItems = "settings.maxHistoryItems"
         static let shortcut = "settings.shortcut"
         static let skipTransientContent = "settings.skipTransientContent"
+        static let autoBackupEnabled = "settings.autoBackupEnabled"
+        static let autoBackupFolderPath = "settings.autoBackupFolderPath"
+        static let autoBackupInterval = "settings.autoBackupInterval"
     }
 
     private init() {
@@ -64,11 +80,16 @@ final class SettingsStore: ObservableObject {
         let storedShortcut = defaults.data(forKey: Keys.shortcut)
             .flatMap { try? decoder.decode(HotKeyShortcut.self, from: $0) }
             ?? .default
+        let storedInterval = defaults.string(forKey: Keys.autoBackupInterval)
+            .flatMap { AutoBackupInterval(rawValue: $0) } ?? .every15min
 
         self.retentionDays = storedRetention
         self.maxHistoryItems = storedMaxItems
         self.shortcut = storedShortcut
         self.skipTransientContent = defaults.object(forKey: Keys.skipTransientContent) as? Bool ?? false
+        self.autoBackupEnabled = defaults.bool(forKey: Keys.autoBackupEnabled)
+        self.autoBackupFolderPath = defaults.string(forKey: Keys.autoBackupFolderPath)
+        self.autoBackupInterval = storedInterval
         refreshLaunchAtLoginStatus()
     }
 
@@ -99,6 +120,29 @@ final class SettingsStore: ObservableObject {
         } catch {
             refreshLaunchAtLoginStatus()
             launchAtLoginNote = error.localizedDescription
+        }
+    }
+}
+
+enum AutoBackupInterval: String, CaseIterable {
+    case onChange    = "onChange"
+    case every15min  = "every15min"
+    case every1hour  = "every1hour"
+
+    var displayName: String {
+        switch self {
+        case .onChange:    return NSLocalizedString("On Clipboard Change", comment: "")
+        case .every15min:  return NSLocalizedString("Every 15 Minutes", comment: "")
+        case .every1hour:  return NSLocalizedString("Every Hour", comment: "")
+        }
+    }
+
+    /// nil = 触发型（onChange），非 nil = 固定秒数
+    var timerInterval: TimeInterval? {
+        switch self {
+        case .onChange:   return nil
+        case .every15min: return 15 * 60
+        case .every1hour: return 60 * 60
         }
     }
 }

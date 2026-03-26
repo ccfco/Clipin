@@ -7,6 +7,7 @@ private struct SettingsNotice {
 
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
+    @ObservedObject var autoBackup: AutoBackupService
     let core: ClipinCore
 
     @State private var notice: SettingsNotice?
@@ -20,6 +21,7 @@ struct SettingsView: View {
                 privacySection
                 retentionSection
                 transferSection
+                autoBackupSection
 
                 if let notice {
                     noticeView(notice)
@@ -27,7 +29,7 @@ struct SettingsView: View {
             }
             .padding(20)
         }
-        .frame(width: 560, height: 620)
+        .frame(width: 560, height: 680)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             settings.refreshLaunchAtLoginStatus()
@@ -274,6 +276,147 @@ struct SettingsView: View {
         } label: {
             Label("Transfer", systemImage: "arrow.left.arrow.right.circle")
         }
+    }
+
+    // MARK: - Auto Backup
+
+    private var autoBackupSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Automatically export clipboard history to a folder on a schedule.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                    Text("Saves as clipin-backup.json. Put it in iCloud Drive, Dropbox, or any folder.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Toggle("Enable auto backup", isOn: $settings.autoBackupEnabled)
+
+                if settings.autoBackupEnabled {
+                    Divider()
+
+                    // 文件夹选择
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Backup folder")
+                            .font(.system(size: 12, weight: .medium))
+
+                        HStack(spacing: 8) {
+                            if let path = settings.autoBackupFolderPath {
+                                Text(abbreviatedPath(path))
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            } else {
+                                Text("Not configured")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.tertiary)
+                            }
+
+                            Spacer()
+
+                            Button("Choose…") { chooseBackupFolder() }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+
+                            if settings.autoBackupFolderPath != nil {
+                                Button("Use iCloud") { useICloudDrive() }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                            }
+                        }
+
+                        if settings.autoBackupFolderPath == nil {
+                            HStack(spacing: 8) {
+                                Button("Choose Folder…") { chooseBackupFolder() }
+                                    .buttonStyle(.bordered)
+
+                                Button("Use iCloud Drive") { useICloudDrive() }
+                                    .buttonStyle(.bordered)
+                            }
+                        }
+                    }
+
+                    // 间隔选择
+                    HStack {
+                        Text("Frequency")
+                            .font(.system(size: 12, weight: .medium))
+                        Spacer()
+                        Picker("", selection: $settings.autoBackupInterval) {
+                            ForEach(AutoBackupInterval.allCases, id: \.self) { interval in
+                                Text(interval.displayName).tag(interval)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 180)
+                    }
+
+                    // 状态行
+                    HStack(spacing: 8) {
+                        if let error = autoBackup.lastBackupError {
+                            Circle().fill(Color.red).frame(width: 6, height: 6)
+                            Text("Backup failed: \(error)")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.red)
+                        } else if let date = autoBackup.lastBackupAt {
+                            Circle().fill(Color.green).frame(width: 6, height: 6)
+                            Text("Last backup: \(date.formatted(.relative(presentation: .named)))")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Circle().fill(Color.secondary.opacity(0.4)).frame(width: 6, height: 6)
+                            Text("No backup yet")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                        }
+
+                        Spacer()
+
+                        if settings.autoBackupFolderPath != nil {
+                            Button("Backup Now") { autoBackup.backupNow() }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                    }
+                }
+            }
+            .padding(4)
+        } label: {
+            Label("Auto Backup", systemImage: "icloud.and.arrow.up")
+        }
+    }
+
+    private func chooseBackupFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose Backup Folder"
+        panel.message = "Choose a folder for the clipin-backup.json file."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        settings.autoBackupFolderPath = url.path
+    }
+
+    private func useICloudDrive() {
+        // iCloud Drive 在非沙盒 app 中可直接访问的标准路径
+        let icloudURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Clipin")
+        do {
+            try FileManager.default.createDirectory(at: icloudURL, withIntermediateDirectories: true)
+            settings.autoBackupFolderPath = icloudURL.path
+        } catch {
+            showNotice("Cannot create iCloud Drive folder: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    private func abbreviatedPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
     }
 
     // MARK: - Notice

@@ -30,6 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var permissionWindow: NSWindow?
     private lazy var cleanupService = CleanupService(core: appState.core, settings: settings)
+    private lazy var autoBackupService = AutoBackupService(core: appState.core, settings: settings)
     private var previousApp: NSRunningApplication?
     private var clickOutsideMonitor: Any?
     private var keyMonitor: Any?
@@ -528,7 +529,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.titlebarAppearsTransparent = true
             newWindow.isReleasedWhenClosed = false
             newWindow.contentView = NSHostingView(
-                rootView: SettingsView(settings: settings, core: appState.core)
+                rootView: SettingsView(settings: settings, autoBackup: autoBackupService, core: appState.core)
             )
             settingsWindow = newWindow
             window = newWindow
