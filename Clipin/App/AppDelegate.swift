@@ -118,12 +118,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false
         )
         panel.contentView = NSHostingView(
-            rootView: MainPanel(
-                viewModel: vm,
-                onOpenSettings: { [weak self] in
-                    self?.openSettingsWindow()
-                }
-            )
+            rootView: MainPanel(viewModel: vm)
         )
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear

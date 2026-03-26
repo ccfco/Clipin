@@ -131,6 +131,13 @@
 "Files" = "文件";
 "URLs" = "链接";
 
+/* SettingsView – tab titles */
+"General" = "通用";
+"Privacy" = "隐私";
+"Retention" = "保留策略";
+"Transfer" = "导入导出";
+"Auto Backup" = "自动备份";
+
 /* SettingsView – General */
 "System Default" = "跟随系统";
 "Language" = "语言";

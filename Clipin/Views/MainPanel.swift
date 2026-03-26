@@ -1,59 +1,13 @@
 import SwiftUI
 
-// MARK: - 品牌色（Raycast 风格淡紫，深浅色自适应）
-
-private let panelShell = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1)
-        : NSColor(srgbRed: 0.972, green: 0.968, blue: 0.988, alpha: 1)
-})
-
-private let chromeSurface = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.14, green: 0.14, blue: 0.15, alpha: 0.6)
-        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.36)
-})
-
-private let sidebarSurface = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.16, green: 0.16, blue: 0.17, alpha: 0.85)
-        : NSColor(srgbRed: 0.944, green: 0.938, blue: 0.974, alpha: 0.96)
-})
-
-private let detailSurface = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.18, green: 0.18, blue: 0.19, alpha: 0.95)
-        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.99)
-})
-
-private let shellGlow = LinearGradient(
-    colors: [
-        Color.white.opacity(0.20),
-        Color.white.opacity(0.05),
-        Color.clear
-    ],
-    startPoint: .topLeading,
-    endPoint: .bottomTrailing
-)
-
-private let panelWash = LinearGradient(
-    colors: [
-        Color.white.opacity(0.18),
-        Color.white.opacity(0.05),
-        Color.clear
-    ],
-    startPoint: .top,
-    endPoint: .bottom
-)
-
-/// 主面板 — 偏原生 macOS 的双栏布局
+/// 主面板 - 更贴近 macOS 26 的 frosted glass 双栏布局
 struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
-    var onOpenSettings: () -> Void = {}
+    @ObservedObject private var settings = SettingsStore.shared
+    @Environment(\.colorScheme) private var colorScheme
 
-    init(viewModel: ClipboardViewModel, onOpenSettings: @escaping () -> Void = {}) {
-        self.viewModel = viewModel
-        self.onOpenSettings = onOpenSettings
+    private var glass: ClipinGlassPalette {
+        .make(theme: settings.visualTheme, colorScheme: colorScheme)
     }
 
     var body: some View {
@@ -64,17 +18,33 @@ struct MainPanel: View {
         }
         .frame(width: 800, height: 540)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
+            RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
                     LinearGradient(
-                        colors: [panelShell, panelShell.opacity(0.985)],
+                        colors: [glass.shellTintTop, glass.shellTintBottom],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    LinearGradient(
+                        colors: [glass.shellWash, Color.clear],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
-                .overlay(panelWash)
-                .overlay(shellGlow.opacity(0.72))
-                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5))
+                .overlay(
+                    LinearGradient(
+                        colors: [glass.shellHighlight, Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.08 : 0.24), lineWidth: 0.5)
+                )
         )
         .overlay(alignment: .top) {
             if viewModel.isPanelPinned {
@@ -116,7 +86,7 @@ struct MainPanel: View {
                 )
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 48, y: 24)
         .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .onAppear {
@@ -151,9 +121,16 @@ struct MainPanel: View {
             itemList
                 .frame(width: 292)
                 .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(sidebarSurface)
-                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5))
+                    RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                        .fill(.thinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                                .fill(glass.sidebarTint)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                        )
                         .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
                 )
 
@@ -161,9 +138,16 @@ struct MainPanel: View {
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(detailSurface)
-                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.05), lineWidth: 0.5))
+                    RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                        .fill(.regularMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                                .fill(glass.detailTint)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                        )
                         .shadow(color: .black.opacity(0.12), radius: 24, y: 12)
                 )
         }
@@ -249,7 +233,7 @@ struct MainPanel: View {
             .buttonStyle(.plain)
             .padding(.leading, 10)
 
-            Button { onOpenSettings() } label: {
+            Button { viewModel.openSettings() } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -261,8 +245,15 @@ struct MainPanel: View {
         .padding(.top, 6)
         .padding(.bottom, 12)
         .background(
-            Color(nsColor: .windowBackgroundColor).opacity(0.4)
-                .overlay(Rectangle().frame(height: 0.5).foregroundColor(Color.primary.opacity(0.05)), alignment: .top)
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .overlay(glass.chromeTint)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 0.5)
+                        .foregroundColor(Color.primary.opacity(0.06)),
+                    alignment: .top
+                )
         )
     }
 
@@ -278,13 +269,13 @@ struct MainPanel: View {
                 .padding(.vertical, 2)
                 .background(
                     RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(primary ? Color.white.opacity(0.14) : Color.primary.opacity(0.06))
+                        .fill(primary ? Color.white.opacity(0.14) : glass.keycapTint)
                 )
         }
         .padding(.horizontal, primary ? 12 : 0)
         .padding(.vertical, primary ? 7 : 0)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
                 .fill(primary ? Color.accentColor.opacity(0.94) : Color.clear)
         )
         .shadow(color: primary ? Color.accentColor.opacity(0.16) : .clear, radius: 12, y: 4)
@@ -292,6 +283,8 @@ struct MainPanel: View {
 }
 
 private struct ItemListView: View {
+    @ObservedObject private var settings = SettingsStore.shared
+    @Environment(\.colorScheme) private var colorScheme
     let sections: [ClipSection]
     let isEmpty: Bool
     let hasActiveFilter: Bool
@@ -302,6 +295,10 @@ private struct ItemListView: View {
     let onDelete: (ClipListItem) -> Void
 
     @State private var hoveredID: String?
+
+    private var glass: ClipinGlassPalette {
+        .make(theme: settings.visualTheme, colorScheme: colorScheme)
+    }
 
     /// 预计算 id -> 序号索引，O(n) 构建，O(1) 查找
     private var shortcutIndex: [String: Int] {
@@ -371,18 +368,22 @@ private struct ItemListView: View {
         )
         .id(item.id)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                 .fill(
                     isSelected
                         ? Color.accentColor.opacity(0.12)
                         : isHovered
-                            ? Color.primary.opacity(0.06)
+                            ? glass.keycapTint
                             : Color.clear
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                         .strokeBorder(
-                            isSelected ? Color.accentColor.opacity(0.15) : Color.clear,
+                            isSelected
+                                ? Color.accentColor.opacity(0.16)
+                                : isHovered
+                                    ? Color.white.opacity(colorScheme == .dark ? 0.04 : 0.14)
+                                    : Color.clear,
                             lineWidth: 0.5
                         )
                 )

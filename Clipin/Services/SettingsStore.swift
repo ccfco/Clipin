@@ -157,6 +157,12 @@ final class SettingsStore: ObservableObject {
         self.appearanceOverride = storedAppearance
         self.visualTheme = storedVisualTheme
         self.appLanguage = storedAppLanguage
+        // init 赋值不触发 didSet，需手动同步确保 AppleLanguages 和持久化值一致
+        if let langs = storedAppLanguage.appleLanguagesValue {
+            defaults.set(langs, forKey: "AppleLanguages")
+        } else {
+            defaults.removeObject(forKey: "AppleLanguages")
+        }
         refreshLaunchAtLoginStatus()
     }
 
