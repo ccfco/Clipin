@@ -25,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var previousApp: NSRunningApplication?
     private var clickOutsideMonitor: Any?
     private var keyMonitor: Any?
+    private var appSwitchObserver: Any?
     private var hideGeneration: Int = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -227,6 +228,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         startClickOutsideMonitor()
         startKeyMonitor()
+        startAppSwitchObserver()
     }
 
     private func hidePanel() {
@@ -235,6 +237,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.hideActionsPalette()
         stopClickOutsideMonitor()
         stopKeyMonitor()
+        stopAppSwitchObserver()
 
         hideGeneration += 1
         let expectedGeneration = hideGeneration
@@ -265,6 +268,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let monitor = clickOutsideMonitor {
             NSEvent.removeMonitor(monitor)
             clickOutsideMonitor = nil
+        }
+    }
+
+    // MARK: - App Switch Observer (Pinned 模式下追踪目标应用)
+
+    private func startAppSwitchObserver() {
+        guard appSwitchObserver == nil else { return }
+        appSwitchObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self,
+                  self.viewModel?.isPanelPinned == true,
+                  let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+            self.previousApp = app
+            self.viewModel?.targetAppName = app.localizedName
+        }
+    }
+
+    private func stopAppSwitchObserver() {
+        if let observer = appSwitchObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            appSwitchObserver = nil
         }
     }
 
