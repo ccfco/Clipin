@@ -36,11 +36,14 @@ final class ClipboardViewModel: ObservableObject {
 
     func executePaletteAction(at index: Int) {
         guard index >= 0, index < filteredPaletteActions.count else { return }
+        let shouldRestoreSearchFocus = isShowingActions
         let action = filteredPaletteActions[index]
         action.handler()
 
         if isShowingActions {
             hideActionsPalette(restoreFocus: true)
+        } else if shouldRestoreSearchFocus {
+            NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
         }
     }
 
@@ -81,6 +84,7 @@ final class ClipboardViewModel: ObservableObject {
     var onCopyRequested: ((ClipItem) -> Void)?
     var onQuickLookRequested: ((ClipItem) -> Void)?
     var onCloseRequested: (() -> Void)?
+    var onOpenSettingsRequested: (() -> Void)?
 
     init(core: ClipinCore) {
         self.core = core
@@ -219,6 +223,8 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func close() { onCloseRequested?() }
+
+    func openSettings() { onOpenSettingsRequested?() }
 
     func togglePanelPin() { isPanelPinned.toggle() }
 

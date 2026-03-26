@@ -246,41 +246,57 @@ struct ActionPalette: View {
 struct ActionPaletteBuilder {
     @MainActor
     static func actions(for viewModel: ClipboardViewModel) -> [PaletteAction] {
-        guard let selected = viewModel.selectedListItem else { return [] }
-
         var list: [PaletteAction] = []
 
-        list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", keywords: ["insert", "send"], section: .primary) {
-            viewModel.pasteSelected()
-        })
+        if let selected = viewModel.selectedListItem {
+            list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", keywords: ["insert", "send"], section: .primary) {
+                viewModel.pasteSelected()
+            })
 
-        if selected.clipType == .text || selected.clipType == .url {
-            list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", badge: "⇧↵", keywords: ["plain", "text only", "strip formatting"], section: .primary) {
-                viewModel.pastePlainSelected()
+            if selected.clipType == .text || selected.clipType == .url {
+                list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", badge: "⇧↵", keywords: ["plain", "text only", "strip formatting"], section: .primary) {
+                    viewModel.pastePlainSelected()
+                })
+            }
+
+            list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", keywords: ["copy", "clipboard", "yank"], section: .primary) {
+                viewModel.copySelected()
+            })
+
+            list.append(PaletteAction("Quick Look", systemImage: "space", badge: viewModel.selectedQuickLookKey, keywords: ["preview", "look"], section: .primary) {
+                viewModel.quickLookSelected()
+            })
+
+            list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P", keywords: ["favorite", "keep", "stay"]) {
+                viewModel.togglePinSelected()
+            })
+
+            if viewModel.canOpenSelectedItem {
+                list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, badge: "⌘O", keywords: ["launch", "reveal", "finder", "visit", "browser", "show"]) {
+                    viewModel.openSelected()
+                })
+            }
+        }
+
+        if viewModel.hasActiveFilter {
+            list.append(PaletteAction("Clear Search & Filters", systemImage: "line.3.horizontal.decrease.circle", badge: "↵", keywords: ["reset", "clear", "search", "filter", "all"]) {
+                _ = viewModel.clearActiveQueryAndFilters()
             })
         }
 
-        list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", keywords: ["copy", "clipboard", "yank"], section: .primary) {
-            viewModel.copySelected()
+        list.append(PaletteAction(viewModel.isPanelPinned ? "Disable Stay Open" : "Enable Stay Open", systemImage: viewModel.isPanelPinned ? "pin.slash" : "pin", badge: "⌘⇧L", keywords: ["pin", "stay", "keep open", "panel"]) {
+            viewModel.togglePanelPin()
         })
 
-        list.append(PaletteAction("Quick Look", systemImage: "space", badge: viewModel.selectedQuickLookKey, keywords: ["preview", "look"], section: .primary) {
-            viewModel.quickLookSelected()
+        list.append(PaletteAction("Open Settings", systemImage: "gearshape", badge: "⌘,", keywords: ["preferences", "settings", "config"]) {
+            viewModel.openSettings()
         })
 
-        list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P", keywords: ["favorite", "keep", "stay"]) {
-            viewModel.togglePinSelected()
-        })
-
-        if viewModel.canOpenSelectedItem {
-            list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, badge: "⌘O", keywords: ["launch", "reveal", "finder", "visit", "browser", "show"]) {
-                viewModel.openSelected()
+        if viewModel.selectedListItem != nil {
+            list.append(PaletteAction("Delete", systemImage: "trash", badge: "⌘⌫", keywords: ["remove", "trash"], section: .destructive, isDestructive: true) {
+                viewModel.deleteSelected()
             })
         }
-
-        list.append(PaletteAction("Delete", systemImage: "trash", badge: "⌘⌫", keywords: ["remove", "trash"], section: .destructive, isDestructive: true) {
-            viewModel.deleteSelected()
-        })
 
         return list
     }

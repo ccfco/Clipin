@@ -95,6 +95,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         vm.onCloseRequested = { [weak self] in
             self?.hidePanel()
         }
+        vm.onOpenSettingsRequested = { [weak self] in
+            guard let self else { return }
+            if !(self.viewModel?.isPanelPinned ?? false) {
+                self.hidePanel()
+            }
+            self.openSettingsWindow()
+        }
 
         Publishers.CombineLatest(
             vm.$searchQuery.removeDuplicates(),
