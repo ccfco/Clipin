@@ -213,11 +213,6 @@ struct MainPanel: View {
                 )
                 .padding(.leading, 10)
 
-                if viewModel.canQuickLookSelectedItem {
-                    keyBadge(label: "Quick Look", key: viewModel.selectedQuickLookKey)
-                        .padding(.leading, 10)
-                }
-
                 if viewModel.canOpenSelectedItem {
                     keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
                         .padding(.leading, 10)

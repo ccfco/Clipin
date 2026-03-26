@@ -82,7 +82,6 @@ final class ClipboardViewModel: ObservableObject {
     var onPasteRequested: ((ClipItem) -> Void)?
     var onPastePlainRequested: ((ClipItem) -> Void)?
     var onCopyRequested: ((ClipItem) -> Void)?
-    var onQuickLookRequested: ((ClipItem) -> Void)?
     var onCloseRequested: (() -> Void)?
     var onOpenSettingsRequested: (() -> Void)?
 
@@ -194,14 +193,6 @@ final class ClipboardViewModel: ObservableObject {
         guard let selectedItemID else { return }
         guard let item = try? core.getItem(id: selectedItemID) else { return }
         onCopyRequested?(item)
-    }
-
-    func quickLookSelected() {
-        guard let item = currentSelectedItem() else { return }
-        if isShowingActions {
-            hideActionsPalette()
-        }
-        onQuickLookRequested?(item)
     }
 
     func openSelected() {
@@ -352,18 +343,6 @@ final class ClipboardViewModel: ObservableObject {
 
     /// 是否正在搜索或过滤
     var hasActiveFilter: Bool { !searchQuery.isEmpty || typeFilter != nil }
-
-    var canTriggerQuickLookWithSpace: Bool {
-        selectedItemID != nil && searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    var canQuickLookSelectedItem: Bool {
-        selectedItemID != nil
-    }
-
-    var selectedQuickLookKey: String {
-        canTriggerQuickLookWithSpace ? "Space" : "⌘Y"
-    }
 
     var canOpenSelectedItem: Bool {
         guard let item = selectedListItem else { return false }
