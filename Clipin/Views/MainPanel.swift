@@ -224,17 +224,25 @@ struct MainPanel: View {
                 }
 
                 Spacer()
-
-                Button { viewModel.toggleActionsPalette() } label: {
-                    keyBadge(label: "Actions", key: "⌘K")
-                }
-                .buttonStyle(.plain)
             } else {
                 Text("Clipboard History")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
+
+                if viewModel.hasActiveFilter {
+                    Text("No selection")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 8)
+                }
+
                 Spacer()
             }
+
+            Button { viewModel.toggleActionsPalette() } label: {
+                keyBadge(label: "Actions", key: "⌘K")
+            }
+            .buttonStyle(.plain)
 
             Button { viewModel.togglePanelPin() } label: {
                 keyBadge(
@@ -409,13 +417,33 @@ private struct ItemListView: View {
                 .foregroundStyle(.secondary)
 
             Text(hasActiveFilter
-                 ? "Try a different search term or filter."
-                 : "Copy something and it will appear here.")
+                 ? "Try a different search term, or press Command-K for actions."
+                 : "Copy something and it will appear here. Command-K still opens actions.")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 200)
+
+            HStack(spacing: 6) {
+                badgeCapsule("⌘K")
+                Text(hasActiveFilter ? "Actions" : "Actions & Settings")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func badgeCapsule(_ key: String) -> some View {
+        Text(key)
+            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+            .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
+            )
     }
 }
