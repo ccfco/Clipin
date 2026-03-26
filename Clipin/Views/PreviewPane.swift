@@ -143,11 +143,11 @@ struct PreviewPane: View {
 
     private func infoGrid(for item: ClipItem) -> some View {
         // 收集所有 info 条目，然后均匀分两列（ceil(n/2) 在左，floor(n/2) 在右）
-        var all: [(String, String, NSImage?)] = []
+        var all: [(LocalizedStringKey, String, NSImage?)] = []
 
-        all.append(("Source", item.sourceName ?? "Unknown", sourceAppIcon(for: item)))
+        all.append(("Source", item.sourceName ?? NSLocalizedString("Unknown", comment: ""), sourceAppIcon(for: item)))
         all.append(("Type", typeLabel(item.clipType), nil))
-        if item.isPinned { all.append(("Status", "Pinned", nil)) }
+        if item.isPinned { all.append(("Status", NSLocalizedString("Pinned", comment: ""), nil)) }
 
         if item.clipType == .image, let path = item.imagePath {
             if let image = NSImage(contentsOfFile: path),
@@ -188,7 +188,7 @@ struct PreviewPane: View {
         }
     }
 
-    private func infoColumn(items: [(String, String, NSImage?)]) -> some View {
+    private func infoColumn(items: [(LocalizedStringKey, String, NSImage?)]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, entry in
                 infoRow(entry.0, value: entry.1, icon: entry.2)
@@ -197,7 +197,7 @@ struct PreviewPane: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func infoRow(_ label: String, value: String, icon: NSImage? = nil) -> some View {
+    private func infoRow(_ label: LocalizedStringKey, value: String, icon: NSImage? = nil) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(label)
                 .font(.system(size: 10, weight: .medium))
@@ -219,7 +219,7 @@ struct PreviewPane: View {
         }
     }
 
-    private func placeholder(icon: String, title: String, subtitle: String) -> some View {
+    private func placeholder(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey) -> some View {
         VStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 30))
@@ -235,7 +235,7 @@ struct PreviewPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func unavailableLabel(_ text: String, systemImage: String) -> some View {
+    private func unavailableLabel(_ text: LocalizedStringKey, systemImage: String) -> some View {
         Label(text, systemImage: systemImage)
             .font(.system(size: 13))
             .foregroundStyle(.secondary)
@@ -256,10 +256,10 @@ struct PreviewPane: View {
 
     private func typeLabel(_ type: ClipType) -> String {
         switch type {
-        case .text: return "Text"
-        case .image: return "Image"
-        case .file: return "File"
-        case .url: return "Link"
+        case .text:  return NSLocalizedString("Text", comment: "")
+        case .image: return NSLocalizedString("Image", comment: "")
+        case .file:  return NSLocalizedString("File", comment: "")
+        case .url:   return NSLocalizedString("Link", comment: "")
         }
     }
 

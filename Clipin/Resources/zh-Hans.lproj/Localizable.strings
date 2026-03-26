@@ -1,0 +1,125 @@
+/* SettingsView */
+"Settings" = "设置";
+"Manage the shortcut, privacy, history retention, startup behavior, and transfer tools." = "管理快捷键、隐私、历史记录保留、开机启动及数据迁移工具。";
+"Global shortcut" = "全局快捷键";
+"Click the field and press the new shortcut. At least one modifier key is required." = "点击输入框，然后按下新快捷键。至少需要一个修饰键。";
+"Reset" = "重置";
+"Launch Clipin at login" = "登录时启动 Clipin";
+"General" = "通用";
+"Privacy" = "隐私";
+"Sensitive content is always excluded" = "始终排除敏感内容";
+"When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off." = "当 1Password、Bitwarden 等应用将内容标记为敏感时，Clipin 永远不会记录。此功能不可关闭。";
+"Filter out drag-and-drop and app-generated clipboard writes" = "过滤拖拽和应用自动写入的剪贴板内容";
+"Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history." = "跳过非用户主动复制触发的剪贴板条目。如果历史记录中频繁出现意外内容，请开启此选项。";
+"Retention" = "保留策略";
+"Keep unpinned history for" = "未固定记录保留时长";
+"Pinned items are always preserved." = "固定的条目永久保留。";
+"Max unpinned items" = "最多未固定条目数";
+"Oldest unpinned items are trimmed first." = "最旧的未固定条目优先清理。";
+"Run Cleanup Now" = "立即清理";
+"Transfer" = "数据迁移";
+"Export your clipboard history as JSON, or restore from a previous export." = "将剪贴板历史导出为 JSON，或从之前的导出文件恢复。";
+"Export JSON\u2026" = "导出 JSON\u2026";
+"Import JSON\u2026" = "导入 JSON\u2026";
+"Existing items are kept during import. Duplicates are skipped." = "导入时保留现有条目，重复内容自动跳过。";
+
+/* SettingsView - Retention picker */
+"7 days" = "7 天";
+"30 days" = "30 天";
+"90 days" = "90 天";
+"1 year" = "1 年";
+"3 years" = "3 年";
+"Forever" = "永久";
+"Unlimited" = "无限制";
+
+/* SettingsStore */
+"Clipin will start automatically after you log in." = "Clipin 将在你登录后自动启动。";
+"Login launch is pending approval in System Settings." = "开机启动等待系统设置授权。";
+
+/* MainPanel - bottom bar */
+"Clipboard History" = "剪贴板历史";
+"No selection" = "未选中";
+"Actions" = "动作";
+"Stay" = "保持";
+"Pinned" = "已固定";
+"Plain Text" = "纯文本";
+"Paste to %@" = "粘贴到 %@";
+
+/* MainPanel - context menu */
+"Paste" = "粘贴";
+"Unpin" = "取消固定";
+"Pin" = "固定";
+"Delete" = "删除";
+
+/* MainPanel - empty state */
+"No results" = "无结果";
+"No history yet" = "暂无历史记录";
+"Try a different search term, or press Command-K for actions." = "换个关键词试试，或按 ⌘K 打开动作面板。";
+"Copy something and it will appear here. Command-K still opens actions." = "复制内容后将在此显示。⌘K 仍可打开动作面板。";
+"Actions & Settings" = "动作与设置";
+
+/* ActionPalette */
+"Search actions" = "搜索动作";
+"Esc" = "Esc";
+"No actions found" = "未找到动作";
+"Keep typing to narrow down available actions, or press Escape to close." = "继续输入以缩小范围，或按 Esc 关闭。";
+"No matches yet. Press Escape to clear the filter, then Escape again to close." = "暂无匹配。按 Esc 清空筛选，再按一次关闭。";
+"Esc clears query, Esc again closes" = "Esc 清空查询，再按关闭";
+"1 action" = "1 个动作";
+"%d actions" = "%d 个动作";
+
+/* ActionPalette - action titles */
+"Paste as Plain Text" = "粘贴为纯文本";
+"Copy to Clipboard" = "复制到剪贴板";
+"Clear Search & Filters" = "清空搜索和筛选";
+"Enable Stay Open" = "开启保持模式";
+"Disable Stay Open" = "关闭保持模式";
+"Open Settings" = "打开设置";
+
+/* ClipboardViewModel - section titles */
+"Today" = "今天";
+"Yesterday" = "昨天";
+
+/* ClipboardViewModel - labels */
+"Top 9" = "前 9 项";
+"Quick Paste" = "快速粘贴";
+"Open" = "打开";
+"Open URL" = "打开链接";
+"Reveal in Finder" = "在 Finder 中显示";
+
+/* PreviewPane - placeholder */
+"Select an item" = "选择一条记录";
+"Choose a clipboard item from the list to inspect it here." = "从左侧列表选择一条剪贴板记录，在此查看详情。";
+"Image not found" = "图片未找到";
+
+/* PreviewPane - info labels */
+"Source" = "来源";
+"Type" = "类型";
+"Status" = "状态";
+"Dimensions" = "尺寸";
+"File size" = "文件大小";
+"Items" = "文件数";
+"Words" = "单词数";
+"Characters" = "字符数";
+"Copies" = "复制次数";
+"Copied" = "复制时间";
+
+/* PreviewPane - info values */
+"Unknown" = "未知";
+"Pinned" = "已固定";
+
+/* PreviewPane / ClipItemRow - type labels */
+"Text" = "文本";
+"Image" = "图片";
+"File" = "文件";
+"Link" = "链接";
+
+/* PermissionView */
+"Accessibility Permission Required" = "需要辅助功能权限";
+"Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item." = "Clipin 需要辅助功能权限，才能在你选择历史记录后自动将内容粘贴到当前应用。";
+"Open System Settings" = "打开系统设置";
+"Window closes automatically after permission is granted" = "授权后此窗口自动关闭";
+"Permission Granted" = "权限已授予";
+"Step 1: Click the button below to open System Settings." = "点击下方按钮，打开系统设置";
+"Step 2: Find Clipin under Privacy & Security \u2192 Accessibility." = "在「隐私与安全性 → 辅助功能」中找到 Clipin";
+"Step 3: Enable the toggle and return." = "打开开关，返回即可使用";

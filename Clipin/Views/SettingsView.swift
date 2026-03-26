@@ -200,7 +200,7 @@ struct SettingsView: View {
                         Spacer()
                         Picker("", selection: normalizedRetentionDays) {
                             ForEach(Self.retentionOptions, id: \.days) { option in
-                                Text(option.label).tag(option.days)
+                                Text(LocalizedStringKey(option.label)).tag(option.days)
                             }
                         }
                         .labelsHidden()
@@ -219,7 +219,7 @@ struct SettingsView: View {
                         Spacer()
                         Picker("", selection: normalizedMaxItems) {
                             ForEach(Self.maxItemsOptions, id: \.count) { option in
-                                Text(option.label).tag(option.count)
+                                Text(LocalizedStringKey(option.label)).tag(option.count)
                             }
                         }
                         .labelsHidden()

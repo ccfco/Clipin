@@ -77,10 +77,10 @@ final class SettingsStore: ObservableObject {
         switch status {
         case .enabled:
             launchAtLoginEnabled = true
-            launchAtLoginNote = "Clipin will start automatically after you log in."
+            launchAtLoginNote = NSLocalizedString("Clipin will start automatically after you log in.", comment: "")
         case .requiresApproval:
             launchAtLoginEnabled = false
-            launchAtLoginNote = "Login launch is pending approval in System Settings."
+            launchAtLoginNote = NSLocalizedString("Login launch is pending approval in System Settings.", comment: "")
         default:
             launchAtLoginEnabled = false
             launchAtLoginNote = nil

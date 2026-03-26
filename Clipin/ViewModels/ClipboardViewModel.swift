@@ -330,7 +330,9 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     var selectedQuickPasteLabel: String {
-        selectedQuickPasteNumber == nil ? "Top 9" : "Quick Paste"
+        selectedQuickPasteNumber == nil
+            ? NSLocalizedString("Top 9", comment: "")
+            : NSLocalizedString("Quick Paste", comment: "")
     }
 
     var selectedQuickPasteKey: String {
@@ -352,14 +354,14 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     var selectedOpenLabel: String {
-        guard let item = selectedListItem else { return "Open" }
+        guard let item = selectedListItem else { return NSLocalizedString("Open", comment: "") }
         switch item.clipType {
         case .url:
-            return "Open URL"
+            return NSLocalizedString("Open URL", comment: "")
         case .file:
-            return "Reveal in Finder"
+            return NSLocalizedString("Reveal in Finder", comment: "")
         default:
-            return "Open"
+            return NSLocalizedString("Open", comment: "")
         }
     }
 
@@ -443,9 +445,9 @@ final class ClipboardViewModel: ObservableObject {
         }
 
         var result: [ClipSection] = []
-        if !pinned.isEmpty    { result.append(ClipSection(title: "Pinned", items: pinned)) }
-        if !today.isEmpty     { result.append(ClipSection(title: "Today", items: today)) }
-        if !yesterday.isEmpty { result.append(ClipSection(title: "Yesterday", items: yesterday)) }
+        if !pinned.isEmpty    { result.append(ClipSection(title: NSLocalizedString("Pinned", comment: ""), items: pinned)) }
+        if !today.isEmpty     { result.append(ClipSection(title: NSLocalizedString("Today", comment: ""), items: today)) }
+        if !yesterday.isEmpty { result.append(ClipSection(title: NSLocalizedString("Yesterday", comment: ""), items: yesterday)) }
         for group in older {
             result.append(ClipSection(title: group.key, items: group.items))
         }

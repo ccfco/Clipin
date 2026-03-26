@@ -197,7 +197,7 @@ struct MainPanel: View {
             if viewModel.selectedListItem != nil {
                 Button { viewModel.pasteSelected() } label: {
                     keyBadge(
-                        label: viewModel.targetAppName.map { "Paste to \($0)" } ?? "Paste",
+                        label: viewModel.targetAppName.map { LocalizedStringKey("Paste to \($0)") } ?? "Paste",
                         key: "↵",
                         primary: true
                     )
@@ -266,7 +266,7 @@ struct MainPanel: View {
         )
     }
 
-    private func keyBadge(label: String, key: String, primary: Bool = false) -> some View {
+    private func keyBadge(label: LocalizedStringKey, key: String, primary: Bool = false) -> some View {
         HStack(spacing: 5) {
             Text(label)
                 .font(.system(size: 12, weight: .medium))
@@ -395,7 +395,7 @@ private struct ItemListView: View {
             .onHover { hovered in hoveredID = hovered ? item.id : nil }
             .contextMenu {
                 Button("Paste") { onActivate(item) }
-                Button(item.isPinned ? "Unpin" : "Pin") { onPin(item) }
+                Button(item.isPinned ? LocalizedStringKey("Unpin") : "Pin") { onPin(item) }
                 Divider()
                 Button("Delete", role: .destructive) { onDelete(item) }
             }
@@ -407,12 +407,12 @@ private struct ItemListView: View {
                 .font(.system(size: 24))
                 .foregroundStyle(.tertiary)
 
-            Text(hasActiveFilter ? "No results" : "No history yet")
+            Text(hasActiveFilter ? LocalizedStringKey("No results") : "No history yet")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
 
             Text(hasActiveFilter
-                 ? "Try a different search term, or press Command-K for actions."
+                 ? LocalizedStringKey("Try a different search term, or press Command-K for actions.")
                  : "Copy something and it will appear here. Command-K still opens actions.")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
@@ -421,7 +421,7 @@ private struct ItemListView: View {
 
             HStack(spacing: 6) {
                 badgeCapsule("⌘K")
-                Text(hasActiveFilter ? "Actions" : "Actions & Settings")
+                Text(hasActiveFilter ? LocalizedStringKey("Actions") : "Actions & Settings")
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
             }

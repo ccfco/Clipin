@@ -1,0 +1,125 @@
+/* SettingsView */
+"Settings" = "Settings";
+"Manage the shortcut, privacy, history retention, startup behavior, and transfer tools." = "Manage the shortcut, privacy, history retention, startup behavior, and transfer tools.";
+"Global shortcut" = "Global shortcut";
+"Click the field and press the new shortcut. At least one modifier key is required." = "Click the field and press the new shortcut. At least one modifier key is required.";
+"Reset" = "Reset";
+"Launch Clipin at login" = "Launch Clipin at login";
+"General" = "General";
+"Privacy" = "Privacy";
+"Sensitive content is always excluded" = "Sensitive content is always excluded";
+"When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off." = "When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off.";
+"Filter out drag-and-drop and app-generated clipboard writes" = "Filter out drag-and-drop and app-generated clipboard writes";
+"Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history." = "Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history.";
+"Retention" = "Retention";
+"Keep unpinned history for" = "Keep unpinned history for";
+"Pinned items are always preserved." = "Pinned items are always preserved.";
+"Max unpinned items" = "Max unpinned items";
+"Oldest unpinned items are trimmed first." = "Oldest unpinned items are trimmed first.";
+"Run Cleanup Now" = "Run Cleanup Now";
+"Transfer" = "Transfer";
+"Export your clipboard history as JSON, or restore from a previous export." = "Export your clipboard history as JSON, or restore from a previous export.";
+"Export JSON\u2026" = "Export JSON\u2026";
+"Import JSON\u2026" = "Import JSON\u2026";
+"Existing items are kept during import. Duplicates are skipped." = "Existing items are kept during import. Duplicates are skipped.";
+
+/* SettingsView - Retention picker */
+"7 days" = "7 days";
+"30 days" = "30 days";
+"90 days" = "90 days";
+"1 year" = "1 year";
+"3 years" = "3 years";
+"Forever" = "Forever";
+"Unlimited" = "Unlimited";
+
+/* SettingsStore */
+"Clipin will start automatically after you log in." = "Clipin will start automatically after you log in.";
+"Login launch is pending approval in System Settings." = "Login launch is pending approval in System Settings.";
+
+/* MainPanel - bottom bar */
+"Clipboard History" = "Clipboard History";
+"No selection" = "No selection";
+"Actions" = "Actions";
+"Stay" = "Stay";
+"Pinned" = "Pinned";
+"Plain Text" = "Plain Text";
+"Paste to %@" = "Paste to %@";
+
+/* MainPanel - context menu */
+"Paste" = "Paste";
+"Unpin" = "Unpin";
+"Pin" = "Pin";
+"Delete" = "Delete";
+
+/* MainPanel - empty state */
+"No results" = "No results";
+"No history yet" = "No history yet";
+"Try a different search term, or press Command-K for actions." = "Try a different search term, or press Command-K for actions.";
+"Copy something and it will appear here. Command-K still opens actions." = "Copy something and it will appear here. Command-K still opens actions.";
+"Actions & Settings" = "Actions & Settings";
+
+/* ActionPalette */
+"Search actions" = "Search actions";
+"Esc" = "Esc";
+"No actions found" = "No actions found";
+"Keep typing to narrow down available actions, or press Escape to close." = "Keep typing to narrow down available actions, or press Escape to close.";
+"No matches yet. Press Escape to clear the filter, then Escape again to close." = "No matches yet. Press Escape to clear the filter, then Escape again to close.";
+"Esc clears query, Esc again closes" = "Esc clears query, Esc again closes";
+"1 action" = "1 action";
+"%d actions" = "%d actions";
+
+/* ActionPalette - action titles */
+"Paste as Plain Text" = "Paste as Plain Text";
+"Copy to Clipboard" = "Copy to Clipboard";
+"Clear Search & Filters" = "Clear Search & Filters";
+"Enable Stay Open" = "Enable Stay Open";
+"Disable Stay Open" = "Disable Stay Open";
+"Open Settings" = "Open Settings";
+
+/* ClipboardViewModel - section titles */
+"Today" = "Today";
+"Yesterday" = "Yesterday";
+
+/* ClipboardViewModel - labels */
+"Top 9" = "Top 9";
+"Quick Paste" = "Quick Paste";
+"Open" = "Open";
+"Open URL" = "Open URL";
+"Reveal in Finder" = "Reveal in Finder";
+
+/* PreviewPane - placeholder */
+"Select an item" = "Select an item";
+"Choose a clipboard item from the list to inspect it here." = "Choose a clipboard item from the list to inspect it here.";
+"Image not found" = "Image not found";
+
+/* PreviewPane - info labels */
+"Source" = "Source";
+"Type" = "Type";
+"Status" = "Status";
+"Dimensions" = "Dimensions";
+"File size" = "File size";
+"Items" = "Items";
+"Words" = "Words";
+"Characters" = "Characters";
+"Copies" = "Copies";
+"Copied" = "Copied";
+
+/* PreviewPane - info values */
+"Unknown" = "Unknown";
+"Pinned" = "Pinned";
+
+/* PreviewPane / ClipItemRow - type labels */
+"Text" = "Text";
+"Image" = "Image";
+"File" = "File";
+"Link" = "Link";
+
+/* PermissionView */
+"Accessibility Permission Required" = "Accessibility Permission Required";
+"Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item." = "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item.";
+"Open System Settings" = "Open System Settings";
+"Window closes automatically after permission is granted" = "Window closes automatically after permission is granted";
+"Permission Granted" = "Permission Granted";
+"Step 1: Click the button below to open System Settings." = "Step 1: Click the button below to open System Settings.";
+"Step 2: Find Clipin under Privacy & Security \u2192 Accessibility." = "Step 2: Find Clipin under Privacy & Security \u2192 Accessibility.";
+"Step 3: Enable the toggle and return." = "Step 3: Enable the toggle and return.";

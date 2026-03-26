@@ -24,6 +24,7 @@ enum PaletteActionSection: Int {
 struct PaletteAction: Identifiable {
     let id = UUID()
     let title: String
+    var localizedTitle: LocalizedStringKey { .init(title) }
     let systemImage: String
     let badge: String
     let keywords: [String]
@@ -138,10 +139,12 @@ struct ActionPalette: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
 
-                Text(query.isEmpty ? "Search actions" : query)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(query.isEmpty ? .tertiary : .primary)
-                    .lineLimit(1)
+                Group {
+                    if query.isEmpty { Text("Search actions") } else { Text(verbatim: query) }
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(query.isEmpty ? .tertiary : .primary)
+                .lineLimit(1)
 
                 Spacer()
 
@@ -157,7 +160,13 @@ struct ActionPalette: View {
             }
 
             if !query.isEmpty {
-                Text("Esc clears query, Esc again closes · \(actions.count) action\(actions.count == 1 ? "" : "s")")
+                Text(verbatim: {
+                    let hint = NSLocalizedString("Esc clears query, Esc again closes", comment: "")
+                    let count = actions.count == 1
+                        ? NSLocalizedString("1 action", comment: "")
+                        : String(format: NSLocalizedString("%d actions", comment: ""), actions.count)
+                    return "\(hint) · \(count)"
+                }())
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.tertiary)
             }
@@ -172,7 +181,7 @@ struct ActionPalette: View {
 
         return HStack(spacing: 0) {
             Label {
-                Text(action.title)
+                Text(action.localizedTitle)
                     .font(.system(size: 15, weight: .medium))
             } icon: {
                 Image(systemName: action.systemImage)

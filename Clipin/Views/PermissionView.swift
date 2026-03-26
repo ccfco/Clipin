@@ -18,11 +18,11 @@ struct PermissionView: View {
             .padding(.top, 48)
             .padding(.bottom, 20)
 
-            Text("需要辅助功能权限")
+            Text("Accessibility Permission Required")
                 .font(.system(size: 20, weight: .semibold))
                 .padding(.bottom, 8)
 
-            Text("Clipin 需要辅助功能权限，才能在你选择历史记录后\n自动将内容粘贴到当前应用。")
+            Text("Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -32,9 +32,9 @@ struct PermissionView: View {
 
             // 步骤说明
             VStack(alignment: .leading, spacing: 12) {
-                StepRow(number: "1", text: "点击下方按钮，打开系统设置")
-                StepRow(number: "2", text: "在「隐私与安全性 → 辅助功能」中找到 Clipin")
-                StepRow(number: "3", text: "打开开关，返回即可使用")
+                StepRow(number: "1", text: "Step 1: Click the button below to open System Settings.")
+                StepRow(number: "2", text: "Step 2: Find Clipin under Privacy & Security \u{2192} Accessibility.")
+                StepRow(number: "3", text: "Step 3: Enable the toggle and return.")
             }
             .padding(.horizontal, 40)
             .padding(.bottom, 32)
@@ -45,7 +45,7 @@ struct PermissionView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "gear")
-                    Text("打开系统设置")
+                    Text("Open System Settings")
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -56,12 +56,12 @@ struct PermissionView: View {
             .padding(.bottom, 12)
 
             if permission.isAccessibilityGranted {
-                Label("权限已授予", systemImage: "checkmark.circle.fill")
+                Label("Permission Granted", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.system(size: 13, weight: .medium))
                     .padding(.bottom, 24)
             } else {
-                Text("授权后此窗口自动关闭")
+                Text("Window closes automatically after permission is granted")
                     .font(.system(size: 12))
                     .foregroundStyle(.tertiary)
                     .padding(.bottom, 24)
@@ -74,7 +74,7 @@ struct PermissionView: View {
 
 private struct StepRow: View {
     let number: String
-    let text: String
+    let text: LocalizedStringKey
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {

@@ -202,7 +202,7 @@ struct ClipItemRow: View {
             if trimmed.isEmpty { return "(empty)" }
             return trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
         case .image:
-            return "Image"
+            return NSLocalizedString("Image", comment: "")
         case .file:
             return FileClipboardContent.displayTitle(for: item.preview)
         }
