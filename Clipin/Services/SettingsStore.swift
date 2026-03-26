@@ -2,6 +2,29 @@ import Combine
 import Foundation
 import ServiceManagement
 
+enum AppLanguage: String, CaseIterable {
+    case system       = "system"
+    case english      = "en"
+    case simplifiedCN = "zh-Hans"
+
+    var displayName: String {
+        switch self {
+        case .system:       return NSLocalizedString("System Default", comment: "")
+        case .english:      return "English"
+        case .simplifiedCN: return "简体中文"
+        }
+    }
+
+    /// AppleLanguages 数组的实际值，nil 表示删除 key（跟随系统）
+    var appleLanguagesValue: [String]? {
+        switch self {
+        case .system:       return nil
+        case .english:      return ["en"]
+        case .simplifiedCN: return ["zh-Hans"]
+        }
+    }
+}
+
 enum AppearanceOverride: String, CaseIterable {
     case system = "system"
     case light  = "light"
@@ -74,6 +97,21 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(appearanceOverride.rawValue, forKey: Keys.appearanceOverride) }
     }
 
+    @Published var visualTheme: VisualTheme {
+        didSet { defaults.set(visualTheme.rawValue, forKey: Keys.visualTheme) }
+    }
+
+    @Published var appLanguage: AppLanguage {
+        didSet {
+            if let langs = appLanguage.appleLanguagesValue {
+                defaults.set(langs, forKey: "AppleLanguages")
+            } else {
+                defaults.removeObject(forKey: "AppleLanguages")
+            }
+            defaults.set(appLanguage.rawValue, forKey: Keys.appLanguage)
+        }
+    }
+
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginNote: String?
 
@@ -89,6 +127,8 @@ final class SettingsStore: ObservableObject {
         static let autoBackupFolderPath = "settings.autoBackupFolderPath"
         static let autoBackupInterval = "settings.autoBackupInterval"
         static let appearanceOverride = "settings.appearanceOverride"
+        static let visualTheme = "settings.visualTheme"
+        static let appLanguage = "settings.appLanguage"
     }
 
     private init() {
@@ -102,6 +142,10 @@ final class SettingsStore: ObservableObject {
             .flatMap { AutoBackupInterval(rawValue: $0) } ?? .weekly
         let storedAppearance = defaults.string(forKey: Keys.appearanceOverride)
             .flatMap { AppearanceOverride(rawValue: $0) } ?? .system
+        let storedVisualTheme = defaults.string(forKey: Keys.visualTheme)
+            .flatMap { VisualTheme(rawValue: $0) } ?? .mist
+        let storedAppLanguage = defaults.string(forKey: Keys.appLanguage)
+            .flatMap { AppLanguage(rawValue: $0) } ?? .system
 
         self.retentionDays = storedRetention
         self.maxHistoryItems = storedMaxItems
@@ -111,6 +155,8 @@ final class SettingsStore: ObservableObject {
         self.autoBackupFolderPath = defaults.string(forKey: Keys.autoBackupFolderPath)
         self.autoBackupInterval = storedInterval
         self.appearanceOverride = storedAppearance
+        self.visualTheme = storedVisualTheme
+        self.appLanguage = storedAppLanguage
         refreshLaunchAtLoginStatus()
     }
 

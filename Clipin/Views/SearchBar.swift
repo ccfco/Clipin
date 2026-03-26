@@ -1,18 +1,6 @@
 import SwiftUI
 import AppKit
 
-private let searchBgInner = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.18, green: 0.17, blue: 0.25, alpha: 0.72)
-        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.88)
-})
-
-private let searchBgOuter = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.13, green: 0.12, blue: 0.19, alpha: 0.20)
-        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.14)
-})
-
 // MARK: - Key-intercepting NSTextField
 
 /// NSTextField 子类：拦截 ↑↓/Return/Escape/Tab，传给回调而非默认文本行为
@@ -119,12 +107,18 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
 
 /// 搜索框 + 内嵌类型过滤 pill tabs
 struct SearchBar: View {
+    @ObservedObject private var settings = SettingsStore.shared
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var query: String
     @Binding var typeFilter: ClipType?
     var onNavigate: (Int) -> Void = { _ in }
     var onSubmit: () -> Void = {}
     var onEscape: () -> Void = {}
     var onCycleTypeFilter: (Bool) -> Void = { _ in }
+
+    private var glass: ClipinGlassPalette {
+        .make(theme: settings.visualTheme, colorScheme: colorScheme)
+    }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -157,13 +151,31 @@ struct SearchBar: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(searchBgInner)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(
+            RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                        .fill(glass.searchInnerTint)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous))
         .shadow(color: .white.opacity(0.18), radius: 6, y: 1)
         .shadow(color: .black.opacity(0.03), radius: 10, y: 6)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(searchBgOuter)
+        .background(
+            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                        .fill(glass.searchOuterTint)
+                )
+        )
     }
 
     private var filterPills: some View {
@@ -176,7 +188,7 @@ struct SearchBar: View {
         }
     }
 
-    private func pill(label: String, filter: ClipType?, shortcut: String) -> some View {
+    private func pill(label: LocalizedStringKey, filter: ClipType?, shortcut: String) -> some View {
         let isActive = typeFilter == filter
 
         return Button {
@@ -185,16 +197,16 @@ struct SearchBar: View {
             HStack(spacing: 3) {
                 Text(label)
                     .font(.system(size: 12, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? Color.white : Color.secondary.opacity(0.88))
+                    .foregroundStyle(isActive ? Color.accentColor : Color.secondary.opacity(0.88))
                 Text(shortcut)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isActive ? Color.white.opacity(0.65) : Color(nsColor: .quaternaryLabelColor))
+                    .foregroundStyle(isActive ? Color.accentColor.opacity(0.55) : Color(nsColor: .quaternaryLabelColor))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? Color.accentColor.opacity(0.96) : Color.clear)
+                    .fill(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
             )
         }
         .buttonStyle(.plain)

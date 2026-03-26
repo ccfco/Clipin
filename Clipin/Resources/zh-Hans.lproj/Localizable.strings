@@ -4,6 +4,15 @@
 "Global shortcut" = "全局快捷键";
 "Click the field and press the new shortcut. At least one modifier key is required." = "点击输入框，然后按下新快捷键。至少需要一个修饰键。";
 "Reset" = "重置";
+"Appearance" = "外观";
+"System" = "跟随系统";
+"Light" = "浅色";
+"Dark" = "深色";
+"Theme" = "主题";
+"Changes the panel tint while keeping native materials." = "在保留原生材质的前提下，调整面板的整体色调。";
+"Mist" = "雾蓝";
+"Graphite" = "石墨";
+"Sunrise" = "晨曦";
 "Launch Clipin at login" = "登录时启动 Clipin";
 "General" = "通用";
 "Privacy" = "隐私";
@@ -35,6 +44,10 @@
 /* SettingsStore */
 "Clipin will start automatically after you log in." = "Clipin 将在你登录后自动启动。";
 "Login launch is pending approval in System Settings." = "开机启动等待系统设置授权。";
+"On Clipboard Change" = "剪贴板变化时";
+"Daily" = "每天";
+"Weekly" = "每周";
+"Monthly" = "每月";
 
 /* MainPanel - bottom bar */
 "Clipboard History" = "剪贴板历史";
@@ -108,11 +121,20 @@
 "Unknown" = "未知";
 "Pinned" = "已固定";
 
-/* PreviewPane / ClipItemRow - type labels */
+/* PreviewPane / ClipItemRow / SearchBar - type labels */
 "Text" = "文本";
 "Image" = "图片";
 "File" = "文件";
 "Link" = "链接";
+"All" = "全部";
+"Images" = "图片";
+"Files" = "文件";
+"URLs" = "链接";
+
+/* SettingsView – General */
+"System Default" = "跟随系统";
+"Language" = "语言";
+"Restart Clipin to apply the language change." = "切换语言后需要重启 Clipin 才能生效。";
 
 /* PermissionView */
 "Accessibility Permission Required" = "需要辅助功能权限";

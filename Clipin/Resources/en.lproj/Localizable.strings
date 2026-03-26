@@ -4,6 +4,15 @@
 "Global shortcut" = "Global shortcut";
 "Click the field and press the new shortcut. At least one modifier key is required." = "Click the field and press the new shortcut. At least one modifier key is required.";
 "Reset" = "Reset";
+"Appearance" = "Appearance";
+"System" = "System";
+"Light" = "Light";
+"Dark" = "Dark";
+"Theme" = "Theme";
+"Changes the panel tint while keeping native materials." = "Changes the panel tint while keeping native materials.";
+"Mist" = "Mist";
+"Graphite" = "Graphite";
+"Sunrise" = "Sunrise";
 "Launch Clipin at login" = "Launch Clipin at login";
 "General" = "General";
 "Privacy" = "Privacy";
@@ -35,6 +44,10 @@
 /* SettingsStore */
 "Clipin will start automatically after you log in." = "Clipin will start automatically after you log in.";
 "Login launch is pending approval in System Settings." = "Login launch is pending approval in System Settings.";
+"On Clipboard Change" = "On Clipboard Change";
+"Daily" = "Daily";
+"Weekly" = "Weekly";
+"Monthly" = "Monthly";
 
 /* MainPanel - bottom bar */
 "Clipboard History" = "Clipboard History";
@@ -108,11 +121,20 @@
 "Unknown" = "Unknown";
 "Pinned" = "Pinned";
 
-/* PreviewPane / ClipItemRow - type labels */
+/* PreviewPane / ClipItemRow / SearchBar - type labels */
 "Text" = "Text";
 "Image" = "Image";
 "File" = "File";
 "Link" = "Link";
+"All" = "All";
+"Images" = "Images";
+"Files" = "Files";
+"URLs" = "URLs";
+
+/* SettingsView – General */
+"System Default" = "System Default";
+"Language" = "Language";
+"Restart Clipin to apply the language change." = "Restart Clipin to apply the language change.";
 
 /* PermissionView */
 "Accessibility Permission Required" = "Accessibility Permission Required";
