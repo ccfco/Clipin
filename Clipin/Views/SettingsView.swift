@@ -10,39 +10,46 @@ struct SettingsView: View {
     @ObservedObject var autoBackup: AutoBackupService
     let core: ClipinCore
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var notice: SettingsNotice?
     @State private var dismissTask: Task<Void, Never>?
     // "Last backup X ago" 每分钟刷新用的参考时间
     @State private var now: Date = .now
     @State private var tickTimer: Timer?
 
+    private var glass: ClipinGlassPalette {
+        .make(theme: settings.visualTheme, colorScheme: colorScheme)
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                header
-                generalSection
-                privacySection
-                retentionSection
-                transferSection
-                autoBackupSection
+        ZStack {
+            windowBackdrop
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+                    generalSection
+                    privacySection
+                    retentionSection
+                    transferSection
+                    autoBackupSection
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 24)
             }
-            .padding(20)
         }
-        .frame(width: 560, height: 680)
-        // notice 作为 safeAreaInset 顶出内容区，不会遮挡任何可点击元素
+        .frame(width: 620, height: 720)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let notice {
                 noticeView(notice)
                     .padding(.horizontal, 22)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(nsColor: .windowBackgroundColor))
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             settings.refreshLaunchAtLoginStatus()
-            // 每分钟更新 now，驱动 "Last backup X ago" 的相对时间刷新
             tickTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
                 Task { @MainActor in now = .now }
             }
@@ -59,19 +66,46 @@ struct SettingsView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Settings")
-                .font(.system(size: 26, weight: .semibold))
-            Text("Manage the shortcut, privacy, history retention, startup behavior, and transfer tools.")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(glass.searchInnerTint)
+                        )
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.primary)
+                }
+                .frame(width: 52, height: 52)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Settings")
+                        .font(.system(size: 28, weight: .semibold))
+                    Text("Manage the shortcut, privacy, history retention, startup behavior, and transfer tools.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 8) {
+                headerBadge(systemImage: "circle.lefthalf.filled", title: settings.appearanceOverride.displayName)
+                headerBadge(systemImage: "swatchpalette", title: settings.visualTheme.displayName)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(sectionBackground(shadowRadius: 26, shadowY: 12))
     }
 
     // MARK: - General
 
     private var generalSection: some View {
-        GroupBox {
+        sectionCard("General", systemImage: "gear") {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Global shortcut")
@@ -116,6 +150,28 @@ struct SettingsView: View {
 
                 Divider()
 
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Theme")
+                            .font(.system(size: 13, weight: .medium))
+                        Spacer()
+                        Picker("", selection: $settings.visualTheme) {
+                            ForEach(VisualTheme.allCases, id: \.self) { theme in
+                                Text(theme.displayName).tag(theme)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 240)
+                    }
+
+                    Text("Changes the panel tint while keeping native materials.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Divider()
+
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(
                         "Launch Clipin at login",
@@ -133,16 +189,13 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(4)
-        } label: {
-            Label("General", systemImage: "gear")
         }
     }
 
     // MARK: - Privacy
 
     private var privacySection: some View {
-        GroupBox {
+        sectionCard("Privacy", systemImage: "hand.raised", accent: .green) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "checkmark.shield.fill")
@@ -175,9 +228,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .padding(4)
-        } label: {
-            Label("Privacy", systemImage: "hand.raised")
         }
     }
 
@@ -226,7 +276,7 @@ struct SettingsView: View {
     }
 
     private var retentionSection: some View {
-        GroupBox {
+        sectionCard("Retention", systemImage: "clock.arrow.circlepath", accent: .orange) {
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {
@@ -273,16 +323,13 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.bordered)
             }
-            .padding(4)
-        } label: {
-            Label("Retention", systemImage: "clock.arrow.circlepath")
         }
     }
 
     // MARK: - Transfer
 
     private var transferSection: some View {
-        GroupBox {
+        sectionCard("Transfer", systemImage: "arrow.left.arrow.right.circle", accent: .blue) {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Export your clipboard history as JSON, or restore from a previous export.")
@@ -305,16 +352,13 @@ struct SettingsView: View {
                     .buttonStyle(.bordered)
                 }
             }
-            .padding(4)
-        } label: {
-            Label("Transfer", systemImage: "arrow.left.arrow.right.circle")
         }
     }
 
     // MARK: - Auto Backup
 
     private var autoBackupSection: some View {
-        GroupBox {
+        sectionCard("Auto Backup", systemImage: "icloud.and.arrow.up", accent: .cyan) {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Automatically export clipboard history to a folder on a schedule.")
@@ -398,10 +442,101 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(4)
-        } label: {
-            Label("Auto Backup", systemImage: "icloud.and.arrow.up")
         }
+    }
+
+    private var windowBackdrop: some View {
+        Rectangle()
+            .fill(.regularMaterial)
+            .overlay(
+                LinearGradient(
+                    colors: [glass.shellTintTop, glass.shellTintBottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                LinearGradient(
+                    colors: [glass.shellWash, Color.clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(alignment: .topTrailing) {
+                Circle()
+                    .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.10 : 0.14))
+                    .frame(width: 260, height: 260)
+                    .blur(radius: 80)
+                    .offset(x: 70, y: -120)
+            }
+            .overlay(alignment: .bottomLeading) {
+                Circle()
+                    .fill(glass.chromeTint.opacity(colorScheme == .dark ? 0.65 : 1.0))
+                    .frame(width: 320, height: 320)
+                    .blur(radius: 100)
+                    .offset(x: -90, y: 120)
+            }
+            .ignoresSafeArea()
+    }
+
+    private func headerBadge(systemImage: String, title: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(Capsule(style: .continuous).fill(glass.keycapTint))
+            )
+    }
+
+    private func sectionCard<Content: View>(
+        _ title: LocalizedStringKey,
+        systemImage: String,
+        accent: Color = .accentColor,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+                    .fill(accent.opacity(colorScheme == .dark ? 0.18 : 0.14))
+                    .overlay(
+                        Image(systemName: systemImage)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(accent)
+                    )
+                    .frame(width: 32, height: 32)
+
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+
+                Spacer()
+            }
+
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(sectionBackground())
+    }
+
+    private func sectionBackground(
+        shadowRadius: CGFloat = 20,
+        shadowY: CGFloat = 10
+    ) -> some View {
+        RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+            .fill(.thinMaterial)
+            .overlay(
+                RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                    .fill(glass.detailTint)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+            )
+            .shadow(color: .black.opacity(0.10), radius: shadowRadius, y: shadowY)
     }
 
     private func chooseBackupFolder() {
@@ -452,7 +587,21 @@ struct SettingsView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                        .fill(glass.searchInnerTint)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                )
+        )
+        .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
     }
 
     private func showNotice(_ text: String, isError: Bool = false) {
@@ -469,16 +618,20 @@ struct SettingsView: View {
     // MARK: - Actions
 
     private func runCleanup() {
-        do {
-            let result = try CleanupService(core: core, settings: settings).runNow()
-            NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
-            if result.totalRemoved == 0 {
-                showNotice("Nothing needed cleanup. Your history already fits the current policy.")
-            } else {
-                showNotice("Removed \(result.totalRemoved) items (\(result.removedByAge) by age, \(result.removedByCount) by count).")
+        // CleanupService.runNow() 是 @MainActor，无法脱离主线程；
+        // 用 Task {} 保持异步语义，避免阻塞当前调用帧
+        Task {
+            do {
+                let result = try CleanupService(core: core, settings: settings).runNow()
+                NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
+                if result.totalRemoved == 0 {
+                    showNotice("Nothing needed cleanup. Your history already fits the current policy.")
+                } else {
+                    showNotice("Removed \(result.totalRemoved) items (\(result.removedByAge) by age, \(result.removedByCount) by count).")
+                }
+            } catch {
+                showNotice(error.localizedDescription, isError: true)
             }
-        } catch {
-            showNotice(error.localizedDescription, isError: true)
         }
     }
 

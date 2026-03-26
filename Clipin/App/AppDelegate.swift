@@ -112,7 +112,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.viewModel = vm
 
         let panel = ClipinPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 540),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -533,13 +533,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window = existingWindow
         } else {
             let newWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
+                contentRect: NSRect(x: 0, y: 0, width: 620, height: 720),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
             newWindow.title = "Clipin Settings"
             newWindow.titlebarAppearsTransparent = true
+            newWindow.titleVisibility = .hidden
+            newWindow.titlebarSeparatorStyle = .none
+            newWindow.toolbarStyle = .preference
+            newWindow.backgroundColor = .clear
+            newWindow.isOpaque = false
+            newWindow.isMovableByWindowBackground = true
+            newWindow.hasShadow = true
             newWindow.isReleasedWhenClosed = false
             newWindow.contentView = NSHostingView(
                 rootView: SettingsView(settings: settings, autoBackup: autoBackupService, core: appState.core)

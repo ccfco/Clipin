@@ -1,18 +1,6 @@
 import SwiftUI
 import AppKit
 
-private let paletteBackground = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.19, green: 0.18, blue: 0.27, alpha: 0.54)
-        : NSColor(srgbRed: 0.994, green: 0.992, blue: 1.0, alpha: 0.54)
-})
-
-private let paletteHighlight = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.35, green: 0.32, blue: 0.46, alpha: 0.18)
-        : NSColor(srgbRed: 1.0, green: 1.0, blue: 1.0, alpha: 0.46)
-})
-
 // MARK: - PaletteAction
 
 enum PaletteActionSection: Int {
@@ -57,11 +45,17 @@ struct PaletteAction: Identifiable {
 // 此视图只负责渲染和鼠标交互。
 
 struct ActionPalette: View {
+    @ObservedObject private var settings = SettingsStore.shared
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var isPresented: Bool
     let query: String
     let actions: [PaletteAction]
     @Binding var selectedIndex: Int
     let onSelect: (Int) -> Void
+
+    private var glass: ClipinGlassPalette {
+        .make(theme: settings.visualTheme, colorScheme: colorScheme)
+    }
 
     private var groupedActionIndices: [[Int]] {
         var groups: [[Int]] = []
@@ -112,19 +106,23 @@ struct ActionPalette: View {
         }
         .padding(10)
         .frame(width: 372, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous))
         .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(paletteBackground)
+            RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
+                .fill(glass.paletteTint)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                    RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [paletteHighlight, Color.clear],
+                                colors: [glass.paletteHighlight, Color.clear],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.06 : 0.22), lineWidth: 0.5)
                 )
         )
         .shadow(color: .black.opacity(0.12), radius: 34, y: 18)
@@ -155,7 +153,7 @@ struct ActionPalette: View {
                     .padding(.vertical, 4)
                     .background(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
+                            .fill(glass.keycapTint)
                     )
             }
 
@@ -202,13 +200,13 @@ struct ActionPalette: View {
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? Color.white.opacity(0.14) : Color.white.opacity(0.08))
+                        .fill(isSelected ? Color.white.opacity(0.14) : glass.keycapTint)
                 )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                 .fill(
                     isSelected
                         ? (action.isDestructive ? Color.red.opacity(0.84) : Color.accentColor.opacity(0.78))
