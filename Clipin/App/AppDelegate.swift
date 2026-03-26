@@ -318,12 +318,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let self,
-                  self.viewModel?.isPanelPinned == true,
-                  let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-                  app.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
-            self.previousApp = app
-            self.viewModel?.targetAppName = app.localizedName
+            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            let bundleId = app?.bundleIdentifier
+            let name = app?.localizedName
+            Task { @MainActor [weak self] in
+                guard let self,
+                      self.viewModel?.isPanelPinned == true,
+                      let app,
+                      bundleId != Bundle.main.bundleIdentifier else { return }
+                self.previousApp = app
+                self.viewModel?.targetAppName = name
+            }
         }
     }
 
