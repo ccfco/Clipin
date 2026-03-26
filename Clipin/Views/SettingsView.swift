@@ -32,6 +32,9 @@ struct SettingsView: View {
         .onAppear {
             settings.refreshLaunchAtLoginStatus()
         }
+        .onDisappear {
+            dismissTask?.cancel()
+        }
     }
 
     // MARK: - Header

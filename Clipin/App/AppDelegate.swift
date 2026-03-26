@@ -553,8 +553,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                   let window = self.settingsWindow,
                   window.isVisible,
                   window.attachedSheet == nil else { return }
+            // close() 会同步触发 windowWillClose，delegate 里已调 stopSettingsClickMonitor
             window.close()
-            self.stopSettingsClickMonitor()
         }
     }
 
