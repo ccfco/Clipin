@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 private let previewInfoBackground = Color(nsColor: NSColor(name: nil) { app in
     app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
@@ -98,6 +99,7 @@ struct PreviewPane: View {
             let primaryPath = paths.first ?? item.content
             let primaryURL = URL(fileURLWithPath: primaryPath)
             let fileListText = paths.isEmpty ? item.content : paths.joined(separator: "\n")
+            let singleImageFile = paths.count == 1 && isImageFile(primaryPath)
 
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 14) {
@@ -115,13 +117,22 @@ struct PreviewPane: View {
                     }
                 }
 
-                SelectableTextPreview(
-                    text: fileListText,
-                    font: .monospacedSystemFont(ofSize: 12, weight: .regular),
-                    searchQuery: searchQuery,
-                    vm: vm
-                )
-                .frame(minHeight: 80)
+                if singleImageFile, let image = NSImage(contentsOfFile: primaryPath) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: 320)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
+                } else {
+                    SelectableTextPreview(
+                        text: fileListText,
+                        font: .monospacedSystemFont(ofSize: 12, weight: .regular),
+                        searchQuery: searchQuery,
+                        vm: vm
+                    )
+                    .frame(minHeight: 80)
+                }
             }
             .padding(28)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -166,6 +177,19 @@ struct PreviewPane: View {
             let paths = FileClipboardContent.paths(from: item.content)
             if paths.count > 1 {
                 all.append(("Items", "\(paths.count)", nil))
+            }
+            // 单图片文件：补充尺寸和大小
+            if let path = paths.first, paths.count == 1, isImageFile(path) {
+                if let image = NSImage(contentsOfFile: path),
+                   let rep = image.representations.first {
+                    let w = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
+                    let h = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
+                    all.append(("Dimensions", "\(w) × \(h)", nil))
+                }
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                   let bytes = attrs[.size] as? Int64 {
+                    all.append(("File size", ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file), nil))
+                }
             }
         }
 
@@ -240,6 +264,12 @@ struct PreviewPane: View {
             .font(.system(size: 13))
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func isImageFile(_ path: String) -> Bool {
+        let ext = URL(fileURLWithPath: path).pathExtension
+        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .image)
     }
 
     private func fileHeaderSubtitle(paths: [String], primaryURL: URL) -> String {
@@ -413,6 +443,11 @@ private struct SelectableTextPreview: NSViewRepresentable {
         )
         textView.minSize = .zero
         textView.autoresizingMask = [.width]
+        textView.linkTextAttributes = [
+            .foregroundColor: NSColor.controlAccentColor,
+            .underlineStyle: NSUnderlineStyle.single.rawValue,
+            .cursor: NSCursor.pointingHand
+        ]
 
         scrollView.documentView = textView
         return scrollView
@@ -443,6 +478,16 @@ private struct SelectableTextPreview: NSViewRepresentable {
                 attributed.addAttribute(.backgroundColor, value: highlightBg, range: found)
                 searchRange.location = found.location + found.length
                 searchRange.length = nsText.length - searchRange.location
+            }
+        }
+
+        // URL 链接检测：用 NSDataDetector 写入 .link 属性，使链接可点击
+        let fullRange = NSRange(location: 0, length: (text as NSString).length)
+        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
+            detector.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
+                if let match, let url = match.url {
+                    attributed.addAttribute(.link, value: url, range: match.range)
+                }
             }
         }
 
