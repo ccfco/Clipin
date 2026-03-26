@@ -8,6 +8,7 @@ Clipin/Generated/
 Clipin.xcodeproj/
 *.xcuserdata
 DerivedData/
+.derived-data/
 
 # macOS
 .DS_Store

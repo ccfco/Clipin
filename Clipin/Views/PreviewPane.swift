@@ -2,23 +2,17 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-private let previewInfoBackground = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.21, green: 0.20, blue: 0.27, alpha: 0.34)
-        : NSColor(srgbRed: 0.963, green: 0.958, blue: 0.986, alpha: 0.62)
-})
-
-private let previewCanvasTint = Color(nsColor: NSColor(name: nil) { app in
-    app.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        ? NSColor(srgbRed: 0.20, green: 0.19, blue: 0.27, alpha: 0.16)
-        : NSColor(srgbRed: 0.980, green: 0.976, blue: 0.994, alpha: 0.78)
-})
-
 /// 右侧预览面板
 struct PreviewPane: View {
+    @ObservedObject private var settings = SettingsStore.shared
+    @Environment(\.colorScheme) private var colorScheme
     let item: ClipItem?
     var searchQuery: String = ""
     @EnvironmentObject var vm: ClipboardViewModel
+
+    private var glass: ClipinGlassPalette {
+        .make(theme: settings.visualTheme, colorScheme: colorScheme)
+    }
 
     var body: some View {
         Group {
@@ -145,9 +139,16 @@ struct PreviewPane: View {
             .padding(.vertical, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(previewInfoBackground)
-                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5))
+                RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
+                            .fill(glass.infoTint)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
+                            .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                    )
                     .shadow(color: .black.opacity(0.1), radius: 12, y: 4)
             )
     }
@@ -339,6 +340,8 @@ struct PreviewPane: View {
 }
 
 private struct ColorSwatchPreview: View {
+    @ObservedObject private var settings = SettingsStore.shared
+    @Environment(\.colorScheme) private var colorScheme
     let color: Color
     let originalText: String
 
@@ -346,15 +349,19 @@ private struct ColorSwatchPreview: View {
         NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
     }
 
+    private var glass: ClipinGlassPalette {
+        .make(theme: settings.visualTheme, colorScheme: colorScheme)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             ZStack {
                 // 浅灰底，当颜色有透明度时可见
-                previewCanvasTint
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                glass.previewCanvasTint
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous))
+                RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
                     .fill(color)
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             }
             .frame(height: 120)
