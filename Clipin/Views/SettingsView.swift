@@ -10,20 +10,19 @@ struct SettingsView: View {
     let core: ClipinCore
 
     @State private var notice: SettingsNotice?
+    @State private var dismissTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
-                activationSection
-                retentionSection
+                generalSection
                 privacySection
+                retentionSection
                 transferSection
 
                 if let notice {
                     noticeView(notice)
-                } else if let note = settings.launchAtLoginNote {
-                    infoRow(text: note)
                 }
             }
             .padding(20)
@@ -35,17 +34,21 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Header
+
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Settings")
                 .font(.system(size: 26, weight: .semibold))
-            Text("Manage the shortcut, history retention, startup behavior, and transfer tools.")
+            Text("Manage the shortcut, privacy, history retention, startup behavior, and transfer tools.")
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
         }
     }
 
-    private var activationSection: some View {
+    // MARK: - General
+
+    private var generalSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -75,20 +78,72 @@ struct SettingsView: View {
 
                 Divider()
 
-                Toggle(
-                    "Launch Clipin at login",
-                    isOn: Binding(
-                        get: { settings.launchAtLoginEnabled },
-                        set: { settings.setLaunchAtLogin($0) }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(
+                        "Launch Clipin at login",
+                        isOn: Binding(
+                            get: { settings.launchAtLoginEnabled },
+                            set: { settings.setLaunchAtLogin($0) }
+                        )
                     )
-                )
-                .toggleStyle(.switch)
+                    .toggleStyle(.switch)
+
+                    if let note = settings.launchAtLoginNote {
+                        Text(note)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .padding(4)
         } label: {
-            Label("Activation", systemImage: "keyboard")
+            Label("General", systemImage: "gear")
         }
     }
+
+    // MARK: - Privacy
+
+    private var privacySection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .foregroundStyle(.green)
+                        .font(.system(size: 14))
+                        .frame(width: 16, alignment: .center)
+                        .padding(.top, 1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Sensitive content is always excluded")
+                            .font(.system(size: 13, weight: .medium))
+                        Text("When apps like 1Password or Bitwarden signal that content is sensitive, Clipin always honors this and never records it.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(
+                        "Skip temporary and auto-generated clipboard changes",
+                        isOn: Binding(
+                            get: { settings.skipTransientContent },
+                            set: { settings.skipTransientContent = $0 }
+                        )
+                    )
+                    .toggleStyle(.switch)
+                    Text("Ignores transient clipboard writes (e.g., drag-and-drop) and app-generated content. Disable if legitimate copies are being missed.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(4)
+        } label: {
+            Label("Privacy", systemImage: "hand.raised")
+        }
+    }
+
+    // MARK: - Retention
 
     private static let retentionOptions: [(label: String, days: Int)] = [
         ("7 days", 7),
@@ -108,7 +163,6 @@ struct SettingsView: View {
         ("Unlimited", 0),
     ]
 
-    /// 将非预设值归到最近的预设选项
     private var normalizedRetentionDays: Binding<Int> {
         Binding(
             get: {
@@ -135,32 +189,40 @@ struct SettingsView: View {
 
     private var retentionSection: some View {
         GroupBox {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Keep unpinned history for")
-                        .font(.system(size: 13, weight: .medium))
-                    Picker("", selection: normalizedRetentionDays) {
-                        ForEach(Self.retentionOptions, id: \.days) { option in
-                            Text(option.label).tag(option.days)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Keep unpinned history for")
+                            .font(.system(size: 13, weight: .medium))
+                        Spacer()
+                        Picker("", selection: normalizedRetentionDays) {
+                            ForEach(Self.retentionOptions, id: \.days) { option in
+                                Text(option.label).tag(option.days)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 110)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
                     Text("Pinned items are always preserved.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Max unpinned items")
-                        .font(.system(size: 13, weight: .medium))
-                    Picker("", selection: normalizedMaxItems) {
-                        ForEach(Self.maxItemsOptions, id: \.count) { option in
-                            Text(option.label).tag(option.count)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Max unpinned items")
+                            .font(.system(size: 13, weight: .medium))
+                        Spacer()
+                        Picker("", selection: normalizedMaxItems) {
+                            ForEach(Self.maxItemsOptions, id: \.count) { option in
+                                Text(option.label).tag(option.count)
+                            }
                         }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 110)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
                     Text("Oldest unpinned items are trimmed first.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
@@ -171,7 +233,7 @@ struct SettingsView: View {
                 Button("Run Cleanup Now") {
                     runCleanup()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
             }
             .padding(4)
         } label: {
@@ -179,52 +241,19 @@ struct SettingsView: View {
         }
     }
 
-    private var privacySection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 14) {
-                // 始终启用项：不提供开关，只做说明
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "lock.shield.fill")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Password manager content is always excluded")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("Clipin respects the nspasteboard privacy protocol. Content marked as concealed by apps like 1Password or Bitwarden is never recorded, regardless of other settings.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Divider()
-
-                // 可选项：TransientType / AutoGeneratedType
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle(
-                        "Skip temporary and auto-generated clipboard changes",
-                        isOn: Binding(
-                            get: { settings.skipTransientContent },
-                            set: { settings.skipTransientContent = $0 }
-                        )
-                    )
-                    .toggleStyle(.switch)
-                    Text("Filters out clipboard writes that are transient (e.g., drag-and-drop intermediaries) or auto-generated by apps. Disable if you notice legitimate copies being missed.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(4)
-        } label: {
-            Label("Privacy", systemImage: "hand.raised")
-        }
-    }
+    // MARK: - Transfer
 
     private var transferSection: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Export and import your clipboard history as JSON. Image clips are embedded directly into the archive.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Export your clipboard history as JSON, or restore from a previous export.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                    Text("Existing items are kept during import. Duplicates are skipped.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
 
                 HStack(spacing: 10) {
                     Button("Export JSON…") {
@@ -244,24 +273,32 @@ struct SettingsView: View {
         }
     }
 
-    private func noticeView(_ notice: SettingsNotice) -> some View {
-        infoRow(
-            text: notice.text,
-            accent: notice.isError ? .red : .accentColor
-        )
-    }
+    // MARK: - Notice
 
-    private func infoRow(text: String, accent: Color = .secondary) -> some View {
+    private func noticeView(_ notice: SettingsNotice) -> some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(accent)
+                .fill(notice.isError ? Color.red : Color.accentColor)
                 .frame(width: 8, height: 8)
-            Text(text)
+            Text(notice.text)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 2)
     }
+
+    private func showNotice(_ text: String, isError: Bool = false) {
+        notice = SettingsNotice(text: text, isError: isError)
+        dismissTask?.cancel()
+        guard !isError else { return }
+        dismissTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            notice = nil
+        }
+    }
+
+    // MARK: - Actions
 
     private func runCleanup() {
         do {
@@ -304,9 +341,5 @@ struct SettingsView: View {
 
     private func skippedSuffix(_ skippedCount: Int) -> String {
         skippedCount > 0 ? " Skipped \(skippedCount) items with missing image data." : ""
-    }
-
-    private func showNotice(_ text: String, isError: Bool = false) {
-        notice = SettingsNotice(text: text, isError: isError)
     }
 }

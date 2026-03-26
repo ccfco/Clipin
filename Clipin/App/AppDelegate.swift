@@ -29,6 +29,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotKey = HotKeyService()
     private var cancellables = Set<AnyCancellable>()
     private var permissionWindow: NSWindow?
+    private var settingsClickMonitor: Any?
+    private var settingsWindowDelegate: SettingsWindowDelegate?
     private lazy var cleanupService = CleanupService(core: appState.core, settings: settings)
     private var previousApp: NSRunningApplication?
     private var clickOutsideMonitor: Any?
@@ -516,8 +518,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window = existingWindow
         } else {
             let newWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 560, height: 520),
-                styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+                contentRect: NSRect(x: 0, y: 0, width: 560, height: 620),
+                styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
@@ -527,6 +529,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.contentView = NSHostingView(
                 rootView: SettingsView(settings: settings, core: appState.core)
             )
+            let delegate = SettingsWindowDelegate { [weak self] in
+                self?.stopSettingsClickMonitor()
+            }
+            newWindow.delegate = delegate
+            settingsWindowDelegate = delegate
             settingsWindow = newWindow
             window = newWindow
         }
@@ -536,6 +543,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        startSettingsClickMonitor()
+    }
+
+    private func startSettingsClickMonitor() {
+        guard settingsClickMonitor == nil else { return }
+        settingsClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            guard let self,
+                  let window = self.settingsWindow,
+                  window.isVisible,
+                  window.attachedSheet == nil else { return }
+            window.close()
+            self.stopSettingsClickMonitor()
+        }
+    }
+
+    private func stopSettingsClickMonitor() {
+        if let monitor = settingsClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            settingsClickMonitor = nil
+        }
     }
 
     // MARK: - Permission
@@ -645,5 +672,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
             }
         }
+    }
+}
+
+private final class SettingsWindowDelegate: NSObject, NSWindowDelegate {
+    private let onClose: () -> Void
+
+    init(onClose: @escaping () -> Void) {
+        self.onClose = onClose
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose()
     }
 }
