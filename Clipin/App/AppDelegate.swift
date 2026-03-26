@@ -253,6 +253,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let panel else { return }
         viewModel?.isPanelPinned = false
         viewModel?.hideActionsPalette()
+        suppressResignKey = false
         stopClickOutsideMonitor()
         stopKeyMonitor()
         stopAppSwitchObserver()
