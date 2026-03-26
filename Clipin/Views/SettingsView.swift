@@ -118,7 +118,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Sensitive content is always excluded")
                             .font(.system(size: 13, weight: .medium))
-                        Text("When apps like 1Password or Bitwarden signal that content is sensitive, Clipin always honors this and never records it.")
+                        Text("When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off.")
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
@@ -128,14 +128,14 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(
-                        "Skip temporary and auto-generated clipboard changes",
+                        "Filter out drag-and-drop and app-generated clipboard writes",
                         isOn: Binding(
                             get: { settings.skipTransientContent },
                             set: { settings.skipTransientContent = $0 }
                         )
                     )
                     .toggleStyle(.switch)
-                    Text("Ignores transient clipboard writes (e.g., drag-and-drop) and app-generated content. Disable if legitimate copies are being missed.")
+                    Text("Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }

@@ -68,7 +68,7 @@ final class SettingsStore: ObservableObject {
         self.retentionDays = storedRetention
         self.maxHistoryItems = storedMaxItems
         self.shortcut = storedShortcut
-        self.skipTransientContent = defaults.object(forKey: Keys.skipTransientContent) as? Bool ?? true
+        self.skipTransientContent = defaults.object(forKey: Keys.skipTransientContent) as? Bool ?? false
         refreshLaunchAtLoginStatus()
     }
 
