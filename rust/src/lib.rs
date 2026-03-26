@@ -89,6 +89,11 @@ impl ClipinCore {
         self.storage.delete_item(&id)
     }
 
+    /// 更新条目的时间戳，使其浮到列表顶部（粘贴时调用）
+    pub fn touch_item(&self, id: String) -> Result<(), ClipinError> {
+        self.storage.touch_item(&id)
+    }
+
     /// 导入一条记录（保留原始时间戳和 pin 状态，用于跨设备迁移）
     pub fn import_item(
         &self,

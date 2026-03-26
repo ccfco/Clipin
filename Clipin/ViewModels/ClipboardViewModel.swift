@@ -180,12 +180,14 @@ final class ClipboardViewModel: ObservableObject {
     func pasteSelected() {
         guard let selectedItemID else { return }
         guard let item = try? core.getItem(id: selectedItemID) else { return }
+        try? core.touchItem(id: selectedItemID)
         onPasteRequested?(item)
     }
 
     func pastePlainSelected() {
         guard let selectedItemID else { return }
         guard let item = try? core.getItem(id: selectedItemID) else { return }
+        try? core.touchItem(id: selectedItemID)
         onPastePlainRequested?(item)
     }
 

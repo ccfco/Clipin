@@ -608,6 +608,20 @@ impl Storage {
         Ok(())
     }
 
+    /// 更新 created_at 为当前时间，使条目浮到列表顶部
+    pub fn touch_item(&self, id: &str) -> Result<(), ClipinError> {
+        let conn = self.conn.lock().unwrap();
+        let now = chrono::Utc::now().timestamp_millis();
+        let affected = conn.execute(
+            "UPDATE clip_items SET created_at = ?1 WHERE id = ?2",
+            params![now, id],
+        )?;
+        if affected == 0 {
+            return Err(ClipinError::NotFound { id: id.to_string() });
+        }
+        Ok(())
+    }
+
     /// 导入一条记录（保留原始 created_at 和 is_pinned）
     pub fn import_item(
         &self,

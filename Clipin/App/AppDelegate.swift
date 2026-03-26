@@ -531,6 +531,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         settings.refreshLaunchAtLoginStatus()
+        window.level = .floating
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
