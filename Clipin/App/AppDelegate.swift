@@ -270,7 +270,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self, self.hideGeneration == expectedGeneration else { return }
                 panel.orderOut(nil)
                 panel.alphaValue = 1
-                self.previousApp?.activate()
+                // settings 窗口可见时不还原焦点，避免把 settings 推到其他 app 后面
+                if self.settingsWindow?.isVisible != true {
+                    self.previousApp?.activate()
+                }
             }
         })
     }
