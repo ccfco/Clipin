@@ -37,18 +37,25 @@ enum PasteService {
         }
     }
 
-    /// 以纯文本写回剪贴板（去除富文本格式，图片/文件转为路径文本）
-    static func writeAsPlainText(_ item: ClipItem) {
+    /// 以纯文本写回剪贴板（去除富文本格式，图片/文件转为路径文本），成功返回 true
+    @discardableResult
+    static func writeAsPlainText(_ item: ClipItem) -> Bool {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
 
         switch item.clipType {
         case .text, .url:
             pasteboard.setString(item.content, forType: .string)
+            return true
         case .image:
-            pasteboard.setString(item.imagePath ?? "image", forType: .string)
+            guard let path = item.imagePath else { return false }
+            pasteboard.setString(path, forType: .string)
+            return true
         case .file:
-            pasteboard.setString(item.content, forType: .string)
+            let text = FileClipboardContent.paths(from: item.content).joined(separator: "\n")
+            guard !text.isEmpty else { return false }
+            pasteboard.setString(text, forType: .string)
+            return true
         }
     }
 

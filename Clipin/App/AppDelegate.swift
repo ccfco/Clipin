@@ -582,8 +582,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func performPastePlain(_ item: ClipItem) {
         monitor?.pause()
-        PasteService.writeAsPlainText(item)
-        guard NSPasteboard.general.string(forType: .string) != nil else {
+        guard PasteService.writeAsPlainText(item) else {
             monitor?.resume()
             return
         }
@@ -623,8 +622,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             if pinned {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                    guard let self, let panel = self.panel else { return }
+                    guard let self else { return }
                     self.suppressResignKey = false
+                    guard let panel = self.panel else { return }
                     panel.makeKeyAndOrderFront(nil)
                     self.viewModel?.targetAppName = self.resolveTargetApp()?.localizedName
                     NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
