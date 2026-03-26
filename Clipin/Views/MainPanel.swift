@@ -197,7 +197,7 @@ struct MainPanel: View {
             if viewModel.selectedListItem != nil {
                 Button { viewModel.pasteSelected() } label: {
                     keyBadge(
-                        label: viewModel.targetAppName.map { LocalizedStringKey("Paste to \($0)") } ?? "Paste",
+                        label: viewModel.targetAppName.map { String(format: NSLocalizedString("Paste to %@", comment: ""), $0) } ?? NSLocalizedString("Paste", comment: ""),
                         key: "↵",
                         primary: true
                     )
@@ -266,9 +266,9 @@ struct MainPanel: View {
         )
     }
 
-    private func keyBadge(label: LocalizedStringKey, key: String, primary: Bool = false) -> some View {
+    private func keyBadge(label: String, key: String, primary: Bool = false) -> some View {
         HStack(spacing: 5) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(primary ? Color.white : Color.secondary)
             Text(key)
