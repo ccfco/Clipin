@@ -22,14 +22,18 @@ struct SettingsView: View {
                 retentionSection
                 transferSection
                 autoBackupSection
-
-                if let notice {
-                    noticeView(notice)
-                }
             }
             .padding(20)
         }
         .frame(width: 560, height: 680)
+        // notice 固定在底部，不随内容滚动，确保始终可见
+        .overlay(alignment: .bottom) {
+            if let notice {
+                noticeView(notice)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 14)
+            }
+        }
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             settings.refreshLaunchAtLoginStatus()
@@ -420,7 +424,7 @@ struct SettingsView: View {
         dismissTask?.cancel()
         guard !isError else { return }
         dismissTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: .seconds(6))
             guard !Task.isCancelled else { return }
             notice = nil
         }
