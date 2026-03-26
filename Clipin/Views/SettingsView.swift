@@ -12,6 +12,9 @@ struct SettingsView: View {
 
     @State private var notice: SettingsNotice?
     @State private var dismissTask: Task<Void, Never>?
+    // "Last backup X ago" 每分钟刷新用的参考时间
+    @State private var now: Date = .now
+    @State private var tickTimer: Timer?
 
     var body: some View {
         ScrollView {
@@ -26,20 +29,30 @@ struct SettingsView: View {
             .padding(20)
         }
         .frame(width: 560, height: 680)
-        // notice 固定在底部，不随内容滚动，确保始终可见
-        .overlay(alignment: .bottom) {
+        // notice 作为 safeAreaInset 顶出内容区，不会遮挡任何可点击元素
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             if let notice {
                 noticeView(notice)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 14)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .windowBackgroundColor))
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             settings.refreshLaunchAtLoginStatus()
+            // 每分钟更新 now，驱动 "Last backup X ago" 的相对时间刷新
+            tickTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+                Task { @MainActor in now = .now }
+            }
         }
         .onDisappear {
             dismissTask?.cancel()
+            dismissTask = nil
+            notice = nil          // 防止 error notice 跨窗口生命周期残留
+            tickTimer?.invalidate()
+            tickTimer = nil
         }
     }
 
@@ -348,7 +361,8 @@ struct SettingsView: View {
                                 .foregroundStyle(.red)
                         } else if let date = autoBackup.lastBackupAt {
                             Circle().fill(Color.green).frame(width: 6, height: 6)
-                            Text("Last backup: \(date.formatted(.relative(presentation: .named)))")
+                            // now 每分钟更新，驱动相对时间字符串重新计算
+                            Text("Last backup: \(relativeString(from: date, to: now))")
                                 .font(.system(size: 11))
                                 .foregroundStyle(.secondary)
                         } else {
@@ -395,6 +409,12 @@ struct SettingsView: View {
         } catch {
             showNotice("Cannot create iCloud Drive folder: \(error.localizedDescription)", isError: true)
         }
+    }
+
+    private func relativeString(from date: Date, to now: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f.localizedString(for: date, relativeTo: now)
     }
 
     private func abbreviatedPath(_ path: String) -> String {

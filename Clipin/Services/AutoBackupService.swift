@@ -56,16 +56,20 @@ final class AutoBackupService: ObservableObject {
 
         switch settings.autoBackupInterval {
         case .onChange:
+            // 启用/配置后立即备份一次，用户能立刻在文件夹里看到结果
+            performBackup(folderURL: folderURL)
+            // 用 Swift Concurrency 而非 GCD queue，与项目其他异步模式保持一致
             changeObserver = NotificationCenter.default.addObserver(
                 forName: .clipHistoryDidChange,
                 object: nil,
-                queue: .main
+                queue: nil
             ) { [weak self] _ in
-                self?.scheduleDebounced(folderURL: folderURL)
+                Task { @MainActor [weak self] in self?.scheduleDebounced(folderURL: folderURL) }
             }
 
         case .daily, .weekly, .monthly:
-            guard let checkInterval = settings.autoBackupInterval.checkInterval else { return }
+            // checkInterval 对 .onChange 以外的 case 保证非 nil
+            let checkInterval = settings.autoBackupInterval.checkInterval!
 
             // App 启动时立即检查是否逾期，避免等完整间隔才触发第一次
             if isBackupOverdue() {
