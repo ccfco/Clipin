@@ -34,6 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickOutsideMonitor: Any?
     private var keyMonitor: Any?
     private var appSwitchObserver: Any?
+    private var suppressResignKey = false
     private var hideGeneration: Int = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -276,10 +277,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// Stay 模式下面板失去 key window 时，短暂延迟后自动夺回焦点。
     /// 延迟是为了让用户的鼠标点击先完成（目标输入框获得焦点、frontmostApplication 更新）。
     private func handlePanelResignKey() {
-        guard viewModel?.isPanelPinned == true, let panel else { return }
+        guard !suppressResignKey,
+              viewModel?.isPanelPinned == true,
+              settingsWindow?.isVisible != true,
+              permissionWindow?.isVisible != true,
+              let panel else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self,
+                  !self.suppressResignKey,
                   self.viewModel?.isPanelPinned == true,
+                  self.settingsWindow?.isVisible != true,
+                  self.permissionWindow?.isVisible != true,
                   panel.isVisible else { return }
             panel.makeKeyAndOrderFront(nil)
             NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
@@ -569,13 +577,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func performPastePlain(_ item: ClipItem) {
         monitor?.pause()
         PasteService.writeAsPlainText(item)
+        guard NSPasteboard.general.string(forType: .string) != nil else {
+            monitor?.resume()
+            return
+        }
         executePasteFlow()
     }
 
-    /// 粘贴投递采用 `CGEvent.postToPid` 进程级精准投递，无论面板是否 Key Window 都能正确送达。
-    /// Pinned 模式下通过 `resolveTargetApp()` 实时查询前台应用，支持用户切换目标后粘贴。
-    /// Pinned 模式下实时查询当前前台应用作为粘贴目标（LSUIElement app 不会成为 frontmostApplication）；
-    /// 非 Pinned 模式使用 showPanel 时快照的 previousApp（面板关闭后需要回到原应用）。
+    /// Pinned 模式下实时查询 frontmostApplication 作为粘贴目标（LSUIElement app 不会成为 frontmostApplication）；
+    /// 非 Pinned 模式使用 showPanel 时快照的 previousApp。
     private func resolveTargetApp() -> NSRunningApplication? {
         let pinned = viewModel?.isPanelPinned ?? false
         if pinned {
@@ -591,6 +601,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let pinned = viewModel?.isPanelPinned ?? false
         let targetApp = resolveTargetApp()
 
+        // 粘贴流程中抑制 resignKey 自动夺回，避免和下面的手动夺回竞争
+        if pinned { suppressResignKey = true }
+
         if !pinned {
             hidePanel()
         }
@@ -599,15 +612,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         targetApp?.activate()
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            // 精准打击：只把 Cmd+V 发给目标进程，彻底杜绝发给 Clipin 自己的可能！
             PasteService.simulatePaste(to: targetApp?.processIdentifier)
             self?.monitor?.resume()
 
             if pinned {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
                     guard let self, let panel = self.panel else { return }
+                    self.suppressResignKey = false
                     panel.makeKeyAndOrderFront(nil)
-                    // 更新底栏目标应用名（下次粘贴的目标可能已变）
                     self.viewModel?.targetAppName = self.resolveTargetApp()?.localizedName
                     NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
                 }
