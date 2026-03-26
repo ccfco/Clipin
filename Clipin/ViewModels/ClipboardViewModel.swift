@@ -401,7 +401,8 @@ final class ClipboardViewModel: ObservableObject {
             .map(String.init)
 
         filteredPaletteActions = paletteActions.filter { action in
-            let haystack = ([action.title, action.badge] + action.keywords)
+            let localizedTitle = NSLocalizedString(action.title, comment: "")
+            let haystack = ([action.title, localizedTitle, action.badge] + action.keywords)
                 .joined(separator: " ")
                 .localizedLowercase
             return terms.allSatisfy(haystack.contains)

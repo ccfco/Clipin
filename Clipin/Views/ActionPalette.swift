@@ -237,8 +237,8 @@ struct ActionPalette: View {
                 .foregroundStyle(.secondary)
 
             Text(query.isEmpty
-                 ? "Keep typing to narrow down available actions, or press Escape to close."
-                 : "No matches yet. Press Escape to clear the filter, then Escape again to close.")
+                 ? LocalizedStringKey("Keep typing to narrow down available actions, or press Escape to close.")
+                 : LocalizedStringKey("No matches yet. Press Escape to clear the filter, then Escape again to close."))
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)

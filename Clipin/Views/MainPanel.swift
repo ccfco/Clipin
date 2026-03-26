@@ -395,7 +395,7 @@ private struct ItemListView: View {
             .onHover { hovered in hoveredID = hovered ? item.id : nil }
             .contextMenu {
                 Button("Paste") { onActivate(item) }
-                Button(item.isPinned ? LocalizedStringKey("Unpin") : "Pin") { onPin(item) }
+                Button(item.isPinned ? LocalizedStringKey("Unpin") : LocalizedStringKey("Pin")) { onPin(item) }
                 Divider()
                 Button("Delete", role: .destructive) { onDelete(item) }
             }
@@ -407,13 +407,13 @@ private struct ItemListView: View {
                 .font(.system(size: 24))
                 .foregroundStyle(.tertiary)
 
-            Text(hasActiveFilter ? LocalizedStringKey("No results") : "No history yet")
+            Text(hasActiveFilter ? LocalizedStringKey("No results") : LocalizedStringKey("No history yet"))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
 
             Text(hasActiveFilter
                  ? LocalizedStringKey("Try a different search term, or press Command-K for actions.")
-                 : "Copy something and it will appear here. Command-K still opens actions.")
+                 : LocalizedStringKey("Copy something and it will appear here. Command-K still opens actions."))
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -421,7 +421,7 @@ private struct ItemListView: View {
 
             HStack(spacing: 6) {
                 badgeCapsule("⌘K")
-                Text(hasActiveFilter ? LocalizedStringKey("Actions") : "Actions & Settings")
+                Text(hasActiveFilter ? LocalizedStringKey("Actions") : LocalizedStringKey("Actions & Settings"))
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
             }
