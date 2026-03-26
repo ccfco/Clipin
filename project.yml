@@ -43,8 +43,8 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: Clipin/BridgingHeader.h
         HEADER_SEARCH_PATHS:
           - $(SRCROOT)/Clipin/Generated
-        MARKETING_VERSION: "0.1.2"
-        CURRENT_PROJECT_VERSION: 3
+        MARKETING_VERSION: "0.1.3"
+        CURRENT_PROJECT_VERSION: 4
         GENERATE_INFOPLIST_FILE: false
         LD_RUNPATH_SEARCH_PATHS:
           - $(inherited)
