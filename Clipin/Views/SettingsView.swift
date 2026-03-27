@@ -26,6 +26,30 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     }
 }
 
+@MainActor
+final class SettingsNavigationModel: ObservableObject {
+    @Published private(set) var selectedTab: SettingsTab
+
+    init(selectedTab: SettingsTab = .general) {
+        self.selectedTab = selectedTab
+    }
+
+    func select(_ tab: SettingsTab) {
+        selectedTab = tab
+    }
+
+    func navigate(delta: Int) {
+        let tabs = SettingsTab.allCases
+        guard let currentIndex = tabs.firstIndex(of: selectedTab) else {
+            selectedTab = tabs.first ?? .general
+            return
+        }
+
+        let nextIndex = max(0, min(tabs.count - 1, currentIndex + delta))
+        selectedTab = tabs[nextIndex]
+    }
+}
+
 // MARK: - SettingsView
 
 private struct SettingsNotice {
@@ -36,10 +60,10 @@ private struct SettingsNotice {
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var autoBackup: AutoBackupService
+    @ObservedObject var navigation: SettingsNavigationModel
     let core: ClipinCore
 
     @Environment(\.colorScheme) private var colorScheme
-    @State private var selectedTab: SettingsTab? = .general
     @State private var notice: SettingsNotice?
     @State private var dismissTask: Task<Void, Never>?
     @State private var now: Date = .now
@@ -60,7 +84,7 @@ struct SettingsView: View {
             HStack(spacing: 14) {
                 sidebar
                 contentArea
-                    .animation(ClipinMotion.panel, value: selectedTab)
+                    .animation(ClipinMotion.panel, value: navigation.selectedTab)
             }
             .padding(14)
         }
@@ -109,11 +133,11 @@ struct SettingsView: View {
     }
 
     private func settingsSidebarRow(_ tab: SettingsTab) -> some View {
-        let isSelected = selectedTab == tab
+        let isSelected = navigation.selectedTab == tab
         let isHovered = hoveredTab == tab
 
         return Button {
-            selectedTab = tab
+            navigation.select(tab)
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: tab.icon)
@@ -151,7 +175,7 @@ struct SettingsView: View {
     // MARK: - Content Area
 
     private var contentArea: some View {
-        let tab = selectedTab ?? .general
+        let tab = navigation.selectedTab
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(tab.title)
@@ -166,6 +190,7 @@ struct SettingsView: View {
                 case .autoBackup: autoBackupContent
                 }
             }
+            .id(tab)
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }

@@ -75,8 +75,7 @@ struct MainPanel: View {
                             }
                         }
                     ),
-                    query: viewModel.actionQuery,
-                    actions: viewModel.filteredPaletteActions,
+                    actions: viewModel.paletteActions,
                     selectedIndex: $viewModel.selectedActionIndex,
                     onSelect: { index in
                         viewModel.executePaletteAction(at: index)
@@ -375,9 +374,11 @@ private struct ItemListView: View {
                     }
                 }
                 .padding(.vertical, 6)
+                .padding(.leading, ClipinChrome.listContentInset)
+                .padding(.trailing, ClipinChrome.listContentInset + ClipinChrome.listScrollbarInset)
             }
-                .onChange(of: selection.wrappedValue) { _, newID in
-                    guard let newID else { return }
+            .onChange(of: selection.wrappedValue) { _, newID in
+                guard let newID else { return }
                 withAnimation(ClipinMotion.selection) {
                     proxy.scrollTo(newID, anchor: .center)
                 }
@@ -390,7 +391,7 @@ private struct ItemListView: View {
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.tertiary)
             .tracking(0.35)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 6)
             .padding(.top, 14)
             .padding(.bottom, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -409,7 +410,6 @@ private struct ItemListView: View {
             isHovered: isHovered,
             hierarchy: hierarchy
         )
-        .padding(.horizontal, ClipinChrome.listRowInset)
         .padding(.vertical, 2)
         .id(item.id)
         .background(

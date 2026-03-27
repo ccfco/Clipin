@@ -30,6 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private let appState = AppState.shared
     private let settings = SettingsStore.shared
+    private let settingsNavigation = SettingsNavigationModel()
     private var monitor: ClipboardMonitor?
     private var viewModel: ClipboardViewModel?
     private let hotKey = HotKeyService()
@@ -52,6 +53,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         static let originY = "panel.savedOriginY"
     }
 
+    private enum KeyboardContext {
+        case mainPanel(ClipboardViewModel)
+        case actionsPalette(ClipboardViewModel)
+        case settings(SettingsNavigationModel)
+        case none
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupPanel()
@@ -59,6 +67,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startMonitoring()
         setupHotKey()
         setupSettingsObservers()
+        startKeyMonitor()
         runCleanupAndReload()
         checkPermissionOnLaunch()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
@@ -276,7 +285,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         startClickOutsideMonitor()
-        startKeyMonitor()
         startAppSwitchObserver()
     }
 
@@ -286,7 +294,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.hideActionsPalette()
         suppressResignKey = false
         stopClickOutsideMonitor()
-        stopKeyMonitor()
         stopAppSwitchObserver()
 
         hideGeneration += 1
@@ -417,138 +424,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, let vm = self.viewModel else { return event }
+            guard let self else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
-            // Palette 模式：优先拦截导航键，不让其到达搜索框
-            if vm.isShowingActions {
-                switch event.keyCode {
-                case 0x7E:  // ↑
-                    vm.navigatePalette(delta: -1); return nil
-                case 0x7D:  // ↓
-                    vm.navigatePalette(delta: 1); return nil
-                case 0x24 where flags.isEmpty:  // Return（无修饰键）
-                    vm.executeSelectedPaletteAction(); return nil
-                case 0x33 where flags.isEmpty:  // Delete / Backspace
-                    vm.removeLastActionQueryCharacter()
-                    return nil
-                case 0x30:  // Tab / Shift-Tab 在动作面板内不应泄漏到类型筛选
-                    return nil
-                case 0x35:  // Escape
-                    if !vm.clearActionQuery() {
-                        vm.hideActionsPalette(restoreFocus: true)
-                    }
-                    return nil
-                default:
-                    if shouldRouteEventToPalette(event, flags: flags),
-                       let text = event.characters {
-                        vm.appendActionQuery(text)
-                        return nil
-                    }
-                    break
-                }
-            }
-
-            switch event.keyCode {
-                    // Tab / Shift-Tab — 全局循环筛选（不依赖搜索框焦点）
-            case 0x30 where flags.isEmpty:
-                vm.cycleTypeFilter()
-                return nil
-            case 0x30 where flags == .shift:
-                vm.cycleTypeFilter(reverse: true)
-                return nil
-
-            // ↑↓ — 项目导航（全局生效，不受焦点影响）
-            // 注意：不要使用 flags.isEmpty，箭头键自带 .numericPad 等隐藏修饰符
-            case 0x7E:
-                vm.selectPrev()
-                return nil
-            case 0x7D:
-                vm.selectNext()
-                return nil
-
-            // Return — 粘贴选中项（全局生效）
-            case 0x24 where flags.isEmpty:
-                vm.pasteSelected()
-                return nil
-
-            // ⇧Return — paste as plain text
-            case 0x24 where flags == .shift:
-                vm.pastePlainSelected()
-                return nil
-
-            // Escape — 先退出瞬态状态，再关闭面板；不依赖当前焦点位置
-            case 0x35:
-                handleEscape(for: vm)
-                return nil
-
-            // ⌘⇧P — toggle pin
-            case 0x23 where flags == [.command, .shift]:
-                vm.togglePinSelected()
-                return nil
-
-            // ⌘⌫ — delete
-            case 0x33 where flags == .command:
-                vm.deleteSelected()
-                return nil
-
-            // ⌘O — open URL / reveal copied files in Finder
-            case 0x1F where flags == .command:
-                vm.openSelected()
-                return nil
-
-            // ⌘C — copy to clipboard (without pasting)
-            // 如果焦点在文本控件且有选区，放行给系统处理
-            case 0x08 where flags == .command:
-                if let responder = self.panel?.firstResponder as? NSTextView,
-                   responder.selectedRange().length > 0 {
-                    return event
-                }
-                vm.copySelected()
-                return nil
-
-            // ⌘K — toggle actions palette
-            case 0x28 where flags == .command:
-                vm.toggleActionsPalette()
-                return nil
-
-            // ⌘, — open settings
-            case 0x2B where flags == .command:
-                if !vm.isPanelPinned { self.hidePanel() }
-                self.openSettingsWindow()
-                return nil
-
-            // ⌘⇧L — toggle stay (keep open) mode
-            case 0x25 where flags == [.command, .shift]:
-                vm.togglePanelPin()
-                return nil
-
-            default:
-                // ⌘1-9 — quick paste by index
-                if flags == .command,
-                   let char = event.charactersIgnoringModifiers,
-                   let digit = char.first?.wholeNumberValue,
-                   (1...9).contains(digit) {
-                    vm.pasteItemAt(index: digit - 1)
-                    return nil
-                }
-                // ⌥1-5 — type filter (All/Text/Images/Files/URLs)
-                if flags == .option {
-                    let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4]
-                    if let index = optMapping[event.keyCode] {
-                        vm.setTypeFilterByIndex(index)
-                        return nil
-                    }
-                }
+            switch self.keyboardContext {
+            case .actionsPalette(let vm):
+                return self.handlePaletteKeyEvent(event, flags: flags, viewModel: vm)
+            case .mainPanel(let vm):
+                return self.handlePanelKeyEvent(event, flags: flags, viewModel: vm)
+            case .settings(let navigation):
+                return self.handleSettingsKeyEvent(event, flags: flags, navigation: navigation)
+            case .none:
                 return event
             }
-        }
-    }
-
-    private func stopKeyMonitor() {
-        if let monitor = keyMonitor {
-            NSEvent.removeMonitor(monitor)
-            keyMonitor = nil
         }
     }
 
@@ -567,18 +455,137 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hidePanel()
     }
 
-    private func shouldRouteEventToPalette(_ event: NSEvent, flags: NSEvent.ModifierFlags) -> Bool {
-        guard !flags.contains(.command),
-              !flags.contains(.control),
-              !flags.contains(.option),
-              !flags.contains(.function) else {
-            return false
+    private var keyboardContext: KeyboardContext {
+        if let settingsWindow, settingsWindow.isVisible, settingsWindow.isKeyWindow {
+            return .settings(settingsNavigation)
         }
 
-        guard let text = event.characters, !text.isEmpty else { return false }
-        return text.unicodeScalars.allSatisfy { scalar in
-            !CharacterSet.controlCharacters.contains(scalar)
+        if let panel, panel.isVisible, panel.isKeyWindow, let viewModel {
+            return viewModel.isShowingActions ? .actionsPalette(viewModel) : .mainPanel(viewModel)
         }
+
+        return .none
+    }
+
+    private func handlePaletteKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {
+        switch event.keyCode {
+        case 0x7E:
+            vm.navigatePalette(delta: -1)
+            return nil
+        case 0x7D:
+            vm.navigatePalette(delta: 1)
+            return nil
+        case 0x24 where flags.isEmpty:
+            vm.executeSelectedPaletteAction()
+            return nil
+        case 0x28 where flags == .command:
+            vm.hideActionsPalette(restoreFocus: true)
+            return nil
+        case 0x35:
+            vm.hideActionsPalette(restoreFocus: true)
+            return nil
+        case 0x30, 0x33:
+            return nil
+        default:
+            return nil
+        }
+    }
+
+    private func handlePanelKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {
+        switch event.keyCode {
+        case 0x30 where flags.isEmpty:
+            vm.cycleTypeFilter()
+            return nil
+        case 0x30 where flags == .shift:
+            vm.cycleTypeFilter(reverse: true)
+            return nil
+        case 0x7E:
+            vm.selectPrev()
+            return nil
+        case 0x7D:
+            vm.selectNext()
+            return nil
+        case 0x24 where flags.isEmpty:
+            vm.pasteSelected()
+            return nil
+        case 0x24 where flags == .shift:
+            vm.pastePlainSelected()
+            return nil
+        case 0x35:
+            handleEscape(for: vm)
+            return nil
+        case 0x23 where flags == [.command, .shift]:
+            vm.togglePinSelected()
+            return nil
+        case 0x33 where flags == .command:
+            vm.deleteSelected()
+            return nil
+        case 0x1F where flags == .command:
+            vm.openSelected()
+            return nil
+        case 0x08 where flags == .command:
+            if let responder = self.panel?.firstResponder as? NSTextView,
+               responder.selectedRange().length > 0 {
+                return event
+            }
+            vm.copySelected()
+            return nil
+        case 0x28 where flags == .command:
+            vm.toggleActionsPalette()
+            return nil
+        case 0x2B where flags == .command:
+            if !vm.isPanelPinned { self.hidePanel() }
+            self.openSettingsWindow()
+            return nil
+        case 0x25 where flags == [.command, .shift]:
+            vm.togglePanelPin()
+            return nil
+        default:
+            if flags == .command,
+               let char = event.charactersIgnoringModifiers,
+               let digit = char.first?.wholeNumberValue,
+               (1...9).contains(digit) {
+                vm.pasteItemAt(index: digit - 1)
+                return nil
+            }
+            if flags == .option {
+                let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4]
+                if let index = optMapping[event.keyCode] {
+                    vm.setTypeFilterByIndex(index)
+                    return nil
+                }
+            }
+            return event
+        }
+    }
+
+    private func handleSettingsKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, navigation: SettingsNavigationModel) -> NSEvent? {
+        guard shouldHandleSettingsNavigation() else { return event }
+        if flags.contains(.command) || flags.contains(.control) || flags.contains(.option) || flags.contains(.function) {
+            return event
+        }
+
+        switch event.keyCode {
+        case 0x7E:
+            navigation.navigate(delta: -1)
+            return nil
+        case 0x7D:
+            navigation.navigate(delta: 1)
+            return nil
+        default:
+            return event
+        }
+    }
+
+    private func shouldHandleSettingsNavigation() -> Bool {
+        guard let settingsWindow else { return false }
+        if settingsWindow.firstResponder is ShortcutRecorderField {
+            return false
+        }
+        if let textView = settingsWindow.firstResponder as? NSTextView, textView.isFieldEditor {
+            return false
+        }
+        return true
     }
 
     private func openSettingsWindow() {
@@ -604,7 +611,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.hasShadow = true
             newWindow.isReleasedWhenClosed = false
             newWindow.contentView = ClipinHostingView(
-                rootView: SettingsView(settings: settings, autoBackup: autoBackupService, core: appState.core)
+                rootView: SettingsView(
+                    settings: settings,
+                    autoBackup: autoBackupService,
+                    navigation: settingsNavigation,
+                    core: appState.core
+                )
             )
             settingsWindow = newWindow
             window = newWindow
@@ -740,7 +752,7 @@ extension AppDelegate: NSWindowDelegate {
         guard settings.rememberPanelPosition else { return }
         savePositionTask?.cancel()
         let origin = panel.frame.origin
-        savePositionTask = Task { @MainActor [weak self] in
+        savePositionTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(0.3))
             guard !Task.isCancelled else { return }
             UserDefaults.standard.set(origin.x, forKey: PanelPositionKeys.originX)

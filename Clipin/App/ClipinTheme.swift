@@ -30,7 +30,11 @@ enum ClipinChrome {
     static let paletteCornerRadius: CGFloat = 26
     static let primaryBadgeCornerRadius: CGFloat = 14
     static let badgeCornerRadius: CGFloat = 10
-    static let listRowInset: CGFloat = 12
+    static let listContentInset: CGFloat = 12
+    static let listScrollbarInset: CGFloat = 8
+    static let detailContentInset: CGFloat = 18
+    static let detailGroupInset: CGFloat = 18
+    static let detailGroupSpacing: CGFloat = 16
 }
 
 enum ClipinMotion {
@@ -368,10 +372,10 @@ extension ClipinGlassPalette {
                 previewCanvasTint: Color.primary.opacity(0.02),
                 keycapTint: Color.primary.opacity(0.04),
                 emphasisInk: Color.primary,
-                emphasisFill: Color.primary.opacity(0.11),
+                emphasisFill: Color.primary.opacity(0.13),
                 emphasisStrongFill: accent.opacity(0.68),
                 emphasisOnStrongFill: .white,
-                emphasisStroke: Color.primary.opacity(0.15),
+                emphasisStroke: Color.primary.opacity(0.18),
                 hoverFill: Color.primary.opacity(0.03),
                 hoverStroke: Color.primary.opacity(0.05),
                 controlFill: Color.primary.opacity(0.03),
@@ -389,10 +393,10 @@ extension ClipinGlassPalette {
                 previewCanvasTint: Color.white.opacity(0.03),
                 keycapTint: Color.white.opacity(0.05),
                 emphasisInk: Color.primary,
-                emphasisFill: Color.white.opacity(0.13),
+                emphasisFill: Color.white.opacity(0.15),
                 emphasisStrongFill: accent.opacity(0.70),
                 emphasisOnStrongFill: .white,
-                emphasisStroke: Color.white.opacity(0.14),
+                emphasisStroke: Color.white.opacity(0.18),
                 hoverFill: Color.white.opacity(0.03),
                 hoverStroke: Color.white.opacity(0.05),
                 controlFill: Color.white.opacity(0.03),

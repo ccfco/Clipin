@@ -73,12 +73,9 @@
 "Actions & Settings" = "Actions & Settings";
 
 /* ActionPalette */
-"Search actions" = "Search actions";
 "Esc" = "Esc";
-"No actions found" = "No actions found";
-"Keep typing to narrow down available actions, or press Escape to close." = "Keep typing to narrow down available actions, or press Escape to close.";
-"No matches yet. Press Escape to clear the filter, then Escape again to close." = "No matches yet. Press Escape to clear the filter, then Escape again to close.";
-"Esc clears query, Esc again closes" = "Esc clears query, Esc again closes";
+"No actions available" = "No actions available";
+"Press Escape to close." = "Press Escape to close.";
 "1 action" = "1 action";
 "%d actions" = "%d actions";
 

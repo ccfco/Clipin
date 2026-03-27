@@ -10,6 +10,7 @@ struct ClipinApp: App {
             SettingsView(
                 settings: SettingsStore.shared,
                 autoBackup: AutoBackupService.shared,
+                navigation: SettingsNavigationModel(),
                 core: AppState.shared.core
             )
         }

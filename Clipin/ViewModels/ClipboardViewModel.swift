@@ -18,14 +18,12 @@ final class ClipboardViewModel: ObservableObject {
     @Published private(set) var sections: [ClipSection] = []
     @Published var targetAppName: String?
     @Published var isShowingActions = false
-    @Published var actionQuery = ""
     @Published var selectedActionIndex = 0
     @Published private(set) var paletteActions: [PaletteAction] = []
-    @Published private(set) var filteredPaletteActions: [PaletteAction] = []
     @Published var isPanelPinned: Bool = false
 
     func navigatePalette(delta: Int) {
-        let count = filteredPaletteActions.count
+        let count = paletteActions.count
         guard count > 0 else { return }
         selectedActionIndex = max(0, min(count - 1, selectedActionIndex + delta))
     }
@@ -35,9 +33,9 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func executePaletteAction(at index: Int) {
-        guard index >= 0, index < filteredPaletteActions.count else { return }
+        guard index >= 0, index < paletteActions.count else { return }
         let shouldRestoreSearchFocus = isShowingActions
-        let action = filteredPaletteActions[index]
+        let action = paletteActions[index]
         action.handler()
 
         if isShowingActions {
@@ -55,16 +53,13 @@ final class ClipboardViewModel: ObservableObject {
         let actions = ActionPaletteBuilder.actions(for: self)
         guard !actions.isEmpty else { return }
         paletteActions = actions
-        actionQuery = ""
-        applyActionFilter()
+        selectedActionIndex = min(selectedActionIndex, max(actions.count - 1, 0))
         isShowingActions = true
     }
 
     func hideActionsPalette(restoreFocus: Bool = false) {
         isShowingActions = false
         paletteActions = []
-        filteredPaletteActions = []
-        actionQuery = ""
         selectedActionIndex = 0
 
         if restoreFocus {
@@ -221,26 +216,6 @@ final class ClipboardViewModel: ObservableObject {
 
     func togglePanelPin() { isPanelPinned.toggle() }
 
-    func appendActionQuery(_ fragment: String) {
-        guard isShowingActions, !fragment.isEmpty else { return }
-        actionQuery.append(fragment)
-        applyActionFilter()
-    }
-
-    func removeLastActionQueryCharacter() {
-        guard isShowingActions, !actionQuery.isEmpty else { return }
-        actionQuery.removeLast()
-        applyActionFilter()
-    }
-
-    @discardableResult
-    func clearActionQuery() -> Bool {
-        guard isShowingActions, !actionQuery.isEmpty else { return false }
-        actionQuery = ""
-        applyActionFilter()
-        return true
-    }
-
     func setTypeFilterByIndex(_ index: Int) {
         switch index {
         case 0: typeFilter = nil
@@ -385,29 +360,6 @@ final class ClipboardViewModel: ObservableObject {
             return selectedItem
         }
         return try? core.getItem(id: selectedItemID)
-    }
-
-    private func applyActionFilter() {
-        let trimmedQuery = actionQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuery.isEmpty else {
-            filteredPaletteActions = paletteActions
-            selectedActionIndex = filteredPaletteActions.isEmpty ? 0 : min(selectedActionIndex, filteredPaletteActions.count - 1)
-            return
-        }
-
-        let terms = trimmedQuery
-            .localizedLowercase
-            .split(whereSeparator: \.isWhitespace)
-            .map(String.init)
-
-        filteredPaletteActions = paletteActions.filter { action in
-            let localizedTitle = NSLocalizedString(action.title, comment: "")
-            let haystack = ([action.title, localizedTitle, action.badge] + action.keywords)
-                .joined(separator: " ")
-                .localizedLowercase
-            return terms.allSatisfy(haystack.contains)
-        }
-        selectedActionIndex = 0
     }
 
     private static let dateFormatter: DateFormatter = {

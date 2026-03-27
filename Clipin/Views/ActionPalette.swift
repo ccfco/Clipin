@@ -15,7 +15,6 @@ struct PaletteAction: Identifiable {
     var localizedTitle: LocalizedStringKey { .init(title) }
     let systemImage: String
     let badge: String
-    let keywords: [String]
     let section: PaletteActionSection
     let isDestructive: Bool
     let handler: () -> Void
@@ -24,7 +23,6 @@ struct PaletteAction: Identifiable {
         _ title: String,
         systemImage: String,
         badge: String,
-        keywords: [String] = [],
         section: PaletteActionSection = .secondary,
         isDestructive: Bool = false,
         handler: @escaping () -> Void
@@ -32,7 +30,6 @@ struct PaletteAction: Identifiable {
         self.title = title
         self.systemImage = systemImage
         self.badge = badge
-        self.keywords = keywords
         self.section = section
         self.isDestructive = isDestructive
         self.handler = handler
@@ -48,7 +45,6 @@ struct ActionPalette: View {
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
     @Binding var isPresented: Bool
-    let query: String
     let actions: [PaletteAction]
     @Binding var selectedIndex: Int
     let onSelect: (Int) -> Void
@@ -97,16 +93,16 @@ struct ActionPalette: View {
         VStack(alignment: .leading, spacing: 10) {
             paletteHeader
 
-            ForEach(Array(groupedActionIndices.enumerated()), id: \.offset) { _, group in
-                VStack(spacing: 4) {
-                    ForEach(group, id: \.self) { index in
-                        actionRow(action: actions[index], index: index)
-                    }
-                }
-            }
-
             if actions.isEmpty {
                 emptyState
+            } else {
+                ForEach(Array(groupedActionIndices.enumerated()), id: \.offset) { _, group in
+                    VStack(spacing: 4) {
+                        ForEach(group, id: \.self) { index in
+                            actionRow(action: actions[index], index: index)
+                        }
+                    }
+                }
             }
         }
         .padding(12)
@@ -123,50 +119,22 @@ struct ActionPalette: View {
     }
 
     private var paletteHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            Text("Actions")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(.secondary)
 
-                Group {
-                    if query.isEmpty { Text("Search actions") } else { Text(verbatim: query) }
-                }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(query.isEmpty ? .tertiary : .primary)
-                .lineLimit(1)
+            Spacer()
 
-                Spacer()
-
-                ClipinKeycap(
-                    key: "Esc",
-                    foreground: Color(nsColor: .secondaryLabelColor),
-                    background: glass.keycapTint
-                )
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 11)
-            .background(
-                ClipinSurfaceBackground(
-                    role: .control,
-                    cornerRadius: ClipinChrome.searchCornerRadius,
-                    glass: glass
-                )
+            ClipinKeycap(
+                key: "Esc",
+                foreground: Color(nsColor: .secondaryLabelColor),
+                background: glass.keycapTint
             )
-
-            if !query.isEmpty {
-                Text(verbatim: {
-                    let hint = NSLocalizedString("Esc clears query, Esc again closes", comment: "")
-                    let count = actions.count == 1
-                        ? NSLocalizedString("1 action", comment: "")
-                        : String(format: NSLocalizedString("%d actions", comment: ""), actions.count)
-                    return "\(hint) · \(count)"
-                }())
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 6)
-            }
         }
+        .padding(.horizontal, 4)
+        .padding(.top, 2)
+        .padding(.bottom, 4)
     }
 
     private func actionRow(action: PaletteAction, index: Int) -> some View {
@@ -229,13 +197,11 @@ struct ActionPalette: View {
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(.tertiary)
 
-            Text("No actions found")
+            Text("No actions available")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
 
-            Text(query.isEmpty
-                 ? LocalizedStringKey("Keep typing to narrow down available actions, or press Escape to close.")
-                 : LocalizedStringKey("No matches yet. Press Escape to clear the filter, then Escape again to close."))
+            Text("Press Escape to close.")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -255,47 +221,47 @@ struct ActionPaletteBuilder {
         var list: [PaletteAction] = []
 
         if let selected = viewModel.selectedListItem {
-            list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", keywords: ["insert", "send"], section: .primary) {
+            list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", section: .primary) {
                 viewModel.pasteSelected()
             })
 
             if selected.clipType == .text || selected.clipType == .url {
-                list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", badge: "⇧↵", keywords: ["plain", "text only", "strip formatting"], section: .primary) {
+                list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", badge: "⇧↵", section: .primary) {
                     viewModel.pastePlainSelected()
                 })
             }
 
-            list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", keywords: ["copy", "clipboard", "yank"], section: .primary) {
+            list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", section: .primary) {
                 viewModel.copySelected()
             })
 
-            list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P", keywords: ["favorite", "keep", "stay"]) {
+            list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P") {
                 viewModel.togglePinSelected()
             })
 
             if viewModel.canOpenSelectedItem {
-                list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, badge: "⌘O", keywords: ["launch", "reveal", "finder", "visit", "browser", "show"]) {
+                list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, badge: "⌘O") {
                     viewModel.openSelected()
                 })
             }
         }
 
         if viewModel.hasActiveFilter {
-            list.append(PaletteAction("Clear Search & Filters", systemImage: "line.3.horizontal.decrease.circle", badge: "↵", keywords: ["reset", "clear", "search", "filter", "all"]) {
+            list.append(PaletteAction("Clear Search & Filters", systemImage: "line.3.horizontal.decrease.circle", badge: "↵") {
                 _ = viewModel.clearActiveQueryAndFilters()
             })
         }
 
-        list.append(PaletteAction(viewModel.isPanelPinned ? "Disable Stay Open" : "Enable Stay Open", systemImage: viewModel.isPanelPinned ? "pin.slash" : "pin", badge: "⌘⇧L", keywords: ["pin", "stay", "keep open", "panel"]) {
+        list.append(PaletteAction(viewModel.isPanelPinned ? "Disable Stay Open" : "Enable Stay Open", systemImage: viewModel.isPanelPinned ? "pin.slash" : "pin", badge: "⌘⇧L") {
             viewModel.togglePanelPin()
         })
 
-        list.append(PaletteAction("Open Settings", systemImage: "gearshape", badge: "⌘,", keywords: ["preferences", "settings", "config"]) {
+        list.append(PaletteAction("Open Settings", systemImage: "gearshape", badge: "⌘,") {
             viewModel.openSettings()
         })
 
         if viewModel.selectedListItem != nil {
-            list.append(PaletteAction("Delete", systemImage: "trash", badge: "⌘⌫", keywords: ["remove", "trash"], section: .destructive, isDestructive: true) {
+            list.append(PaletteAction("Delete", systemImage: "trash", badge: "⌘⌫", section: .destructive, isDestructive: true) {
                 viewModel.deleteSelected()
             })
         }

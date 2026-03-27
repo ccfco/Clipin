@@ -73,12 +73,9 @@
 "Actions & Settings" = "动作与设置";
 
 /* ActionPalette */
-"Search actions" = "搜索动作";
 "Esc" = "Esc";
-"No actions found" = "未找到动作";
-"Keep typing to narrow down available actions, or press Escape to close." = "继续输入以缩小范围，或按 Esc 关闭。";
-"No matches yet. Press Escape to clear the filter, then Escape again to close." = "暂无匹配。按 Esc 清空筛选，再按一次关闭。";
-"Esc clears query, Esc again closes" = "Esc 清空查询，再按关闭";
+"No actions available" = "当前无可用动作";
+"Press Escape to close." = "按 Esc 关闭。";
 "1 action" = "1 个动作";
 "%d actions" = "%d 个动作";
 

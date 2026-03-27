@@ -17,22 +17,44 @@ struct PreviewPane: View {
     var body: some View {
         Group {
             if let item {
-                VStack(alignment: .leading, spacing: 24) {
-                    content(for: item)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                VStack(alignment: .leading, spacing: ClipinChrome.detailGroupSpacing) {
+                    contentStage(for: item)
 
                     metadataSection(for: item)
                 }
-                .padding(28)
+                .padding(ClipinChrome.detailContentInset)
             } else {
-                placeholder(
-                    icon: "doc.text.magnifyingglass",
-                    title: "Select an item",
-                    subtitle: "Choose a clipboard item from the list to inspect it here."
-                )
+                contentStage {
+                    placeholder(
+                        icon: "doc.text.magnifyingglass",
+                        title: "Select an item",
+                        subtitle: "Choose a clipboard item from the list to inspect it here."
+                    )
+                }
+                .padding(ClipinChrome.detailContentInset)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func contentStage(for item: ClipItem) -> some View {
+        contentStage {
+            content(for: item)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private func contentStage<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(ClipinChrome.detailGroupInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(
+                ClipinSurfaceBackground(
+                    role: .grouped,
+                    cornerRadius: ClipinChrome.cardCornerRadius,
+                    glass: glass
+                )
+            )
     }
 
     @ViewBuilder
@@ -129,8 +151,15 @@ struct PreviewPane: View {
 
     private func metadataSection(for item: ClipItem) -> some View {
         infoGrid(for: item)
-            .padding(.top, 2)
+            .padding(ClipinChrome.detailGroupInset)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                ClipinSurfaceBackground(
+                    role: .grouped,
+                    cornerRadius: ClipinChrome.cardCornerRadius,
+                    glass: glass
+                )
+            )
     }
 
     private func infoGrid(for item: ClipItem) -> some View {
@@ -143,8 +172,8 @@ struct PreviewPane: View {
 
     private var infoGridColumns: [GridItem] {
         [
-            GridItem(.flexible(minimum: 220), spacing: 28, alignment: .leading),
-            GridItem(.flexible(minimum: 220), spacing: 28, alignment: .leading)
+            GridItem(.flexible(minimum: 220), spacing: 20, alignment: .leading),
+            GridItem(.flexible(minimum: 220), spacing: 20, alignment: .leading)
         ]
     }
 
@@ -228,7 +257,7 @@ struct PreviewPane: View {
             Text(item.label)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.tertiary)
-                .frame(minWidth: 46, idealWidth: 60, maxWidth: 74, alignment: .leading)
+                .frame(minWidth: 48, idealWidth: 60, maxWidth: 76, alignment: .leading)
                 .lineLimit(1)
 
             HStack(spacing: 6) {
@@ -241,7 +270,7 @@ struct PreviewPane: View {
 
                 Text(item.value)
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.primary.opacity(0.84))
+                    .foregroundStyle(Color.primary.opacity(0.88))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .textSelection(.enabled)

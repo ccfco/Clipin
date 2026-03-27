@@ -2,6 +2,14 @@
 
 ## 2026-03-27
 
+### Window-aware keyboard routing and structural UI cleanup
+
+- Moved keyboard navigation from a panel-first assumption to a window-aware router in `AppDelegate`, so `↑↓` now go to the active context instead of being silently stolen by the main panel. Settings uses a dedicated `SettingsNavigationModel`, which restores arrow-key sidebar switching without falling back to `List(selection:)`.
+- Removed action-palette query state and filtering from `ClipboardViewModel`, the palette header, and the keyboard monitor. `⌘K` is now a static command sheet with arrow navigation, Enter to run, and Esc to close, while plain typing/backspace/tab are swallowed so input never leaks back into the main search field.
+- Reworked the main list spacing skeleton instead of only retinting selection: the sidebar now has a section-level gutter and scrollbar reserve, so selected rows no longer read as flush to the container edges and the main list finally shares the same breathing room as the action palette.
+- Restored one quiet inner stage to the detail pane and brought metadata back as a grouped block rather than a flat inline grid. The right side now has a clear content stage plus a compact info group, which keeps the previous version's anchored finish without returning to stacked two-line fields or dividers.
+- Slightly strengthened the native theme selection fill/stroke so the default theme's selected row reads more decisively once the spacing skeleton is in place.
+
 ### Content-first attention hierarchy in the main panel
 
 - Stopped treating the issue as isolated tint tuning and introduced a shared `ClipinPanelHierarchy` semantic model for `scope`, `selection`, and `command`, so the panel's task hierarchy now lives in one place instead of leaking through ad-hoc color picks.
