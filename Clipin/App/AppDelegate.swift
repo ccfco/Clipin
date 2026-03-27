@@ -125,6 +125,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let checkUpdatesItem = NSMenuItem(title: NSLocalizedString("Check for Updates...", comment: ""), action: #selector(checkForUpdates), keyEquivalent: "")
             checkUpdatesItem.target = self
             menu.addItem(checkUpdatesItem)
+            let aboutItem = NSMenuItem(title: NSLocalizedString("About Clipin", comment: ""), action: #selector(openAbout), keyEquivalent: "")
+            aboutItem.target = self
+            menu.addItem(aboutItem)
             menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
             menu.addItem(NSMenuItem.separator())
             menu.addItem(NSMenuItem(title: "Quit Clipin", action: #selector(quitApp), keyEquivalent: "q"))
@@ -145,6 +148,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         openSettingsWindow()
     }
 
+    func openAboutFromCommand() {
+        openSettingsWindow(select: .about)
+    }
+
     func checkForUpdatesFromCommand() {
         checkForUpdates()
     }
@@ -153,13 +160,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.terminate(nil)
     }
 
+    @objc private func openAbout() {
+        openSettingsWindow(select: .about)
+    }
+
     @objc private func checkForUpdates() {
-        openSettingsWindow(select: .general)
+        openSettingsWindow(select: .about)
         updateReminder.checkNow()
     }
 
     @objc private func openUpdateDetails() {
-        openSettingsWindow(select: .general)
+        openSettingsWindow(select: .about)
     }
 
     @objc private func openReleasePage() {

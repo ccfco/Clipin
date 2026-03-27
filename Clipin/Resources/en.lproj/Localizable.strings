@@ -136,12 +136,15 @@
 "Retention" = "Retention";
 "Transfer" = "Transfer";
 "Auto Backup" = "Auto Backup";
+"About" = "About";
 
 /* SettingsView – General */
 "System Default" = "System Default";
 "Language" = "Language";
 "Restart Clipin to apply the language change." = "Restart Clipin to apply the language change.";
 "Press shortcut" = "Press shortcut";
+"App version, updates, project links, and release notes." = "App version, updates, project links, and release notes.";
+"A fast, keyboard-first clipboard companion for macOS." = "A fast, keyboard-first clipboard companion for macOS.";
 "Updates" = "Updates";
 "Current version" = "Current version";
 "Clipin checks GitHub Releases and lets you download the newest build manually." = "Clipin checks GitHub Releases and lets you download the newest build manually.";
@@ -159,8 +162,20 @@
 "No release notes provided." = "No release notes provided.";
 "Get the latest build" = "Get the latest build";
 "Open the GitHub release page, or jump straight to the latest installer asset." = "Open the GitHub release page, or jump straight to the latest installer asset.";
+"Project" = "Project";
+"Source code" = "Source code";
+"Browse the repository, implementation details, and development history on GitHub." = "Browse the repository, implementation details, and development history on GitHub.";
+"Open GitHub" = "Open GitHub";
+"Release history" = "Release history";
+"Open the latest release page to browse shipped builds and release notes." = "Open the latest release page to browse shipped builds and release notes.";
+"Open Releases" = "Open Releases";
+"Report an issue" = "Report an issue";
+"Open GitHub Issues to report bugs, request features, or continue a discussion." = "Open GitHub Issues to report bugs, request features, or continue a discussion.";
+"Open Issues" = "Open Issues";
 "View Release" = "View Release";
 "Download Latest" = "Download Latest";
+
+"About Clipin" = "About Clipin";
 
 /* App update */
 "Check for Updates..." = "Check for Updates...";

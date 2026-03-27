@@ -59,28 +59,32 @@
 - `Check for Updates...`
 - 如果发现新版本，则在顶部显示：
   - `New Version Available: v0.1.6`
-- 点击后打开一个更新详情面板，或者直接打开设置页里的 Updates 区块
+- 点击后直接打开设置页里的 `About`，让用户在同一处看到版本、更新说明和下载入口
 
 不建议直接用系统通知作为主提醒方式，因为 menu bar app 的更新提醒更适合留在应用自身语境里。
 
 ### 3. 设置页入口
 
-在 `Settings -> General` 下增加 `Updates` 分组：
+在 `Settings -> About` 下集中承载 app 元信息与更新能力：
 
-- 当前版本：`v0.1.5`
-- 自动检查更新：开关
-- 上次检查时间
-- 当前状态：
-  - 已是最新
-  - 发现新版本 `vX.Y.Z`
-  - 检查失败
-- `Check Now`
-- `View Release`
-- `Download Latest`
+- 顶部展示应用图标、当前版本与一句简短说明
+- `Updates` 分组：
+  - 自动检查更新：开关
+  - 当前状态：
+    - 已是最新
+    - 发现新版本 `vX.Y.Z`
+    - 检查失败
+  - `Check Now`
+  - `View Release`
+  - `Download Latest`
+- `Project` 分组：
+  - `Open GitHub`
+  - `Open Releases`
+  - `Open Issues`
 
 ### 4. 更新说明展示
 
-发现新版本后，展示 release body 的摘要。
+发现新版本后，在 `About -> Updates` 内展示 release body 的摘要。
 
 建议：
 
@@ -187,8 +191,8 @@ struct ReleaseInfo {
 最适合接入的位置：
 
 - 菜单栏右键菜单：`Clipin/App/AppDelegate.swift`
-- 设置页 General：`Clipin/Views/SettingsView.swift`
-- 用户设置持久化：`Clipin/Services/SettingsStore.swift`
+- 设置页 About：`Clipin/Views/SettingsView.swift`
+- 更新状态与跳转：`Clipin/Services/UpdateReminderService.swift`
 
 ## UI 细节建议
 
@@ -248,11 +252,11 @@ Clipin 是 menu bar 工具，不应像大型桌面应用那样一启动就打断
 
 - 加 `ReleaseChecker`
 - 菜单栏 `Check for Updates...`
-- 设置页 `Updates` 分组
+- 设置页 `About`，把版本 / 更新 / 项目链接集中在同一个页面
 - 展示 release notes 摘要
 - 跳转 GitHub Release / 下载 zip
 
-当前代码已经落地到这一阶段，命名上收口为单一 `UpdateReminderService`，避免一开始就拆成多层 coordinator / store。
+当前代码已经落地到这一阶段，命名上收口为单一 `UpdateReminderService`，并把 app 元信息和更新能力统一收进 `About`，避免 `General` 再继续混入与偏好设置无关的内容。
 
 ### Phase 2
 

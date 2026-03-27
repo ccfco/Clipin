@@ -136,12 +136,15 @@
 "Retention" = "保留策略";
 "Transfer" = "导入导出";
 "Auto Backup" = "自动备份";
+"About" = "关于";
 
 /* SettingsView – General */
 "System Default" = "跟随系统";
 "Language" = "语言";
 "Restart Clipin to apply the language change." = "切换语言后需要重启 Clipin 才能生效。";
 "Press shortcut" = "按下快捷键";
+"App version, updates, project links, and release notes." = "应用版本、更新状态、项目入口和发布说明。";
+"A fast, keyboard-first clipboard companion for macOS." = "一个为 macOS 打造的、快速而键盘优先的剪贴板助手。";
 "Updates" = "更新";
 "Current version" = "当前版本";
 "Clipin checks GitHub Releases and lets you download the newest build manually." = "Clipin 会检查 GitHub Releases，并允许你手动下载最新版本。";
@@ -159,8 +162,20 @@
 "No release notes provided." = "这次发布没有提供更新说明。";
 "Get the latest build" = "获取最新版本";
 "Open the GitHub release page, or jump straight to the latest installer asset." = "打开 GitHub Release 页面，或直接跳转到最新安装包资源。";
+"Project" = "项目";
+"Source code" = "源码";
+"Browse the repository, implementation details, and development history on GitHub." = "在 GitHub 上查看仓库、实现细节和开发历史。";
+"Open GitHub" = "打开 GitHub";
+"Release history" = "发布历史";
+"Open the latest release page to browse shipped builds and release notes." = "打开最新 Release 页面，查看已发布版本和更新说明。";
+"Open Releases" = "打开 Releases";
+"Report an issue" = "反馈问题";
+"Open GitHub Issues to report bugs, request features, or continue a discussion." = "打开 GitHub Issues，反馈 bug、提交功能请求或继续讨论。";
+"Open Issues" = "打开 Issues";
 "View Release" = "查看 Release";
 "Download Latest" = "下载最新版";
+
+"About Clipin" = "关于 Clipin";
 
 /* App update */
 "Check for Updates..." = "检查更新…";

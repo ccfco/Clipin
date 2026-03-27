@@ -11,6 +11,11 @@ struct ClipinApp: App {
                 .frame(width: 1, height: 1)
         }
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About Clipin") {
+                    appDelegate.openAboutFromCommand()
+                }
+            }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates...") {
                     appDelegate.checkForUpdatesFromCommand()

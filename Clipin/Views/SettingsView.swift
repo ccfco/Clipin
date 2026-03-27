@@ -4,7 +4,7 @@ import AppKit
 // MARK: - SettingsTab
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, privacy, retention, transfer, autoBackup
+    case general, privacy, retention, transfer, autoBackup, about
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
@@ -14,6 +14,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .retention: return "Retention"
         case .transfer:  return "Transfer"
         case .autoBackup: return "Auto Backup"
+        case .about: return "About"
         }
     }
     var icon: String {
@@ -23,6 +24,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .retention: return "clock.arrow.circlepath"
         case .transfer:  return "arrow.left.arrow.right.circle"
         case .autoBackup: return "icloud.and.arrow.up"
+        case .about: return "info.circle"
         }
     }
 
@@ -38,6 +40,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
             return "Move clipboard history in or out of Clipin without losing your current library."
         case .autoBackup:
             return "Keep an automatic JSON backup on disk so history can be restored if needed."
+        case .about:
+            return "App version, updates, project links, and release notes."
         }
     }
 }
@@ -100,6 +104,19 @@ struct SettingsView: View {
     private var hierarchy: ClipinPanelHierarchy {
         .make(glass: glass, colorScheme: colorScheme)
     }
+
+    private var appDisplayName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? "Clipin"
+    }
+
+    private var currentVersionLine: String {
+        "v\(updateReminder.currentVersion) (\(updateReminder.currentBuild))"
+    }
+
+    private let repositoryURL = URL(string: "https://github.com/ccfco/Clipin")!
+    private let issuesURL = URL(string: "https://github.com/ccfco/Clipin/issues")!
 
     private var updateAutoCheckBinding: Binding<Bool> {
         Binding(
@@ -246,6 +263,7 @@ struct SettingsView: View {
                     case .retention:  retentionContent
                     case .transfer:   transferContent
                     case .autoBackup: autoBackupContent
+                    case .about:      aboutContent
                     }
                 } else {
                     settingsSelectionPlaceholder
@@ -359,76 +377,6 @@ struct SettingsView: View {
                 }
             }
 
-            contentGroup {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("Updates")
-                        .font(.system(size: 13, weight: .medium))
-
-                    settingFieldRow("Current version", description: "Clipin checks GitHub Releases and lets you download the newest build manually.") {
-                        Text("v\(updateReminder.currentVersion) (\(updateReminder.currentBuild))")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
-                    }
-
-                    groupDivider
-
-                    toggleSettingRow(
-                        "Automatically check for updates",
-                        description: "Check GitHub Releases in the background and surface a reminder when a new version is available.",
-                        isOn: updateAutoCheckBinding
-                    )
-
-                    groupDivider
-
-                    actionRow(
-                        "Update status",
-                        description: updateStatusDescription,
-                        buttonTitle: "Check Now",
-                        action: { updateReminder.checkNow() }
-                    )
-
-                    if let latestRelease = updateReminder.latestRelease {
-                        groupDivider
-
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Release notes")
-                                .font(.system(size: 13, weight: .medium))
-
-                            Text(latestRelease.notesPreview.isEmpty ? NSLocalizedString("No release notes provided.", comment: "") : latestRelease.notesPreview)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-
-                        groupDivider
-
-                        HStack(alignment: .top, spacing: 18) {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("Get the latest build")
-                                    .font(.system(size: 13, weight: .medium))
-
-                                Text("Open the GitHub release page, or jump straight to the latest installer asset.")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                            HStack(spacing: 8) {
-                                Button("View Release") {
-                                    updateReminder.openReleasePage()
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button("Download Latest") {
-                                    updateReminder.downloadLatestRelease()
-                                }
-                                .buttonStyle(.borderedProminent)
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -646,6 +594,137 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - About
+
+    private var aboutContent: some View {
+        VStack(spacing: 16) {
+            contentGroup {
+                HStack(alignment: .top, spacing: 16) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 68, height: 68)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(appDisplayName)
+                            .font(.system(size: 22, weight: .semibold))
+
+                        Text(currentVersionLine)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+
+                        Text("A fast, keyboard-first clipboard companion for macOS.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: 420, alignment: .leading)
+                    }
+                }
+            }
+
+            contentGroup {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Updates")
+                            .font(.system(size: 13, weight: .medium))
+
+                        Text("Clipin checks GitHub Releases and lets you download the newest build manually.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    toggleSettingRow(
+                        "Automatically check for updates",
+                        description: "Check GitHub Releases in the background and surface a reminder when a new version is available.",
+                        isOn: updateAutoCheckBinding
+                    )
+
+                    groupDivider
+
+                    actionRow(
+                        "Update status",
+                        description: updateStatusDescription,
+                        buttonTitle: "Check Now",
+                        action: { updateReminder.checkNow() }
+                    )
+
+                    if let latestRelease = updateReminder.latestRelease {
+                        groupDivider
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Release notes")
+                                .font(.system(size: 13, weight: .medium))
+
+                            Text(latestRelease.notesPreview.isEmpty ? NSLocalizedString("No release notes provided.", comment: "") : latestRelease.notesPreview)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        groupDivider
+
+                        HStack(alignment: .top, spacing: 18) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Get the latest build")
+                                    .font(.system(size: 13, weight: .medium))
+
+                                Text("Open the GitHub release page, or jump straight to the latest installer asset.")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            HStack(spacing: 8) {
+                                Button("View Release") {
+                                    updateReminder.openReleasePage()
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button("Download Latest") {
+                                    updateReminder.downloadLatestRelease()
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
+                    }
+                }
+            }
+
+            contentGroup {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Project")
+                        .font(.system(size: 13, weight: .medium))
+
+                    actionRow(
+                        "Source code",
+                        description: "Browse the repository, implementation details, and development history on GitHub.",
+                        buttonTitle: "Open GitHub",
+                        action: { openExternalURL(repositoryURL) }
+                    )
+
+                    groupDivider
+
+                    actionRow(
+                        "Release history",
+                        description: "Open the latest release page to browse shipped builds and release notes.",
+                        buttonTitle: "Open Releases",
+                        action: { updateReminder.openReleasePage() }
+                    )
+
+                    groupDivider
+
+                    actionRow(
+                        "Report an issue",
+                        description: "Open GitHub Issues to report bugs, request features, or continue a discussion.",
+                        buttonTitle: "Open Issues",
+                        action: { openExternalURL(issuesURL) }
+                    )
+                }
+            }
+        }
+    }
+
     // MARK: - Window backdrop & helpers
 
     private func detailHeader(for tab: SettingsTab) -> some View {
@@ -813,6 +892,10 @@ struct SettingsView: View {
                     glass: glass
                 )
             )
+    }
+
+    private func openExternalURL(_ url: URL) {
+        NSWorkspace.shared.open(url)
     }
 
     private func noticeView(_ notice: SettingsNotice) -> some View {
