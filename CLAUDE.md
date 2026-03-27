@@ -37,6 +37,10 @@ cd rust && cargo test --lib
 - `scripts/build-rust.sh` — 构建脚本
 - `project.yml` — xcodegen 配置
 
+## 文档约定
+
+- **`CLAUDE.md` 是唯一维护的协作文档**：实现决策、UI 约定、踩坑记录统一写这里，不再继续维护额外的 polish log 或重复说明文档。
+
 ## 决策
 
 - **图片 OCR**：使用 Apple Vision Framework `VNRecognizeTextRequest`（macOS 原生，零依赖，支持中英文）。图片写盘后在同一 `Task.detached` 内串行 OCR，结果写入 `clip_items.ocr_text` 列。FTS5 索引同步覆盖 ocr_text，搜索图片文字与搜索文本完全统一。列表 preview 通过 SQL 层 `COALESCE(NULLIF(ocr_text,''),content)` 智能回退，无需改 Swift 模型。
