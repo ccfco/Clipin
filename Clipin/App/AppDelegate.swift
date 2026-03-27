@@ -54,6 +54,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         static let originY = "panel.savedOriginY"
     }
 
+    private enum SettingsWindowMetrics {
+        static let size = NSSize(width: 720, height: 608)
+    }
+
     private enum KeyboardContext {
         case mainPanel(ClipboardViewModel)
         case actionsPalette(ClipboardViewModel)
@@ -626,7 +630,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window = existingWindow
         } else {
             let newWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 680, height: 600),
+                contentRect: NSRect(origin: .zero, size: SettingsWindowMetrics.size),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -655,8 +659,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         settings.refreshLaunchAtLoginStatus()
         window.center()
-        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        focusSettingsSidebar(in: window)
+    }
+
+    private func focusSettingsSidebar(in window: NSWindow, attemptsRemaining: Int = 3) {
+        DispatchQueue.main.async { [weak self, weak window] in
+            guard let self, let window else { return }
+
+            guard window.isKeyWindow else {
+                guard attemptsRemaining > 0 else { return }
+                self.focusSettingsSidebar(in: window, attemptsRemaining: attemptsRemaining - 1)
+                return
+            }
+
+            guard let tableView: NSTableView = self.findSubview(ofType: NSTableView.self, in: window.contentView) else {
+                return
+            }
+
+            window.makeFirstResponder(tableView)
+        }
+    }
+
+    private func findSubview<T: NSView>(ofType type: T.Type, in root: NSView?) -> T? {
+        guard let root else { return nil }
+        if let match = root as? T {
+            return match
+        }
+
+        for child in root.subviews {
+            if let match: T = findSubview(ofType: type, in: child) {
+                return match
+            }
+        }
+
+        return nil
     }
 
     // MARK: - Permission

@@ -168,7 +168,7 @@ struct ActionPalette: View {
                 background: isSelected ? selectedBadgeFill : glass.keycapTint
             )
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, ClipinChrome.listRowOuterInset)
         .padding(.vertical, 11)
         .background(
             ClipinSelectableRowBackground(
