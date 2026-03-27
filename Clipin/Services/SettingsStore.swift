@@ -42,6 +42,7 @@ enum AppearanceOverride: String, CaseIterable {
 @MainActor
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
+    private static let currentOnboardingVersion = 1
 
     @Published var retentionDays: Int {
         didSet {
@@ -119,6 +120,9 @@ final class SettingsStore: ObservableObject {
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginNote: String?
 
+    /// 首次引导版本。用版本号而不是 Bool，后续若需要重做 onboarding 可平滑升级。
+    private(set) var onboardingVersion: Int
+
     private let defaults = UserDefaults.standard
     private let encoder = JSONEncoder()
 
@@ -134,7 +138,26 @@ final class SettingsStore: ObservableObject {
         static let visualTheme = "settings.visualTheme"
         static let appLanguage = "settings.appLanguage"
         static let rememberPanelPosition = "settings.rememberPanelPosition"
+        static let onboardingVersion = "settings.onboardingVersion"
     }
+
+    /// 老用户迁移信号：任意一个 key 已存在，就说明这个安装已经被实际使用过，不应突然弹欢迎页。
+    private static let legacyInstallKeys: [String] = [
+        Keys.retentionDays,
+        Keys.maxHistoryItems,
+        Keys.shortcut,
+        Keys.skipTransientContent,
+        Keys.autoBackupEnabled,
+        Keys.autoBackupFolderPath,
+        Keys.autoBackupInterval,
+        Keys.appearanceOverride,
+        Keys.visualTheme,
+        Keys.appLanguage,
+        Keys.rememberPanelPosition,
+        "panel.savedOriginX",
+        "panel.savedOriginY",
+        "autoBackup.lastBackupAt",
+    ]
 
     private init() {
         let decoder = JSONDecoder()
@@ -151,6 +174,7 @@ final class SettingsStore: ObservableObject {
             .flatMap { VisualTheme(rawValue: $0) } ?? .mist
         let storedAppLanguage = defaults.string(forKey: Keys.appLanguage)
             .flatMap { AppLanguage(rawValue: $0) } ?? .system
+        let storedOnboardingVersion = defaults.object(forKey: Keys.onboardingVersion) as? Int ?? 0
 
         self.retentionDays = storedRetention
         self.maxHistoryItems = storedMaxItems
@@ -163,6 +187,7 @@ final class SettingsStore: ObservableObject {
         self.visualTheme = storedVisualTheme
         self.appLanguage = storedAppLanguage
         self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
+        self.onboardingVersion = storedOnboardingVersion
         // init 赋值不触发 didSet，需手动同步确保 AppleLanguages 和持久化值一致
         if let langs = storedAppLanguage.appleLanguagesValue {
             defaults.set(langs, forKey: "AppleLanguages")
@@ -200,6 +225,64 @@ final class SettingsStore: ObservableObject {
             refreshLaunchAtLoginStatus()
             launchAtLoginNote = error.localizedDescription
         }
+    }
+
+    var hasCompletedOnboarding: Bool {
+        onboardingVersion >= Self.currentOnboardingVersion
+    }
+
+    /// 只对真正的新安装展示首次引导。
+    /// 现有用户如果在本次启动前就已经有本地存储、已有历史数据/偏好，或已经授予辅助功能权限，都直接视为已完成。
+    func shouldShowOnboarding(
+        core: ClipinCore,
+        permissionGranted: Bool,
+        hadExistingStorageBeforeBootstrap: Bool
+    ) -> Bool {
+        guard !hasCompletedOnboarding else { return false }
+
+        if looksLikeExistingInstall(
+            core: core,
+            permissionGranted: permissionGranted,
+            hadExistingStorageBeforeBootstrap: hadExistingStorageBeforeBootstrap
+        ) {
+            markOnboardingCompleted()
+            return false
+        }
+
+        return true
+    }
+
+    func markOnboardingCompleted() {
+        let nextVersion = Self.currentOnboardingVersion
+        guard onboardingVersion != nextVersion else { return }
+        onboardingVersion = nextVersion
+        defaults.set(nextVersion, forKey: Keys.onboardingVersion)
+    }
+
+    /// 调试辅助：把 onboarding 还原为“未完成”，方便重复验证首次启动路径。
+    func resetOnboardingForTesting() {
+        onboardingVersion = 0
+        defaults.removeObject(forKey: Keys.onboardingVersion)
+    }
+
+    private func looksLikeExistingInstall(
+        core: ClipinCore,
+        permissionGranted: Bool,
+        hadExistingStorageBeforeBootstrap: Bool
+    ) -> Bool {
+        if hadExistingStorageBeforeBootstrap {
+            return true
+        }
+
+        if permissionGranted {
+            return true
+        }
+
+        if !core.getListItems(limit: 1, offset: 0, typeFilter: nil).isEmpty {
+            return true
+        }
+
+        return Self.legacyInstallKeys.contains { defaults.object(forKey: $0) != nil }
     }
 }
 

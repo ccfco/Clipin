@@ -12,7 +12,7 @@ struct PermissionView: View {
 
     var body: some View {
         ZStack {
-            Rectangle()
+            RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
                 .fill(.regularMaterial)
                 .overlay(
                     LinearGradient(
@@ -109,6 +109,8 @@ struct PermissionView: View {
             .padding(ClipinChrome.shellGap)
         }
         .frame(width: 400, height: 420)
+        .shadow(color: .black.opacity(0.16), radius: 48, y: 24)
+        .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
     }
 }
 

@@ -143,6 +143,48 @@
 "Restart Clipin to apply the language change." = "Restart Clipin to apply the language change.";
 "Press shortcut" = "Press shortcut";
 
+/* OnboardingView */
+"Keyboard-first clipboard, refined for focus." = "Keyboard-first clipboard, refined for focus.";
+"A calmer home for everything you copy." = "A calmer home for everything you copy.";
+"Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus." = "Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus.";
+"Open Launcher" = "Open Launcher";
+"Paste" = "Paste";
+"Actions" = "Actions";
+"Keyboard-first" = "Keyboard-first";
+"Open, filter, act, and paste without leaving the home row." = "Open, filter, act, and paste without leaving the home row.";
+"Search images too" = "Search images too";
+"OCR keeps screenshots and image snippets searchable with plain text." = "OCR keeps screenshots and image snippets searchable with plain text.";
+"Private by default" = "Private by default";
+"Everything stays local, and sensitive clipboard writes are skipped." = "Everything stays local, and sensitive clipboard writes are skipped.";
+"Three beats, then you are back to typing." = "Three beats, then you are back to typing.";
+"Clipin is built around one quiet loop: copy, open, confirm." = "Clipin is built around one quiet loop: copy, open, confirm.";
+"Copy anything" = "Copy anything";
+"Clipin captures text, images, links, and complete file selections." = "Clipin captures text, images, links, and complete file selections.";
+"Press ⌘⇧V" = "Press ⌘⇧V";
+"The launcher appears right where you work, ready to search and narrow." = "The launcher appears right where you work, ready to search and narrow.";
+"Press Return" = "Press Return";
+"Paste instantly, or stay in Continuous Paste mode for repeated drops." = "Paste instantly, or stay in Continuous Paste mode for repeated drops.";
+"Cycle clip types" = "Cycle clip types";
+"Open global actions" = "Open global actions";
+"Keep pasting across apps" = "Keep pasting across apps";
+"You are ready to paste straight back into any app." = "You are ready to paste straight back into any app.";
+"One system permission unlocks the last step." = "One system permission unlocks the last step.";
+"Accessibility access is on. Clipin can now send the selected item straight back to the current app." = "Accessibility access is on. Clipin can now send the selected item straight back to the current app.";
+"Accessibility access lets Clipin return the selected item to the current app the moment you press Return." = "Accessibility access lets Clipin return the selected item to the current app the moment you press Return.";
+"Accessibility" = "Accessibility";
+"Granted" = "Granted";
+"Needed for automatic paste" = "Needed for automatic paste";
+"Ready" = "Ready";
+"Pending" = "Pending";
+"Open System Settings." = "Open System Settings.";
+"Find Clipin in Privacy & Security → Accessibility." = "Find Clipin in Privacy & Security → Accessibility.";
+"Turn it on, then come back here." = "Turn it on, then come back here.";
+"You can keep browsing and copying history without this. Automatic paste starts working as soon as the permission is enabled." = "You can keep browsing and copying history without this. Automatic paste starts working as soon as the permission is enabled.";
+"Back" = "Back";
+"Maybe later" = "Maybe later";
+"Continue" = "Continue";
+"Open Clipin" = "Open Clipin";
+
 /* PermissionView */
 "Accessibility Permission Required" = "Accessibility Permission Required";
 "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item." = "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item.";

@@ -36,6 +36,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotKey = HotKeyService()
     private var cancellables = Set<AnyCancellable>()
     private var permissionWindow: NSWindow?
+    private var onboardingWindow: NSWindow?
     private lazy var cleanupService = CleanupService(core: appState.core, settings: settings)
     private let autoBackupService = AutoBackupService.shared
     private var previousApp: NSRunningApplication?
@@ -58,6 +59,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         static let size = NSSize(width: 720, height: 608)
     }
 
+    private enum OnboardingWindowMetrics {
+        static let size = NSSize(width: 560, height: 640)
+    }
+
     private enum KeyboardContext {
         case mainPanel(ClipboardViewModel)
         case actionsPalette(ClipboardViewModel)
@@ -74,7 +79,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupSettingsObservers()
         startKeyMonitor()
         runCleanupAndReload()
-        checkPermissionOnLaunch()
+        showLaunchExperienceIfNeeded()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()
     }
@@ -252,6 +257,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Show / Hide
 
     @objc func togglePanel() {
+        if let onboardingWindow, onboardingWindow.isVisible {
+            NSApp.activate(ignoringOtherApps: true)
+            onboardingWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
         guard let panel else { return }
         if panel.isVisible {
             if viewModel?.isContinuousPasteEnabled == true {
@@ -718,8 +729,72 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Permission
 
-    private func checkPermissionOnLaunch() {
-        let pm = PermissionManager.shared
+    private func showLaunchExperienceIfNeeded() {
+        let permission = PermissionManager.shared
+
+        if settings.shouldShowOnboarding(
+            core: appState.core,
+            permissionGranted: permission.isAccessibilityGranted,
+            hadExistingStorageBeforeBootstrap: appState.hadExistingStorageBeforeBootstrap
+        ) {
+            openOnboardingWindow(permission: permission)
+            return
+        }
+
+        showPermissionWindowIfNeeded(permission)
+    }
+
+    private func openOnboardingWindow(permission: PermissionManager) {
+        let window: NSWindow
+        let isNew: Bool
+
+        if let existingWindow = onboardingWindow {
+            window = existingWindow
+            isNew = false
+        } else {
+            let newWindow = NSWindow(
+                contentRect: NSRect(origin: .zero, size: OnboardingWindowMetrics.size),
+                styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            newWindow.title = "Welcome to Clipin"
+            newWindow.titlebarAppearsTransparent = true
+            newWindow.titleVisibility = .hidden
+            newWindow.titlebarSeparatorStyle = .none
+            newWindow.backgroundColor = .clear
+            newWindow.isOpaque = false
+            newWindow.isMovableByWindowBackground = true
+            newWindow.isReleasedWhenClosed = false
+            newWindow.hasShadow = true
+            newWindow.level = .floating
+            newWindow.delegate = self
+            newWindow.contentView = ClipinHostingView(
+                rootView: OnboardingView(permission: permission) { [weak self] openPanel in
+                    self?.finishOnboarding(openPanel: openPanel)
+                }
+            )
+            onboardingWindow = newWindow
+            window = newWindow
+            isNew = true
+        }
+
+        if isNew { window.center() }
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func finishOnboarding(openPanel: Bool) {
+        settings.markOnboardingCompleted()
+        onboardingWindow?.close()
+
+        guard openPanel else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.showPanel()
+        }
+    }
+
+    private func showPermissionWindowIfNeeded(_ pm: PermissionManager = .shared) {
         guard !pm.isAccessibilityGranted else { return }
 
         let view = PermissionView(permission: pm)
@@ -732,6 +807,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = NSHostingView(rootView: view)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.delegate = self
         window.center()
         window.level = .floating
 
@@ -832,6 +908,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - NSWindowDelegate
 
 extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        if notification.object as? NSWindow === onboardingWindow {
+            onboardingWindow = nil
+        }
+        if notification.object as? NSWindow === permissionWindow {
+            permissionWindow = nil
+        }
+    }
+
     /// 用户拖拽面板后更新记忆位置。
     /// isProgrammaticMove 防止 showPanel() 里的 setFrameOrigin 误触发。
     /// UserDefaults 写入做 0.3s 防抖，避免拖拽过程中每帧都写。

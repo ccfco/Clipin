@@ -68,7 +68,8 @@
 1. 前往 [Releases](https://github.com/ccfco/Clipin/releases/latest) 下载最新 `Clipin-vX.X.X-macOS.zip`
 2. 解压得到 `Clipin.app`，拖入 `/Applications`
 3. 首次打开如果被系统拦截，右键点"打开"完成确认
-4. 授予「辅助功能」权限后即可使用
+4. 首次启动会进入简短欢迎引导，记住主快捷键 `⌘⇧V`
+5. 授予「辅助功能」权限后即可使用自动粘贴；未授权时也仍可浏览和再次复制历史
 
 ### 源码构建
 

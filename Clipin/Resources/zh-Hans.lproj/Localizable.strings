@@ -143,6 +143,48 @@
 "Restart Clipin to apply the language change." = "切换语言后需要重启 Clipin 才能生效。";
 "Press shortcut" = "按下快捷键";
 
+/* OnboardingView */
+"Keyboard-first clipboard, refined for focus." = "键盘优先的剪贴板管理，克制而专注。";
+"A calmer home for everything you copy." = "给每一次复制，一个更从容的归处。";
+"Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus." = "Clipin 安静地待在菜单栏，把你复制过的文本、图片、链接和文件都收进可搜索的短期记忆里，让粘贴不再打断节奏。";
+"Open Launcher" = "呼出面板";
+"Paste" = "粘贴";
+"Actions" = "动作";
+"Keyboard-first" = "键盘优先";
+"Open, filter, act, and paste without leaving the home row." = "呼出、筛选、执行和粘贴，都不需要离开键盘主区。";
+"Search images too" = "图片也能搜";
+"OCR keeps screenshots and image snippets searchable with plain text." = "OCR 会让截图和图片片段像普通文本一样可搜索。";
+"Private by default" = "默认私密";
+"Everything stays local, and sensitive clipboard writes are skipped." = "所有数据都留在本地，敏感剪贴板写入会被自动跳过。";
+"Three beats, then you are back to typing." = "三个动作，就回到输入状态。";
+"Clipin is built around one quiet loop: copy, open, confirm." = "Clipin 的核心路径只有一条安静的循环：复制、呼出、确认。";
+"Copy anything" = "复制任意内容";
+"Clipin captures text, images, links, and complete file selections." = "文本、图片、链接，以及整组选中的文件，都会被完整收进历史记录。";
+"Press ⌘⇧V" = "按下 ⌘⇧V";
+"The launcher appears right where you work, ready to search and narrow." = "面板会在你工作的位置立刻出现，随时可以搜索和收窄范围。";
+"Press Return" = "按下回车";
+"Paste instantly, or stay in Continuous Paste mode for repeated drops." = "立即粘贴，或者进入连续粘贴模式，在多个应用之间持续投递。";
+"Cycle clip types" = "切换内容类型";
+"Open global actions" = "打开全局动作面板";
+"Keep pasting across apps" = "跨应用持续粘贴";
+"You are ready to paste straight back into any app." = "现在已经可以直接把内容送回任意应用了。";
+"One system permission unlocks the last step." = "再给一个系统权限，最后一步就完整了。";
+"Accessibility access is on. Clipin can now send the selected item straight back to the current app." = "辅助功能权限已经开启，Clipin 现在可以把选中的内容直接送回当前应用。";
+"Accessibility access lets Clipin return the selected item to the current app the moment you press Return." = "辅助功能权限可以让 Clipin 在你按下回车的瞬间，把选中的内容直接送回当前应用。";
+"Accessibility" = "辅助功能";
+"Granted" = "已授权";
+"Needed for automatic paste" = "自动粘贴需要此权限";
+"Ready" = "就绪";
+"Pending" = "待完成";
+"Open System Settings." = "打开系统设置。";
+"Find Clipin in Privacy & Security → Accessibility." = "在「隐私与安全性 → 辅助功能」中找到 Clipin。";
+"Turn it on, then come back here." = "打开开关，然后回到这里。";
+"You can keep browsing and copying history without this. Automatic paste starts working as soon as the permission is enabled." = "即使现在不授权，你仍然可以浏览和再次复制历史内容；只要权限打开，自动粘贴会立刻生效。";
+"Back" = "返回";
+"Maybe later" = "稍后再说";
+"Continue" = "继续";
+"Open Clipin" = "打开 Clipin";
+
 /* PermissionView */
 "Accessibility Permission Required" = "需要辅助功能权限";
 "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item." = "Clipin 需要辅助功能权限，才能在你选择历史记录后自动将内容粘贴到当前应用。";
