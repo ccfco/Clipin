@@ -54,7 +54,7 @@
 "Clipboard History" = "剪贴板历史";
 "No selection" = "未选中";
 "Actions" = "动作";
-"Stay" = "保持";
+"Continuous Paste" = "连续粘贴";
 "Pinned" = "已固定";
 "Plain Text" = "纯文本";
 "Paste to %@" = "粘贴到 %@";
@@ -83,8 +83,8 @@
 "Paste as Plain Text" = "粘贴为纯文本";
 "Copy to Clipboard" = "复制到剪贴板";
 "Clear Search & Filters" = "清空搜索和筛选";
-"Enable Stay Open" = "开启保持模式";
-"Disable Stay Open" = "关闭保持模式";
+"Enable Continuous Paste" = "开启连续粘贴";
+"Disable Continuous Paste" = "关闭连续粘贴";
 "Open Settings" = "打开设置";
 
 /* ClipboardViewModel - section titles */

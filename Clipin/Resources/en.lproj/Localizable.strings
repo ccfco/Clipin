@@ -54,7 +54,7 @@
 "Clipboard History" = "Clipboard History";
 "No selection" = "No selection";
 "Actions" = "Actions";
-"Stay" = "Stay";
+"Continuous Paste" = "Continuous Paste";
 "Pinned" = "Pinned";
 "Plain Text" = "Plain Text";
 "Paste to %@" = "Paste to %@";
@@ -83,8 +83,8 @@
 "Paste as Plain Text" = "Paste as Plain Text";
 "Copy to Clipboard" = "Copy to Clipboard";
 "Clear Search & Filters" = "Clear Search & Filters";
-"Enable Stay Open" = "Enable Stay Open";
-"Disable Stay Open" = "Disable Stay Open";
+"Enable Continuous Paste" = "Enable Continuous Paste";
+"Disable Continuous Paste" = "Disable Continuous Paste";
 "Open Settings" = "Open Settings";
 
 /* ClipboardViewModel - section titles */

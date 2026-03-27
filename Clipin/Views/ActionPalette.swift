@@ -252,8 +252,12 @@ struct ActionPaletteBuilder {
             })
         }
 
-        list.append(PaletteAction(viewModel.isPanelPinned ? "Disable Stay Open" : "Enable Stay Open", systemImage: viewModel.isPanelPinned ? "pin.slash" : "pin", badge: "⌘⇧L") {
-            viewModel.togglePanelPin()
+        list.append(PaletteAction(
+            viewModel.isContinuousPasteEnabled ? "Disable Continuous Paste" : "Enable Continuous Paste",
+            systemImage: viewModel.isContinuousPasteEnabled ? "repeat.circle.fill" : "repeat.circle",
+            badge: "⌘⇧L"
+        ) {
+            viewModel.toggleContinuousPaste()
         })
 
         list.append(PaletteAction("Open Settings", systemImage: "gearshape", badge: "⌘,") {

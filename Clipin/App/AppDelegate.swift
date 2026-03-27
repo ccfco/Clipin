@@ -47,6 +47,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var savedPanelOrigin: NSPoint?
     private var isProgrammaticMove = false
     private var savePositionTask: Task<Void, Never>?
+    private var backfillTask: Task<Void, Never>?
 
     private enum PanelPositionKeys {
         static let originX = "panel.savedOriginX"
@@ -441,36 +442,65 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 为历史图片补跑 OCR（仅处理 ocr_text 为空的条目）
-    /// 使用 .background 优先级串行处理，不影响 UI 和正常的新图片 OCR
+    /// 为历史图片补跑 OCR（仅处理 ocr_text 为 NULL 的条目，分页直到处理完毕）
+    /// 使用 .background 优先级串行处理，不影响 UI 和正常的新图片 OCR；
+    /// Task 存储在 backfillTask 供 applicationWillTerminate 取消
     private func backfillOcrForExistingImages() {
         let core = appState.core
-        Task.detached(priority: .background) {
-            let images = core.getItems(limit: 1000, offset: 0, typeFilter: .image)
-            let pending = images.filter { $0.ocrText == nil }
-            guard !pending.isEmpty else { return }
+        backfillTask = Task.detached(priority: .background) {
+            let pageSize = 200
+            var offset = 0
+            var totalProcessed = 0
 
-            print("ℹ️ OCR backfill: \(pending.count) image(s) to process")
-            for item in pending {
-                guard let path = item.imagePath,
-                      FileManager.default.fileExists(atPath: path) else {
-                    // 图片文件已丢失（可能被清理），写入空字符串标记为已处理，避免重复扫描
-                    try? core.updateOcrText(id: item.id, ocrText: "")
+            while !Task.isCancelled {
+                let page = core.getItems(limit: Int32(pageSize), offset: Int32(offset), typeFilter: .image)
+                let pending = page.filter { $0.ocrText == nil }
+
+                if pending.isEmpty {
+                    // 本页无待处理条目：若页面未满说明已到末尾；否则继续翻页
+                    if page.count < pageSize { break }
+                    offset += pageSize
                     continue
                 }
-                let text = await OcrService.recognizeText(at: path)
-                // 无论是否识别到文字都写回（NULL=未处理，""=处理过但无文字）
-                do {
-                    try core.updateOcrText(id: item.id, ocrText: text)
-                    if !text.isEmpty {
-                        NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
+
+                for item in pending {
+                    guard !Task.isCancelled else { break }
+
+                    guard let path = item.imagePath else {
+                        // imagePath 为 nil 是数据异常（image 类型必须有路径），记录日志
+                        print("⚠️ OCR backfill: item \(item.id) has no imagePath, marking as processed")
+                        try? core.updateOcrText(id: item.id, ocrText: "")
+                        continue
                     }
-                } catch {
-                    print("⚠️ OCR backfill write error for \(item.id): \(error)")
+                    guard FileManager.default.fileExists(atPath: path) else {
+                        // 文件已被清理，标记为已处理避免重复扫描
+                        try? core.updateOcrText(id: item.id, ocrText: "")
+                        continue
+                    }
+
+                    let text = await OcrService.recognizeText(at: path)
+                    // 无论是否识别到文字都写回（NULL=未处理，""=处理过但无文字）
+                    do {
+                        try core.updateOcrText(id: item.id, ocrText: text)
+                        if !text.isEmpty {
+                            NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
+                        }
+                        totalProcessed += 1
+                    } catch {
+                        print("⚠️ OCR backfill write error for \(item.id): \(error)")
+                    }
                 }
+                offset += pageSize
             }
-            print("ℹ️ OCR backfill complete")
+
+            if totalProcessed > 0 {
+                print("ℹ️ OCR backfill complete: \(totalProcessed) image(s) processed")
+            }
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        backfillTask?.cancel()
     }
 
     private func runCleanupAndReload(selectLatest: Bool = false) {

@@ -43,9 +43,9 @@
 
 ⌨️ **键盘优先** — 方向键导航、回车粘贴、`⌘1-9` 快速粘贴前 9 条
 
-📌 **连续粘贴** — ⌘⇧L 开启 Stay 模式，跨应用点击输入框后面板自动夺回焦点，连续选择并粘贴
+📌 **连续粘贴** — `⌘⇧L` 开启连续粘贴模式，跨应用点击输入框后面板自动夺回焦点，连续选择并粘贴
 
-🎯 **动作面板** — `⌘K` 打开命令面板，键入即筛选，空态下也始终可用
+🎯 **动作面板** — `⌘K` 打开静态命令面板，空态下也始终可用
 
 🧠 **低负担列表** — 列表只展示轻量摘要，完整内容按需加载，大文本历史也不容易拖慢面板
 
@@ -99,7 +99,7 @@ xcodegen generate
 | `⌘O` | 打开 URL / 在 Finder 中显示文件 |
 | `⌘K` | 打开动作面板 |
 | `Tab` / `⇧Tab` | 切换类型筛选 |
-| `⌘⇧L` | 开启/关闭 Stay 模式 |
+| `⌘⇧L` | 开启/关闭连续粘贴 |
 | `⌘,` | 打开设置 |
 | `Esc` | 先清除搜索/筛选，再关闭面板 |
 
@@ -114,10 +114,10 @@ xcodegen generate
 
 **已完成：**
 
-- [x] 连续粘贴（Stay 模式）
+- [x] 连续粘贴模式
 - [x] 长期/永久历史保留
 - [x] FTS5 全文搜索
-- [x] 动作面板 + 键入筛选
+- [x] 动作面板
 - [x] 隐私感知采集
 
 ## 架构
@@ -169,7 +169,7 @@ Clipin is a tiny, keyboard-first clipboard manager for macOS. It is built to lau
 - Fast search: `Rust + SQLite + FTS5 trigram` with Chinese and English full-text lookup
 - Low-overhead UI: lightweight list items in the main panel, full details loaded on demand
 - Keyboard-first flow: arrow keys, Enter to paste, `⌘1-9` quick paste, `⌘K` action palette
-- Stay mode (`⌘⇧L`): continuous paste across apps without repeated hotkey presses
+- Continuous Paste mode (`⌘⇧L`): continuous paste across apps without repeated hotkey presses
 - Privacy-first: all data stays local, and sensitive clipboard content is automatically skipped
 
 ## Install
