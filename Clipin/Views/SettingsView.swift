@@ -256,6 +256,16 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            contentGroup {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle("Remember panel position between sessions", isOn: $settings.rememberPanelPosition)
+                        .toggleStyle(.switch)
+                    Text("When enabled, the panel reopens at the last position you moved it to, even after restarting Clipin.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 

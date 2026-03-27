@@ -43,10 +43,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var appSwitchObserver: Any?
     private var suppressResignKey = false
     private var hideGeneration: Int = 0
+    private var savedPanelOrigin: NSPoint? = nil
+    private var isProgrammaticMove = false
+
+    private enum PanelPositionKeys {
+        static let originX = "panel.savedOriginX"
+        static let originY = "panel.savedOriginY"
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupPanel()
+        loadSavedPanelPosition()
         startMonitoring()
         setupHotKey()
         setupSettingsObservers()
@@ -138,11 +146,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.onResignKey = { [weak self] in
             self?.handlePanelResignKey()
         }
-
-        if let screen = NSScreen.main {
-            let f = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: f.midX - 360, y: f.midY + f.height * 0.1))
-        }
+        panel.delegate = self
 
         self.panel = panel
     }
@@ -204,6 +208,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             .store(in: &cancellables)
+
+        settings.$rememberPanelPosition
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] enabled in
+                guard let self else { return }
+                if enabled {
+                    // 开启时立即持久化当前内存中的位置（如果有）
+                    if let origin = savedPanelOrigin {
+                        UserDefaults.standard.set(origin.x, forKey: PanelPositionKeys.originX)
+                        UserDefaults.standard.set(origin.y, forKey: PanelPositionKeys.originY)
+                    }
+                } else {
+                    UserDefaults.standard.removeObject(forKey: PanelPositionKeys.originX)
+                    UserDefaults.standard.removeObject(forKey: PanelPositionKeys.originY)
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Show / Hide
@@ -240,15 +263,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.targetAppName = previousApp?.localizedName
         viewModel?.loadItems(selectLatest: true)
 
-        let screen = NSScreen.screens.first(where: {
-            $0.frame.contains(NSEvent.mouseLocation)
-        }) ?? NSScreen.main ?? NSScreen.screens.first
-        if let f = screen?.visibleFrame {
-            let panelSize = panel.frame.size
-            let x = f.midX - panelSize.width / 2
-            let y = f.midY + f.height * 0.1
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
-        }
+        positionPanelForShow()
 
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
@@ -291,6 +306,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         })
+    }
+
+    /// 根据当前状态决定面板出现位置：优先使用已记忆的位置，否则计算友好默认位置。
+    private func positionPanelForShow() {
+        guard let panel else { return }
+
+        // 有记忆位置且原点仍在某个屏幕可见区域内 → 直接还原
+        if let saved = savedPanelOrigin,
+           NSScreen.screens.contains(where: { $0.visibleFrame.contains(saved) }) {
+            isProgrammaticMove = true
+            panel.setFrameOrigin(saved)
+            isProgrammaticMove = false
+            return
+        }
+
+        // 默认位置：跟随鼠标所在屏幕，面板中心位于可见区域 58% 高度处，确保不超出边界
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
+            ?? NSScreen.main ?? NSScreen.screens.first
+        guard let f = screen?.visibleFrame else { return }
+        let size = panel.frame.size
+        let x = f.minX + (f.width - size.width) / 2
+        let centerY = f.minY + f.height * 0.58
+        let y = max(f.minY, min(centerY - size.height / 2, f.maxY - size.height))
+        isProgrammaticMove = true
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        isProgrammaticMove = false
+    }
+
+    /// 应用启动时从 UserDefaults 恢复面板位置（仅当"跨重启记忆"开启时）。
+    private func loadSavedPanelPosition() {
+        guard settings.rememberPanelPosition else { return }
+        let defaults = UserDefaults.standard
+        guard let x = defaults.object(forKey: PanelPositionKeys.originX) as? Double,
+              let y = defaults.object(forKey: PanelPositionKeys.originY) as? Double else { return }
+        savedPanelOrigin = NSPoint(x: x, y: y)
     }
 
     /// Stay 模式下面板失去 key window 时，短暂延迟后自动夺回焦点。
@@ -668,6 +718,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if pinned {
                 NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
             }
+        }
+    }
+}
+
+// MARK: - NSWindowDelegate
+
+extension AppDelegate: NSWindowDelegate {
+    /// 用户拖拽面板后更新记忆位置。
+    /// isProgrammaticMove 防止 showPanel() 里的 setFrameOrigin 误触发。
+    func windowDidMove(_ notification: Notification) {
+        guard !isProgrammaticMove,
+              let panel = self.panel,
+              notification.object as? NSPanel === panel else { return }
+        savedPanelOrigin = panel.frame.origin
+        if settings.rememberPanelPosition {
+            UserDefaults.standard.set(panel.frame.origin.x, forKey: PanelPositionKeys.originX)
+            UserDefaults.standard.set(panel.frame.origin.y, forKey: PanelPositionKeys.originY)
         }
     }
 }

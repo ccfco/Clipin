@@ -112,6 +112,10 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    @Published var rememberPanelPosition: Bool {
+        didSet { defaults.set(rememberPanelPosition, forKey: Keys.rememberPanelPosition) }
+    }
+
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginNote: String?
 
@@ -129,6 +133,7 @@ final class SettingsStore: ObservableObject {
         static let appearanceOverride = "settings.appearanceOverride"
         static let visualTheme = "settings.visualTheme"
         static let appLanguage = "settings.appLanguage"
+        static let rememberPanelPosition = "settings.rememberPanelPosition"
     }
 
     private init() {
@@ -157,6 +162,7 @@ final class SettingsStore: ObservableObject {
         self.appearanceOverride = storedAppearance
         self.visualTheme = storedVisualTheme
         self.appLanguage = storedAppLanguage
+        self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
         // init 赋值不触发 didSet，需手动同步确保 AppleLanguages 和持久化值一致
         if let langs = storedAppLanguage.appleLanguagesValue {
             defaults.set(langs, forKey: "AppleLanguages")
