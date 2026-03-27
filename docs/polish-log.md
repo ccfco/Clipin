@@ -7,8 +7,9 @@
 - Stopped treating the issue as isolated tint tuning and introduced a shared `ClipinPanelHierarchy` semantic model for `scope`, `selection`, and `command`, so the panel's task hierarchy now lives in one place instead of leaking through ad-hoc color picks.
 - Demoted the top filter pills to quiet scope controls, rebuilt list selection as a theme-tinted selected surface instead of a neutral row plus side rail, and recast the footer `Paste to…` chip as a command hint rather than the primary visual button.
 - Simplified the right preview pane back to a single surface after visual review: removed the extra nested preview shell, dropped the hero-mode typography, and kept text/URL preview content on one consistent reading size so the experience stays continuous while navigating.
-- Flattened the lower metadata area into the same preview surface with a separator instead of another card, and then removed the separate selected-row rail entirely so text, file, and image rows all share one consistent selection treatment.
+- Removed the hard divider approach after review and regrouped preview metadata with subtle layered surfaces and whitespace instead, so the lower info block still reads as a separate group without breaking the panel into line-cut regions.
 - Rebuilt the info panel from stacked two-line fields into a compact inline metadata grid with a dedicated `InfoItem` model, so secondary details use less vertical space and behave more like dense metadata than mini content blocks.
+- Pulled the action palette back into the same design family as the main panel by sharing rounded-surface primitives, keycap chrome, and the same quiet selected-row language instead of letting the palette keep its own independent glass skin.
 
 Acceptance:
 

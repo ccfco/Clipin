@@ -17,23 +17,13 @@ struct PreviewPane: View {
     var body: some View {
         Group {
             if let item {
-                VStack(spacing: 0) {
+                VStack(spacing: 20) {
                     content(for: item)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.horizontal, 28)
-                        .padding(.top, 28)
-                        .padding(.bottom, 20)
-
-                    Rectangle()
-                        .fill(glass.separatorLine)
-                        .frame(height: 0.5)
-                        .padding(.horizontal, 20)
 
                     infoSection(for: item)
-                        .padding(.horizontal, 28)
-                        .padding(.top, 18)
-                        .padding(.bottom, 20)
                 }
+                .padding(28)
             } else {
                 placeholder(
                     icon: "doc.text.magnifyingglass",
@@ -139,7 +129,18 @@ struct PreviewPane: View {
 
     private func infoSection(for item: ClipItem) -> some View {
         infoGrid(for: item)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                ClipinRoundedSurface(
+                    cornerRadius: ClipinChrome.cardCornerRadius,
+                    material: .thinMaterial,
+                    tint: glass.controlFill.opacity(colorScheme == .dark ? 0.96 : 0.9),
+                    stroke: glass.hoverStroke,
+                    highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.04 : 0.16)
+                )
+            )
     }
 
     private func infoGrid(for item: ClipItem) -> some View {

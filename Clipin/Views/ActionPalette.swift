@@ -57,6 +57,10 @@ struct ActionPalette: View {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
     }
 
+    private var hierarchy: ClipinPanelHierarchy {
+        .make(glass: glass, colorScheme: colorScheme)
+    }
+
     private var groupedActionIndices: [[Int]] {
         var groups: [[Int]] = []
         for (index, action) in actions.enumerated() {
@@ -89,7 +93,7 @@ struct ActionPalette: View {
     }
 
     private var palettePanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             paletteHeader
 
             ForEach(Array(groupedActionIndices.enumerated()), id: \.offset) { _, group in
@@ -98,34 +102,36 @@ struct ActionPalette: View {
                         actionRow(action: actions[index], index: index)
                     }
                 }
+                .padding(6)
+                .background(
+                    ClipinRoundedSurface(
+                        cornerRadius: ClipinChrome.cardCornerRadius,
+                        material: .thinMaterial,
+                        tint: glass.controlFill.opacity(colorScheme == .dark ? 0.96 : 0.9),
+                        stroke: glass.hoverStroke,
+                        highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.04 : 0.18)
+                    )
+                )
             }
 
             if actions.isEmpty {
                 emptyState
             }
         }
-        .padding(10)
+        .padding(12)
         .frame(width: 372, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous))
         .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
-                .fill(glass.paletteTint)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [glass.paletteHighlight, Color.clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
-                        .strokeBorder(glass.controlStroke, lineWidth: 0.5)
-                )
+            ClipinRoundedSurface(
+                cornerRadius: ClipinChrome.paletteCornerRadius,
+                material: .regularMaterial,
+                tint: glass.detailTint,
+                stroke: glass.controlStroke,
+                highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.10 : 0.28),
+                shadowColor: .black.opacity(0.12),
+                shadowRadius: 34,
+                shadowYOffset: 18
+            )
         )
-        .shadow(color: .black.opacity(0.12), radius: 34, y: 18)
         .shadow(color: .black.opacity(0.04), radius: 10, y: 3)
         .onAppear { selectedIndex = 0 }
     }
@@ -146,16 +152,23 @@ struct ActionPalette: View {
 
                 Spacer()
 
-                Text("Esc")
-                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(glass.keycapTint)
-                    )
+                ClipinKeycap(
+                    key: "Esc",
+                    foreground: Color(nsColor: .secondaryLabelColor),
+                    background: glass.keycapTint
+                )
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(
+                ClipinRoundedSurface(
+                    cornerRadius: ClipinChrome.searchCornerRadius,
+                    material: .regularMaterial,
+                    tint: glass.controlFill,
+                    stroke: glass.controlStroke,
+                    highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.16 : 0.34)
+                )
+            )
 
             if !query.isEmpty {
                 Text(verbatim: {
@@ -167,15 +180,18 @@ struct ActionPalette: View {
                 }())
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 6)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.top, 4)
-        .padding(.bottom, 2)
     }
 
     private func actionRow(action: PaletteAction, index: Int) -> some View {
         let isSelected = selectedIndex == index
+        let selectedFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.18 : 0.12) : hierarchy.selection.fill
+        let selectedStroke = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.30 : 0.22) : hierarchy.selection.stroke
+        let selectedInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.92 : 0.82) : hierarchy.selection.ink
+        let selectedSecondaryInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.72 : 0.64) : hierarchy.selection.secondaryInk
+        let selectedBadgeFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.14 : 0.10) : hierarchy.selection.badgeFill
 
         return HStack(spacing: 0) {
             Label {
@@ -187,21 +203,17 @@ struct ActionPalette: View {
             }
             .foregroundStyle(
                 action.isDestructive
-                    ? (isSelected ? Color.white : Color.red)
-                    : (isSelected ? glass.emphasisOnStrongFill : Color.primary)
+                    ? (isSelected ? selectedInk : Color.red)
+                    : (isSelected ? selectedInk : Color.primary)
             )
 
             Spacer()
 
-            Text(action.badge)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(isSelected ? glass.emphasisOnStrongFill.opacity(0.68) : Color.secondary.opacity(0.88))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? Color.white.opacity(0.14) : glass.keycapTint)
-                )
+            ClipinKeycap(
+                key: action.badge,
+                foreground: isSelected ? selectedSecondaryInk : Color.secondary.opacity(0.88),
+                background: isSelected ? selectedBadgeFill : glass.keycapTint
+            )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -209,8 +221,12 @@ struct ActionPalette: View {
             RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                 .fill(
                     isSelected
-                        ? (action.isDestructive ? Color.red.opacity(0.84) : glass.emphasisStrongFill)
+                        ? selectedFill
                         : Color.clear
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+                        .strokeBorder(isSelected ? selectedStroke : Color.clear, lineWidth: 0.5)
                 )
         )
         .contentShape(Rectangle())

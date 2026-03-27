@@ -38,6 +38,79 @@ enum ClipinMotion {
     static let panel = Animation.spring(response: 0.32, dampingFraction: 0.84)
 }
 
+struct ClipinRoundedSurface: View {
+    let cornerRadius: CGFloat
+    let material: Material
+    let tint: Color
+    let stroke: Color
+    let highlight: Color
+    let shadowColor: Color
+    let shadowRadius: CGFloat
+    let shadowYOffset: CGFloat
+
+    init(
+        cornerRadius: CGFloat,
+        material: Material,
+        tint: Color,
+        stroke: Color,
+        highlight: Color = .clear,
+        shadowColor: Color = .clear,
+        shadowRadius: CGFloat = 0,
+        shadowYOffset: CGFloat = 0
+    ) {
+        self.cornerRadius = cornerRadius
+        self.material = material
+        self.tint = tint
+        self.stroke = stroke
+        self.highlight = highlight
+        self.shadowColor = shadowColor
+        self.shadowRadius = shadowRadius
+        self.shadowYOffset = shadowYOffset
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(material)
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(tint)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [highlight, Color.clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(stroke, lineWidth: 0.5)
+            )
+            .shadow(color: shadowColor, radius: shadowRadius, y: shadowYOffset)
+    }
+}
+
+struct ClipinKeycap: View {
+    let key: String
+    let foreground: Color
+    let background: Color
+
+    var body: some View {
+        Text(key)
+            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(background)
+            )
+    }
+}
+
 struct ClipinGlassPalette {
     let shellTintTop: Color
     let shellTintBottom: Color

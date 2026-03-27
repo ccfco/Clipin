@@ -156,26 +156,13 @@ struct SearchBar: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                .fill(.regularMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                        .fill(glass.controlFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                        .strokeBorder(glass.controlStroke, lineWidth: 0.5)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [glass.shellHighlight.opacity(colorScheme == .dark ? 0.2 : 0.5), Color.clear],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                )
+            ClipinRoundedSurface(
+                cornerRadius: ClipinChrome.searchCornerRadius,
+                material: .regularMaterial,
+                tint: glass.controlFill,
+                stroke: glass.controlStroke,
+                highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.2 : 0.5)
+            )
         )
         .padding(.horizontal, 14)
         .padding(.top, 8)

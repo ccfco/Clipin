@@ -125,34 +125,32 @@ struct MainPanel: View {
             itemList
                 .frame(width: 292)
                 .background(
-                    RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                        .fill(.thinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                                .fill(glass.sidebarTint)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                                .strokeBorder(glass.controlStroke, lineWidth: 0.5)
-                        )
-                        .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
+                    ClipinRoundedSurface(
+                        cornerRadius: ClipinChrome.sectionCornerRadius,
+                        material: .thinMaterial,
+                        tint: glass.sidebarTint,
+                        stroke: glass.controlStroke,
+                        highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.08 : 0.24),
+                        shadowColor: .black.opacity(0.1),
+                        shadowRadius: 20,
+                        shadowYOffset: 10
+                    )
                 )
 
             PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
-                    RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                        .fill(.regularMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                                .fill(glass.detailTint)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                                .strokeBorder(glass.controlStroke, lineWidth: 0.5)
-                        )
-                        .shadow(color: .black.opacity(0.12), radius: 24, y: 12)
+                    ClipinRoundedSurface(
+                        cornerRadius: ClipinChrome.sectionCornerRadius,
+                        material: .regularMaterial,
+                        tint: glass.detailTint,
+                        stroke: glass.controlStroke,
+                        highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.10 : 0.28),
+                        shadowColor: .black.opacity(0.12),
+                        shadowRadius: 24,
+                        shadowYOffset: 12
+                    )
                 )
         }
         .padding(.horizontal, 14)
@@ -251,12 +249,6 @@ struct MainPanel: View {
             Rectangle()
                 .fill(.ultraThinMaterial)
                 .overlay(glass.chromeTint)
-                .overlay(
-                    Rectangle()
-                        .frame(height: 0.5)
-                        .foregroundColor(glass.separatorLine),
-                    alignment: .top
-                )
         )
     }
 
@@ -277,7 +269,7 @@ struct MainPanel: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
-            keycap(
+            ClipinKeycap(
                 key: key,
                 foreground: hierarchy.command.ink.opacity(0.76),
                 background: hierarchy.command.keycapFill
@@ -287,28 +279,17 @@ struct MainPanel: View {
         .padding(.trailing, 11)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
-                        .fill(hierarchy.command.fill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [glass.shellHighlight.opacity(colorScheme == .dark ? 0.18 : 0.34), Color.clear],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
-                        .strokeBorder(hierarchy.command.stroke, lineWidth: 0.75)
-                )
+            ClipinRoundedSurface(
+                cornerRadius: ClipinChrome.primaryBadgeCornerRadius,
+                material: .ultraThinMaterial,
+                tint: hierarchy.command.fill,
+                stroke: hierarchy.command.stroke,
+                highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.18 : 0.34),
+                shadowColor: .black.opacity(colorScheme == .dark ? 0.14 : 0.05),
+                shadowRadius: 8,
+                shadowYOffset: 3
+            )
         )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.14 : 0.05), radius: 8, y: 3)
     }
 
     private func keyBadge(label: String, key: String, emphasized: Bool = false) -> some View {
@@ -316,7 +297,7 @@ struct MainPanel: View {
             Text(LocalizedStringKey(label))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(emphasized ? glass.emphasisInk : Color.secondary)
-            keycap(
+            ClipinKeycap(
                 key: key,
                 foreground: emphasized ? glass.emphasisInk.opacity(0.82) : Color(nsColor: .tertiaryLabelColor),
                 background: emphasized ? glass.controlFill : glass.keycapTint
@@ -333,18 +314,6 @@ struct MainPanel: View {
                 )
         )
         .shadow(color: emphasized ? glass.primaryActionGlow.opacity(0.35) : .clear, radius: 10, y: 4)
-    }
-
-    private func keycap(key: String, foreground: Color, background: Color) -> some View {
-        Text(key)
-            .font(.system(size: 10.5, weight: .medium, design: .rounded))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-            .background(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(background)
-            )
     }
 }
 
