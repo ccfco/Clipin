@@ -804,10 +804,14 @@ struct SettingsView: View {
         }
     }
 
-    private func relativeString(from date: Date, to now: Date) -> String {
+    private static let _relativeFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .full
-        return f.localizedString(for: date, relativeTo: now)
+        return f
+    }()
+
+    private func relativeString(from date: Date, to now: Date) -> String {
+        Self._relativeFormatter.localizedString(for: date, relativeTo: now)
     }
 
     private func abbreviatedPath(_ path: String) -> String {

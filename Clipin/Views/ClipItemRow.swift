@@ -4,7 +4,7 @@ import AppKit
 /// 检测十六进制颜色字符串，返回 SwiftUI Color（#RGB / #RRGGBB / #RRGGBBAA）
 func detectHexColor(in text: String) -> Color? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard trimmed.hasPrefix("#"), (4...9).contains(trimmed.count) else { return nil }
+    guard trimmed.hasPrefix("#"), [4, 7, 9].contains(trimmed.count) else { return nil }
     let hex = String(trimmed.dropFirst())
     guard hex.allSatisfy(\.isHexDigit) else { return nil }
 
