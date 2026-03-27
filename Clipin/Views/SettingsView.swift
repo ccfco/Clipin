@@ -25,6 +25,21 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .autoBackup: return "icloud.and.arrow.up"
         }
     }
+
+    var summary: LocalizedStringKey {
+        switch self {
+        case .general:
+            return "Fine-tune keyboard behavior, launch defaults, and how Clipin looks."
+        case .privacy:
+            return "Control which clipboard writes are ignored so sensitive or noisy content stays out."
+        case .retention:
+            return "Set how long history stays around and when unpinned items should be trimmed."
+        case .transfer:
+            return "Move clipboard history in or out of Clipin without losing your current library."
+        case .autoBackup:
+            return "Keep an automatic JSON backup on disk so history can be restored if needed."
+        }
+    }
 }
 
 @MainActor
@@ -142,14 +157,14 @@ struct SettingsView: View {
     var body: some View {
         ZStack {
             windowBackdrop
-            HStack(spacing: 14) {
+            HStack(spacing: 16) {
                 sidebar
                 contentArea
                     .animation(ClipinMotion.panel, value: navigation.selectedTab)
             }
-            .padding(14)
+            .padding(16)
         }
-        .frame(width: 680, height: 600)
+        .frame(width: 720, height: 608)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let notice {
                 noticeView(notice)
@@ -179,7 +194,7 @@ struct SettingsView: View {
         List(SettingsTab.allCases, selection: selectedSidebarTab) { tab in
             settingsSidebarRow(tab)
                 .tag(tab)
-                .listRowInsets(EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 10))
+                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
         }
@@ -195,7 +210,7 @@ struct SettingsView: View {
                 glass: glass
             )
         )
-        .frame(width: 188)
+        .frame(width: 208)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
@@ -215,8 +230,8 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
         .background(
             ClipinSelectableRowBackground(
                 isSelected: isSelected,
@@ -240,10 +255,8 @@ struct SettingsView: View {
     private var contentArea: some View {
         let tab = navigation.selectedTab
         return ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text(tab.title)
-                    .font(.system(size: 20, weight: .semibold))
-                    .padding(.bottom, 2)
+            VStack(alignment: .leading, spacing: 18) {
+                detailHeader(for: tab)
 
                 switch tab {
                 case .general:    generalContent
@@ -254,7 +267,7 @@ struct SettingsView: View {
                 }
             }
             .id(tab)
-            .padding(20)
+            .padding(22)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(
@@ -269,41 +282,60 @@ struct SettingsView: View {
     // MARK: - General
 
     private var generalContent: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
             contentGroup {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Global shortcut")
-                        .font(.system(size: 13, weight: .medium))
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Global shortcut")
+                            .font(.system(size: 13, weight: .medium))
 
-                    HStack(spacing: 10) {
-                        ShortcutRecorder(
-                            shortcut: Binding(
-                                get: { settings.shortcut },
-                                set: { settings.shortcut = $0 }
-                            ),
-                            glass: glass
-                        )
-                        .frame(width: 180, height: 34)
+                        HStack(spacing: 10) {
+                            ShortcutRecorder(
+                                shortcut: Binding(
+                                    get: { settings.shortcut },
+                                    set: { settings.shortcut = $0 }
+                                ),
+                                glass: glass
+                            )
+                            .frame(width: 180, height: 34)
 
-                        Button("Reset") {
-                            settings.shortcut = .default
-                            showNotice("Shortcut reset to \(settings.shortcut.displayString).")
+                            Button("Reset") {
+                                settings.shortcut = .default
+                                showNotice("Shortcut reset to \(settings.shortcut.displayString).")
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
+
+                        Text("Click the field and press the new shortcut. At least one modifier key is required.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
                     }
 
-                    Text("Click the field and press the new shortcut. At least one modifier key is required.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                    groupDivider
+
+                    toggleSettingRow(
+                        "Launch Clipin at login",
+                        description: "Clipin launches automatically after you sign in.",
+                        note: settings.launchAtLoginNote,
+                        isOn: Binding(
+                            get: { settings.launchAtLoginEnabled },
+                            set: { settings.setLaunchAtLogin($0) }
+                        )
+                    )
+
+                    groupDivider
+
+                    toggleSettingRow(
+                        "Remember panel position between sessions",
+                        description: "Reopen the panel where you last moved it, even after restarting Clipin.",
+                        isOn: $settings.rememberPanelPosition
+                    )
                 }
             }
 
             contentGroup {
-                VStack(spacing: 18) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text("Appearance")
-                            .font(.system(size: 13, weight: .medium))
-                        Spacer()
+                VStack(alignment: .leading, spacing: 18) {
+                    settingFieldRow("Appearance") {
                         Picker("", selection: $settings.appearanceOverride) {
                             ForEach(AppearanceOverride.allCases, id: \.self) { mode in
                                 Text(mode.displayName).tag(mode)
@@ -311,75 +343,34 @@ struct SettingsView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
-                        .frame(width: 200)
+                        .frame(width: 220)
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("Theme")
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                            Picker("", selection: $settings.visualTheme) {
-                                ForEach(VisualTheme.allCases, id: \.self) { theme in
-                                    Text(theme.displayName).tag(theme)
-                                }
+                    groupDivider
+
+                    settingFieldRow("Theme", description: "Adjust the panel tint while keeping native materials and shared chrome.") {
+                        Picker("", selection: $settings.visualTheme) {
+                            ForEach(VisualTheme.allCases, id: \.self) { theme in
+                                Text(theme.displayName).tag(theme)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.segmented)
-                            .frame(width: 200)
                         }
-                        Text("Changes the panel tint while keeping native materials.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                        .labelsHidden()
+                        .pickerStyle(.segmented)
+                        .frame(width: 220)
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("Language")
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                            Picker("", selection: $settings.appLanguage) {
-                                ForEach(AppLanguage.allCases, id: \.self) { lang in
-                                    Text(lang.displayName).tag(lang)
-                                }
+                    groupDivider
+
+                    settingFieldRow("Language", description: "Restart Clipin after changing the app language.") {
+                        Picker("", selection: $settings.appLanguage) {
+                            ForEach(AppLanguage.allCases, id: \.self) { lang in
+                                Text(lang.displayName).tag(lang)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(width: 160)
                         }
-                        Text("Restart Clipin to apply the language change.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 170)
                     }
-                }
-            }
-
-            contentGroup {
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle(
-                        "Launch Clipin at login",
-                        isOn: Binding(
-                            get: { settings.launchAtLoginEnabled },
-                            set: { settings.setLaunchAtLogin($0) }
-                        )
-                    )
-                    .toggleStyle(.switch)
-
-                    if let note = settings.launchAtLoginNote {
-                        Text(note)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            contentGroup {
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle("Remember panel position between sessions", isOn: $settings.rememberPanelPosition)
-                        .toggleStyle(.switch)
-                    Text("When enabled, the panel reopens at the last position you moved it to, even after restarting Clipin.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
                 }
             }
         }
@@ -388,38 +379,25 @@ struct SettingsView: View {
     // MARK: - Privacy
 
     private var privacyContent: some View {
-        VStack(spacing: 14) {
-            contentGroup {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "checkmark.shield.fill")
-                        .foregroundStyle(.green)
-                        .font(.system(size: 14))
-                        .frame(width: 16, alignment: .center)
-                        .padding(.top, 1)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Sensitive content is always excluded")
-                            .font(.system(size: 13, weight: .medium))
-                        Text("When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+        VStack(spacing: 16) {
+            contentGroup(role: .control, padding: 14) {
+                infoCallout(
+                    icon: "checkmark.shield.fill",
+                    tint: .green,
+                    title: "Sensitive content is always excluded",
+                    message: "When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off."
+                )
             }
 
             contentGroup {
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle(
-                        "Filter out drag-and-drop and app-generated clipboard writes",
-                        isOn: Binding(
-                            get: { settings.skipTransientContent },
-                            set: { settings.skipTransientContent = $0 }
-                        )
+                toggleSettingRow(
+                    "Filter out drag-and-drop and app-generated clipboard writes",
+                    description: "Skip clipboard writes that were not triggered by an explicit copy action so noisy transient items do not enter history.",
+                    isOn: Binding(
+                        get: { settings.skipTransientContent },
+                        set: { settings.skipTransientContent = $0 }
                     )
-                    .toggleStyle(.switch)
-                    Text("Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
+                )
             }
         }
     }
@@ -457,51 +435,42 @@ struct SettingsView: View {
     }
 
     private var retentionContent: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
             contentGroup {
-                VStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("Keep unpinned history for")
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                            Picker("", selection: normalizedRetentionDays) {
-                                ForEach(Self.retentionOptions, id: \.days) { option in
-                                    Text(LocalizedStringKey(option.label)).tag(option.days)
-                                }
+                VStack(alignment: .leading, spacing: 18) {
+                    settingFieldRow("Keep unpinned history for", description: "Pinned items are always preserved.") {
+                        Picker("", selection: normalizedRetentionDays) {
+                            ForEach(Self.retentionOptions, id: \.days) { option in
+                                Text(LocalizedStringKey(option.label)).tag(option.days)
                             }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(width: 110)
                         }
-                        Text("Pinned items are always preserved.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 120)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("Max unpinned items")
-                                .font(.system(size: 13, weight: .medium))
-                            Spacer()
-                            Picker("", selection: normalizedMaxItems) {
-                                ForEach(Self.maxItemsOptions, id: \.count) { option in
-                                    Text(LocalizedStringKey(option.label)).tag(option.count)
-                                }
-                            }
-                            .labelsHidden()
-                            .pickerStyle(.menu)
-                            .frame(width: 110)
-                        }
-                        Text("Oldest unpinned items are trimmed first.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
 
-            contentGroup {
-                Button("Run Cleanup Now") { runCleanup() }
-                    .buttonStyle(.bordered)
+                    groupDivider
+
+                    settingFieldRow("Max unpinned items", description: "Oldest unpinned items are trimmed first when the limit is reached.") {
+                        Picker("", selection: normalizedMaxItems) {
+                            ForEach(Self.maxItemsOptions, id: \.count) { option in
+                                Text(LocalizedStringKey(option.label)).tag(option.count)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 120)
+                    }
+
+                    groupDivider
+
+                    actionRow(
+                        "Run Cleanup Now",
+                        description: "Apply the current retention rules immediately and remove outdated unpinned items.",
+                        buttonTitle: "Run Cleanup Now",
+                        action: runCleanup
+                    )
+                }
             }
         }
     }
@@ -510,21 +479,22 @@ struct SettingsView: View {
 
     private var transferContent: some View {
         contentGroup {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Export your clipboard history as JSON, or restore from a previous export.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                    Text("Existing items are kept during import. Duplicates are skipped.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                HStack(spacing: 10) {
-                    Button("Export JSON…") { exportArchive() }
-                        .buttonStyle(.bordered)
-                    Button("Import JSON…") { importArchive() }
-                        .buttonStyle(.bordered)
-                }
+            VStack(alignment: .leading, spacing: 18) {
+                actionRow(
+                    "Export clipboard history",
+                    description: "Create a JSON snapshot of your current history so it can be archived or moved elsewhere.",
+                    buttonTitle: "Export JSON…",
+                    action: exportArchive
+                )
+
+                groupDivider
+
+                actionRow(
+                    "Import from an existing export",
+                    description: "Bring items back from a previous JSON export. Existing items stay in place and duplicates are skipped.",
+                    buttonTitle: "Import JSON…",
+                    action: importArchive
+                )
             }
         }
     }
@@ -532,82 +502,87 @@ struct SettingsView: View {
     // MARK: - Auto Backup
 
     private var autoBackupContent: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
             contentGroup {
-                VStack(alignment: .leading, spacing: 14) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Automatically export clipboard history to a folder on a schedule.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                        Text("Saves as clipin-backup.json. Put it in iCloud Drive, Dropbox, or any folder.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                    Toggle("Enable auto backup", isOn: $settings.autoBackupEnabled)
-                }
+                toggleSettingRow(
+                    "Enable auto backup",
+                    description: "Export history as clipin-backup.json on a schedule. Store it in iCloud Drive, Dropbox, or any folder you trust.",
+                    isOn: $settings.autoBackupEnabled
+                )
             }
 
             if settings.autoBackupEnabled {
                 contentGroup {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Backup folder")
-                            .font(.system(size: 12, weight: .medium))
-                        if let path = settings.autoBackupFolderPath {
-                            Text(abbreviatedPath(path))
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-                        HStack(spacing: 8) {
-                            Button(settings.autoBackupFolderPath == nil ? "Choose Folder…" : "Change…") {
-                                chooseBackupFolder()
-                            }
-                            .buttonStyle(.bordered)
-                            Button("Use iCloud Drive") { useICloudDrive() }
-                                .buttonStyle(.bordered)
-                        }
-                    }
-                }
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Backup folder")
+                                .font(.system(size: 13, weight: .medium))
+                            Text(
+                                settings.autoBackupFolderPath.map(abbreviatedPath)
+                                    ?? "Choose a destination folder for clipin-backup.json."
+                            )
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
 
-                contentGroup {
-                    HStack {
-                        Text("Frequency")
-                            .font(.system(size: 12, weight: .medium))
-                        Spacer()
-                        Picker("", selection: $settings.autoBackupInterval) {
-                            ForEach(AutoBackupInterval.allCases, id: \.self) { interval in
-                                Text(interval.displayName).tag(interval)
+                            HStack(spacing: 8) {
+                                Button(settings.autoBackupFolderPath == nil ? "Choose Folder…" : "Change…") {
+                                    chooseBackupFolder()
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button("Use iCloud Drive") { useICloudDrive() }
+                                    .buttonStyle(.bordered)
                             }
                         }
-                        .labelsHidden()
-                        .frame(width: 180)
-                    }
-                }
 
-                contentGroup {
-                    HStack(spacing: 8) {
-                        if let error = autoBackup.lastBackupError {
-                            Circle().fill(Color.red).frame(width: 6, height: 6)
-                            Text("Backup failed: \(error)")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.red)
-                        } else if let date = autoBackup.lastBackupAt {
-                            Circle().fill(Color.green).frame(width: 6, height: 6)
-                            Text("Last backup: \(relativeString(from: date, to: now))")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Circle().fill(Color.secondary.opacity(0.4)).frame(width: 6, height: 6)
-                            Text("No backup yet")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
+                        groupDivider
+
+                        settingFieldRow("Frequency", description: "Choose how often Clipin writes a fresh backup file.") {
+                            Picker("", selection: $settings.autoBackupInterval) {
+                                ForEach(AutoBackupInterval.allCases, id: \.self) { interval in
+                                    Text(interval.displayName).tag(interval)
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: 190)
                         }
-                        Spacer()
-                        if settings.autoBackupFolderPath != nil {
-                            Button("Backup Now") { autoBackup.backupNow() }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
+
+                        groupDivider
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Backup status")
+                                .font(.system(size: 13, weight: .medium))
+
+                            contentGroup(role: .control, padding: 14) {
+                                HStack(spacing: 10) {
+                                    if let error = autoBackup.lastBackupError {
+                                        Circle().fill(Color.red).frame(width: 7, height: 7)
+                                        Text("Backup failed: \(error)")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.red)
+                                    } else if let date = autoBackup.lastBackupAt {
+                                        Circle().fill(Color.green).frame(width: 7, height: 7)
+                                        Text("Last backup: \(relativeString(from: date, to: now))")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.secondary)
+                                    } else {
+                                        Circle().fill(Color.secondary.opacity(0.4)).frame(width: 7, height: 7)
+                                        Text("No backup yet")
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.tertiary)
+                                    }
+
+                                    Spacer()
+
+                                    if settings.autoBackupFolderPath != nil {
+                                        Button("Backup Now") { autoBackup.backupNow() }
+                                            .buttonStyle(.bordered)
+                                            .controlSize(.small)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -616,6 +591,18 @@ struct SettingsView: View {
     }
 
     // MARK: - Window backdrop & helpers
+
+    private func detailHeader(for tab: SettingsTab) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(tab.title)
+                .font(.system(size: 20, weight: .semibold))
+
+            Text(tab.summary)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 520, alignment: .leading)
+        }
+    }
 
     private var windowBackdrop: some View {
         Rectangle()
@@ -644,13 +631,115 @@ struct SettingsView: View {
             .ignoresSafeArea()
     }
 
-    private func contentGroup<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private var groupDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.06))
+            .frame(height: 1)
+    }
+
+    private func settingFieldRow<Control: View>(
+        _ title: String,
+        description: String? = nil,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        HStack(alignment: description == nil ? .firstTextBaseline : .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+
+                if let description {
+                    Text(description)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            control()
+        }
+    }
+
+    private func toggleSettingRow(
+        _ title: String,
+        description: String,
+        note: String? = nil,
+        isOn: Binding<Bool>
+    ) -> some View {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+
+                Text(description)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                if let note {
+                    Text(note)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("", isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+        }
+    }
+
+    private func actionRow(
+        _ title: String,
+        description: String,
+        buttonTitle: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+
+                Text(description)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(buttonTitle, action: action)
+                .buttonStyle(.bordered)
+        }
+    }
+
+    private func infoCallout(icon: String, tint: Color, title: String, message: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .foregroundStyle(tint)
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 18, alignment: .center)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func contentGroup<Content: View>(
+        role: ClipinSurfaceRole = .grouped,
+        padding: CGFloat = 16,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(padding)
             .background(
                 ClipinSurfaceBackground(
-                    role: .grouped,
+                    role: role,
                     cornerRadius: ClipinChrome.cardCornerRadius,
                     glass: glass
                 )
