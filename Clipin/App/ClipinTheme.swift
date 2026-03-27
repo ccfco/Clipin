@@ -68,6 +68,72 @@ struct ClipinGlassPalette {
     let primaryActionKeycapTint: Color
 }
 
+/// 主面板的任务层级语义：
+/// - scope: 搜索与筛选，只负责限定范围
+/// - selection: 左侧当前对象，负责建立列表到预览的映射
+/// - command: 底部命令提示，说明回车会发生什么，但不与内容争主角
+struct ClipinPanelHierarchy {
+    struct Scope {
+        let fill: Color
+        let stroke: Color
+        let ink: Color
+        let shortcutInk: Color
+    }
+
+    struct Selection {
+        let fill: Color
+        let stroke: Color
+        let ink: Color
+        let secondaryInk: Color
+        let badgeFill: Color
+        let highlight: Color
+    }
+
+    struct Command {
+        let fill: Color
+        let stroke: Color
+        let ink: Color
+        let iconFill: Color
+        let iconInk: Color
+        let keycapFill: Color
+    }
+
+    let scope: Scope
+    let selection: Selection
+    let command: Command
+}
+
+extension ClipinPanelHierarchy {
+    static func make(glass: ClipinGlassPalette, colorScheme: ColorScheme) -> Self {
+        let isDark = colorScheme == .dark
+
+        return Self(
+            scope: Scope(
+                fill: glass.controlFill.opacity(isDark ? 0.96 : 0.90),
+                stroke: glass.controlStroke.opacity(isDark ? 0.96 : 0.78),
+                ink: Color.primary.opacity(isDark ? 0.92 : 0.78),
+                shortcutInk: Color.secondary.opacity(isDark ? 0.58 : 0.48)
+            ),
+            selection: Selection(
+                fill: glass.emphasisFill,
+                stroke: glass.emphasisStroke,
+                ink: glass.emphasisInk.opacity(isDark ? 0.98 : 0.92),
+                secondaryInk: glass.emphasisInk.opacity(isDark ? 0.64 : 0.58),
+                badgeFill: glass.keycapTint.opacity(isDark ? 1.0 : 0.92),
+                highlight: glass.emphasisFill.opacity(isDark ? 1.0 : 0.85)
+            ),
+            command: Command(
+                fill: glass.controlFill.opacity(isDark ? 0.98 : 0.92),
+                stroke: glass.controlStroke.opacity(isDark ? 0.98 : 0.82),
+                ink: Color.primary.opacity(isDark ? 0.96 : 0.84),
+                iconFill: glass.emphasisStrongFill.opacity(isDark ? 0.92 : 0.82),
+                iconInk: glass.emphasisOnStrongFill.opacity(isDark ? 0.96 : 0.90),
+                keycapFill: glass.keycapTint.opacity(isDark ? 1.0 : 0.88)
+            )
+        )
+    }
+}
+
 extension ClipinGlassPalette {
     static func make(theme: VisualTheme, colorScheme: ColorScheme) -> Self {
         let isDark = colorScheme == .dark

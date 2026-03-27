@@ -10,6 +10,10 @@ struct MainPanel: View {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
     }
 
+    private var hierarchy: ClipinPanelHierarchy {
+        .make(glass: glass, colorScheme: colorScheme)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             headerBar
@@ -260,23 +264,23 @@ struct MainPanel: View {
         HStack(spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(Color.white.opacity(colorScheme == .dark ? 0.18 : 0.26))
+                    .fill(hierarchy.command.iconFill)
                 Image(systemName: "arrow.up.forward.app.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.96))
+                    .foregroundStyle(hierarchy.command.iconInk)
             }
             .frame(width: 25, height: 25)
 
             Text(label)
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(Color.white)
+                .foregroundStyle(hierarchy.command.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
 
             keycap(
                 key: key,
-                foreground: Color.white.opacity(0.82),
-                background: glass.primaryActionKeycapTint
+                foreground: hierarchy.command.ink.opacity(0.76),
+                background: hierarchy.command.keycapFill
             )
         }
         .padding(.leading, 10)
@@ -284,22 +288,16 @@ struct MainPanel: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
-                .fill(.thinMaterial)
+                .fill(.ultraThinMaterial)
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [glass.primaryActionTintTop, glass.primaryActionTintBottom],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
+                        .fill(hierarchy.command.fill)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
                         .fill(
                             LinearGradient(
-                                colors: [glass.primaryActionHighlight, Color.clear],
+                                colors: [glass.shellHighlight.opacity(colorScheme == .dark ? 0.18 : 0.34), Color.clear],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -307,11 +305,10 @@ struct MainPanel: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
-                        .strokeBorder(glass.emphasisStroke.opacity(colorScheme == .dark ? 0.9 : 1), lineWidth: 0.75)
+                        .strokeBorder(hierarchy.command.stroke, lineWidth: 0.75)
                 )
         )
-        .shadow(color: glass.primaryActionGlow, radius: 18, y: 10)
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 10, y: 4)
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.14 : 0.05), radius: 8, y: 3)
     }
 
     private func keyBadge(label: String, key: String, emphasized: Bool = false) -> some View {
@@ -376,6 +373,10 @@ private struct ItemListView: View {
 
     private var glass: ClipinGlassPalette {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
+    }
+
+    private var hierarchy: ClipinPanelHierarchy {
+        .make(glass: glass, colorScheme: colorScheme)
     }
 
     /// 预计算 id -> 序号索引，O(n) 构建，O(1) 查找
@@ -443,14 +444,15 @@ private struct ItemListView: View {
             searchQuery: searchQuery,
             isSelected: isSelected,
             isHovered: isHovered,
-            glass: glass
+            hierarchy: hierarchy
         )
+        .padding(.horizontal, 8)
         .id(item.id)
         .background(
             RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                 .fill(
                     isSelected
-                        ? glass.emphasisFill
+                        ? hierarchy.selection.fill
                         : isHovered
                             ? glass.hoverFill
                             : Color.clear
@@ -459,14 +461,13 @@ private struct ItemListView: View {
                     RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                         .strokeBorder(
                             isSelected
-                                ? glass.emphasisStroke
+                                ? hierarchy.selection.stroke
                                 : isHovered
                                     ? glass.hoverStroke
                                     : Color.clear,
                             lineWidth: 0.5
                         )
                 )
-                .padding(.horizontal, 8)
         )
         .animation(ClipinMotion.selection, value: isSelected)
         .animation(ClipinMotion.feedback, value: isHovered)

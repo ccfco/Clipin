@@ -120,6 +120,10 @@ struct SearchBar: View {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
     }
 
+    private var hierarchy: ClipinPanelHierarchy {
+        .make(glass: glass, colorScheme: colorScheme)
+    }
+
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
@@ -197,19 +201,19 @@ struct SearchBar: View {
             HStack(spacing: 3) {
                 Text(label)
                     .font(.system(size: 12, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? glass.emphasisInk : Color.secondary.opacity(0.88))
+                    .foregroundStyle(isActive ? hierarchy.scope.ink : Color.secondary.opacity(0.88))
                 Text(shortcut)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isActive ? glass.emphasisInk.opacity(0.62) : Color(nsColor: .quaternaryLabelColor))
+                    .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : Color(nsColor: .quaternaryLabelColor))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? glass.emphasisFill : Color.clear)
+                    .fill(isActive ? hierarchy.scope.fill : Color.clear)
                     .overlay(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(isActive ? glass.emphasisStroke : Color.clear, lineWidth: 0.5)
+                            .strokeBorder(isActive ? hierarchy.scope.stroke : Color.clear, lineWidth: 0.5)
                     )
             )
         }

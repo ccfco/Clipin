@@ -1,5 +1,20 @@
 # Clipin Polish Log
 
+## 2026-03-27
+
+### Content-first attention hierarchy in the main panel
+
+- Stopped treating the issue as isolated tint tuning and introduced a shared `ClipinPanelHierarchy` semantic model for `scope`, `selection`, and `command`, so the panel's task hierarchy now lives in one place instead of leaking through ad-hoc color picks.
+- Demoted the top filter pills to quiet scope controls, rebuilt list selection as a theme-tinted selected surface instead of a neutral row plus side rail, and recast the footer `Paste to…` chip as a command hint rather than the primary visual button.
+- Simplified the right preview pane back to a single surface after visual review: removed the extra nested preview shell, dropped the hero-mode typography, and kept text/URL preview content on one consistent reading size so the experience stays continuous while navigating.
+- Flattened the lower metadata area into the same preview surface with a separator instead of another card, and then removed the separate selected-row rail entirely so text, file, and image rows all share one consistent selection treatment.
+- Rebuilt the info panel from stacked two-line fields into a compact inline metadata grid with a dedicated `InfoItem` model, so secondary details use less vertical space and behave more like dense metadata than mini content blocks.
+
+Acceptance:
+
+- `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Debug -derivedDataPath /tmp/ClipinDerived build`
+- `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release -derivedDataPath /tmp/ClipinDerivedRelease build`
+
 ## 2026-03-24
 
 ### Keyboard navigation and double-click paste

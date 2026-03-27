@@ -5,8 +5,8 @@
 <h1 align="center">Clipin</h1>
 
 <p align="center">
-  快速搜索、连续粘贴、键盘优先的 macOS 剪贴板管理器<br>
-  <sub>A keyboard-first clipboard manager for macOS, built with Rust + SwiftUI.</sub>
+  轻量、快速、键盘优先的 macOS 剪贴板管理器<br>
+  <sub>A tiny, keyboard-first clipboard manager for macOS, built to stay fast and stay out of your way.</sub>
 </p>
 
 <p align="center">
@@ -21,21 +21,33 @@
   <a href="#安装">下载</a> · <a href="#快捷键">快捷键</a> · <a href="#路线图">路线图</a> · <a href="#english">English</a>
 </p>
 
----
+<p align="center">
+  小体积原生应用 · 本地优先 · 菜单栏常驻 · 为连续粘贴而设计
+</p>
 
-> TODO: Add screenshot / GIF
+## 为什么是 Clipin
 
----
+`Clipin` 不是一个把功能越堆越多的“剪贴板工具箱”，而是一个为高频复制/粘贴场景优化的原生 macOS 工具。它的目标很直接：打开快、搜索快、粘贴快，长期常驻时尽量少打扰你，也尽量少拖累系统。
+
+- **包体积小，安装负担低** — 当前仓库本地 `Release` 构建的 `Clipin.app` 约 `6.6 MB`，压缩后约 `2.7 MB`。原生 `SwiftUI + Rust` 架构，没有 Electron 级运行时包袱。
+- **搜索和切换很快** — `Rust + SQLite + FTS5 trigram` 做中英文全文检索，输入即查，适合把剪贴板当成可搜索的短期记忆。
+- **为低负担常驻而设计** — 主列表只加载轻量摘要，右侧详情按需异步读取，避免把整段长文本和全部历史一次性塞进 UI。
+- **对系统和注意力都更克制** — 菜单栏形态，不出现在 Dock；支持保留策略、数量上限和去重，减少历史膨胀与无效噪音。
+- **真正键盘优先** — 打开、筛选、执行动作、连续粘贴都能靠键盘完成，用起来更像 launcher，而不是只能翻历史的面板。
 
 ## 功能亮点
 
-🔍 **即时搜索** — 中英文全文检索（FTS5 trigram），输入即高亮匹配
+🪶 **轻量原生** — 原生 `SwiftUI` 外壳 + `Rust` 核心，安装包和运行负担都更克制，适合长期常驻
 
-⌨️ **键盘优先** — 方向键导航、回车粘贴、⌘1-9 快速粘贴前 9 条
+🔍 **即时搜索** — 中英文全文检索（FTS5 trigram），输入即匹配，短查询自动回退 `LIKE`
+
+⌨️ **键盘优先** — 方向键导航、回车粘贴、`⌘1-9` 快速粘贴前 9 条
 
 📌 **连续粘贴** — ⌘⇧L 开启 Stay 模式，跨应用点击输入框后面板自动夺回焦点，连续选择并粘贴
 
-🎯 **动作面板** — ⌘K 打开命令面板，键入即筛选，空态下也可用
+🎯 **动作面板** — `⌘K` 打开命令面板，键入即筛选，空态下也始终可用
+
+🧠 **低负担列表** — 列表只展示轻量摘要，完整内容按需加载，大文本历史也不容易拖慢面板
 
 🔒 **隐私优先** — 数据全部本地 SQLite 存储，自动跳过密码管理器等敏感剪贴板内容
 
@@ -43,7 +55,7 @@
 
 ♾️ **长期存储** — 支持 7 天到永久保留，条目上限最高 50K 或不限
 
-⚡ **Rust 驱动** — Rust + SQLite + FTS5 存储引擎，毫秒级响应，Swift 6 strict concurrency
+⚡ **为常驻优化** — 菜单栏应用，不出现在 Dock；默认流程克制，尽量把打扰感压到最低
 
 ## 安装
 
@@ -150,16 +162,15 @@ Clipin/
 
 ## What is Clipin?
 
-A keyboard-first clipboard manager for macOS, built with Rust + SwiftUI.
+Clipin is a tiny, keyboard-first clipboard manager for macOS. It is built to launch fast, search fast, and stay quietly in your menu bar without feeling heavy.
 
-**Highlights:**
-- Instant full-text search (FTS5 trigram) with Chinese & English support
-- Keyboard-driven: arrow keys, Enter to paste, ⌘1-9 quick paste
-- Stay mode (⌘⇧L): continuous paste across apps without extra hotkey presses
-- Action palette (⌘K): type to filter commands
-- Privacy-first: all data stored locally, sensitive clipboard content auto-skipped
-- Long-term storage: keep history forever with configurable retention
-- Rust-powered: SQLite + FTS5 engine, millisecond response times
+**Why it stands out:**
+- Small native footprint: current local Release build is about `6.6 MB` (`~2.7 MB` zipped)
+- Fast search: `Rust + SQLite + FTS5 trigram` with Chinese and English full-text lookup
+- Low-overhead UI: lightweight list items in the main panel, full details loaded on demand
+- Keyboard-first flow: arrow keys, Enter to paste, `⌘1-9` quick paste, `⌘K` action palette
+- Stay mode (`⌘⇧L`): continuous paste across apps without repeated hotkey presses
+- Privacy-first: all data stays local, and sensitive clipboard content is automatically skipped
 
 ## Install
 

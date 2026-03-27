@@ -19,11 +19,21 @@ struct PreviewPane: View {
             if let item {
                 VStack(spacing: 0) {
                     content(for: item)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 28)
+                        .padding(.bottom, 20)
+
+                    Rectangle()
+                        .fill(glass.separatorLine)
+                        .frame(height: 0.5)
+                        .padding(.horizontal, 20)
+
                     infoSection(for: item)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 16)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 18)
+                        .padding(.bottom, 20)
                 }
-                .padding(.top, 4)
             } else {
                 placeholder(
                     icon: "doc.text.magnifyingglass",
@@ -41,16 +51,15 @@ struct PreviewPane: View {
         case .text:
             if let color = detectHexColor(in: item.content) {
                 ColorSwatchPreview(color: color, originalText: item.content)
-                    .padding(20)
+                    .frame(maxWidth: 460, alignment: .leading)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
-                textPreviewBody(
+                TextPreviewBody(
                     text: item.content,
-                    font: preferredTextFont(for: item.content),
+                    font: previewTextFont(),
                     searchQuery: searchQuery
                 )
                 .environmentObject(vm)
-                .padding(28)
             }
 
         case .url:
@@ -62,15 +71,13 @@ struct PreviewPane: View {
                     }
                 }
 
-                textPreviewBody(
+                TextPreviewBody(
                     text: item.content,
-                    font: preferredTextFont(for: item.content, baseSize: 13.5),
+                    font: previewTextFont(),
                     searchQuery: searchQuery
                 )
                 .environmentObject(vm)
             }
-            .padding(28)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
         case .image:
             ScrollView {
@@ -85,7 +92,6 @@ struct PreviewPane: View {
                     unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
                 }
             }
-            .padding(28)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
         case .file:
@@ -128,114 +134,144 @@ struct PreviewPane: View {
                     .frame(minHeight: 80)
                 }
             }
-            .padding(28)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
     private func infoSection(for item: ClipItem) -> some View {
         infoGrid(for: item)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                    .fill(glass.controlFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                            .strokeBorder(glass.controlStroke, lineWidth: 0.5)
-                    )
-            )
     }
 
     private func infoGrid(for item: ClipItem) -> some View {
-        // 收集所有 info 条目，然后均匀分两列（ceil(n/2) 在左，floor(n/2) 在右）
-        var all: [(LocalizedStringKey, String, NSImage?)] = []
+        LazyVGrid(columns: infoGridColumns, alignment: .leading, spacing: 10) {
+            ForEach(infoItems(for: item)) { item in
+                infoRow(item)
+            }
+        }
+    }
 
-        all.append(("Source", item.sourceName ?? NSLocalizedString("Unknown", comment: ""), sourceAppIcon(for: item)))
-        all.append(("Type", typeLabel(item.clipType), nil))
-        if item.isPinned { all.append(("Status", NSLocalizedString("Pinned", comment: ""), nil)) }
+    private var infoGridColumns: [GridItem] {
+        [
+            GridItem(.flexible(minimum: 0), spacing: 24, alignment: .leading),
+            GridItem(.flexible(minimum: 0), spacing: 24, alignment: .leading)
+        ]
+    }
+
+    private func infoItems(for item: ClipItem) -> [InfoItem] {
+        var items: [InfoItem] = []
+
+        items.append(
+            InfoItem(
+                id: "source",
+                label: "Source",
+                value: item.sourceName ?? NSLocalizedString("Unknown", comment: ""),
+                icon: sourceAppIcon(for: item)
+            )
+        )
+        items.append(InfoItem(id: "type", label: "Type", value: typeLabel(item.clipType)))
+
+        if item.isPinned {
+            items.append(InfoItem(id: "status", label: "Status", value: NSLocalizedString("Pinned", comment: "")))
+        }
 
         if item.clipType == .image, let path = item.imagePath {
             if let image = NSImage(contentsOfFile: path),
                let rep = image.representations.first {
                 let w = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
                 let h = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
-                all.append(("Dimensions", "\(w) × \(h)", nil))
+                items.append(InfoItem(id: "dimensions", label: "Dimensions", value: "\(w) × \(h)"))
             }
             if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
                let bytes = attrs[.size] as? Int64 {
-                all.append(("File size", ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file), nil))
+                items.append(
+                    InfoItem(
+                        id: "file_size",
+                        label: "File size",
+                        value: ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                    )
+                )
             }
         }
 
         if item.clipType == .file {
             let paths = FileClipboardContent.paths(from: item.content)
             if paths.count > 1 {
-                all.append(("Items", "\(paths.count)", nil))
+                items.append(InfoItem(id: "items", label: "Items", value: "\(paths.count)"))
             }
-            // 单图片文件：补充尺寸和大小
             if let path = paths.first, paths.count == 1, isImageFile(path) {
                 if let image = NSImage(contentsOfFile: path),
                    let rep = image.representations.first {
                     let w = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
                     let h = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
-                    all.append(("Dimensions", "\(w) × \(h)", nil))
+                    items.append(InfoItem(id: "dimensions", label: "Dimensions", value: "\(w) × \(h)"))
                 }
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: path),
                    let bytes = attrs[.size] as? Int64 {
-                    all.append(("File size", ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file), nil))
+                    items.append(
+                        InfoItem(
+                            id: "file_size",
+                            label: "File size",
+                            value: ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+                        )
+                    )
                 }
             }
         }
 
         if item.clipType == .text || item.clipType == .url {
             let words = item.content.split { $0.isWhitespace || $0.isNewline }.count
-            all.append(("Words", "\(words)", nil))
-            all.append(("Characters", "\(item.charCount)", nil))
+            items.append(InfoItem(id: "words", label: "Words", value: "\(words)"))
+            items.append(InfoItem(id: "characters", label: "Characters", value: "\(item.charCount)"))
         }
 
-        if item.copyCount > 1 { all.append(("Copies", "\(item.copyCount)", nil)) }
-        all.append(("Copied", relativeDate(item.createdAt), nil))
-
-        let mid = (all.count + 1) / 2
-        let leftItems  = Array(all[..<mid])
-        let rightItems = all.count > mid ? Array(all[mid...]) : []
-
-        return HStack(alignment: .top, spacing: 24) {
-            infoColumn(items: leftItems)
-            infoColumn(items: rightItems)
+        if item.copyCount > 1 {
+            items.append(InfoItem(id: "copies", label: "Copies", value: "\(item.copyCount)"))
         }
+        items.append(InfoItem(id: "copied", label: "Copied", value: relativeDate(item.createdAt)))
+
+        return items
     }
 
-    private func infoColumn(items: [(LocalizedStringKey, String, NSImage?)]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, entry in
-                infoRow(entry.0, value: entry.1, icon: entry.2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func infoRow(_ label: LocalizedStringKey, value: String, icon: NSImage? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.system(size: 10, weight: .medium))
+    private func infoRow(_ item: InfoItem) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(item.label)
+                .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.tertiary)
+                .frame(minWidth: 54, idealWidth: 72, maxWidth: 88, alignment: .leading)
+                .lineLimit(1)
 
             HStack(spacing: 6) {
-                if let icon {
+                if let icon = item.icon {
                     Image(nsImage: icon)
                         .resizable()
                         .frame(width: 13, height: 13)
                         .opacity(0.78)
                 }
 
-                Text(value)
+                Text(item.value)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.primary.opacity(0.76))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .textSelection(.enabled)
+                    .help(item.value)
             }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private struct InfoItem: Identifiable {
+        let id: String
+        let label: LocalizedStringKey
+        let value: String
+        let icon: NSImage?
+
+        init(id: String, label: LocalizedStringKey, value: String, icon: NSImage? = nil) {
+            self.id = id
+            self.label = label
+            self.value = value
+            self.icon = icon
         }
     }
 
@@ -312,24 +348,25 @@ struct PreviewPane: View {
         return Self._relativeDateFormatter.localizedString(for: date, relativeTo: .now)
     }
 
-    private struct textPreviewBody: View {
-    let text: String
-    let font: NSFont
-    let searchQuery: String
-    @EnvironmentObject var vm: ClipboardViewModel
+    private struct TextPreviewBody: View {
+        let text: String
+        let font: NSFont
+        let searchQuery: String
+        @EnvironmentObject var vm: ClipboardViewModel
 
-    var body: some View {
-        SelectableTextPreview(
-            text: text,
-            font: font,
-            searchQuery: searchQuery,
-            vm: vm
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        var body: some View {
+            SelectableTextPreview(
+                text: text,
+                font: font,
+                searchQuery: searchQuery,
+                vm: vm
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
     }
-}
-    private func preferredTextFont(for text: String, baseSize: CGFloat = 13) -> NSFont {
-        return .systemFont(ofSize: baseSize, weight: .regular)
+
+    private func previewTextFont() -> NSFont {
+        .systemFont(ofSize: 13.5, weight: .regular)
     }
 
 }

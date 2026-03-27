@@ -119,7 +119,7 @@ struct ClipItemRow: View {
     var searchQuery: String = ""
     var isSelected: Bool = false
     var isHovered: Bool = false
-    let glass: ClipinGlassPalette
+    let hierarchy: ClipinPanelHierarchy
 
     var body: some View {
         HStack(spacing: 9) {
@@ -127,7 +127,7 @@ struct ClipItemRow: View {
 
             Text(highlightedDisplayText)
                 .font(.system(size: 13.5, weight: isSelected ? .medium : .regular))
-                .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.92))
+                .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.primary.opacity(0.92))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -135,7 +135,7 @@ struct ClipItemRow: View {
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(isSelected ? glass.emphasisInk.opacity(0.72) : Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(isSelected ? hierarchy.selection.secondaryInk : Color(nsColor: .tertiaryLabelColor))
                     .opacity(isSelected || isHovered ? 1 : 0)
             }
 
@@ -145,7 +145,7 @@ struct ClipItemRow: View {
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(
                         isSelected
-                            ? glass.emphasisInk.opacity(0.82)
+                            ? hierarchy.selection.ink
                             : Color.secondary.opacity(0.78)
                     )
                     .padding(.horizontal, 4)
@@ -154,7 +154,7 @@ struct ClipItemRow: View {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(
                                 isSelected
-                                    ? glass.controlFill
+                                    ? hierarchy.selection.badgeFill
                                     : Color.primary.opacity(isHovered ? 0.08 : 0.05)
                             )
                     )
@@ -163,7 +163,7 @@ struct ClipItemRow: View {
             // 时间 — 右对齐，退场角色
             Text(timeLabel)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(isSelected ? Color.primary.opacity(0.45) : Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(isSelected ? hierarchy.selection.secondaryInk : Color(nsColor: .tertiaryLabelColor))
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 8)
@@ -190,7 +190,7 @@ struct ClipItemRow: View {
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isSelected ? glass.emphasisInk : Color.secondary)
+                .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.secondary)
                 .frame(width: 24, height: 24)
         }
     }
@@ -220,7 +220,7 @@ struct ClipItemRow: View {
         while searchStart < text.endIndex,
               let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
             if let attrRange = Range(range, in: result) {
-                result[attrRange].backgroundColor = glass.emphasisFill
+                result[attrRange].backgroundColor = hierarchy.selection.highlight
                 result[attrRange].foregroundColor = .primary
             }
             searchStart = range.upperBound
