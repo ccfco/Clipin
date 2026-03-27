@@ -7,12 +7,16 @@ struct ClipinApp: App {
     var body: some Scene {
         // Menu bar app — no main window
         Settings {
-            SettingsView(
-                settings: SettingsStore.shared,
-                autoBackup: AutoBackupService.shared,
-                navigation: SettingsNavigationModel(),
-                core: AppState.shared.core
-            )
+            Color.clear
+                .frame(width: 1, height: 1)
+        }
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings...") {
+                    appDelegate.openSettingsFromCommand()
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
     }
 }

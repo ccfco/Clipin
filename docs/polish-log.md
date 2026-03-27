@@ -10,6 +10,8 @@
 - Followed up on the next review by separating “container inset” from “object width”: the preview stage and metadata block now keep their own horizontal object inset inside the detail pane, so the right side stops reading as edge-to-edge even though it still uses a single shared detail surface.
 - Shrunk metadata density instead of only changing fonts: tighter block inset, smaller value typography, and narrower grid spacing give vertical space back to the preview stage so the bottom info block no longer outweighs the content it describes.
 - Rebalanced the footer as a fixed-height command strip and reduced the Paste CTA's internal padding/icon size, so the bottom bar keeps one height across normal and empty/filter states instead of being stretched by the selected-item callout.
+- Refined the spacing one level higher after dark-theme review: header, content, and footer now share one shell spacing rhythm, while sidebar/detail shadows are slightly reduced so section edges stop crowding each other and the bottom area no longer shows clipped sharp-corner artifacts.
+- Unified settings entry points by redirecting the app settings command to the same custom `NSWindow` used elsewhere instead of leaving SwiftUI's default Settings scene alive. This removes the split interaction path that could make the settings window feel inconsistent or lose first-click mouse behavior.
 
 ### Window-aware keyboard routing and structural UI cleanup
 

@@ -185,7 +185,7 @@ struct PreviewPane: View {
     }
 
     private func infoGrid(for item: ClipItem) -> some View {
-        LazyVGrid(columns: infoGridColumns, alignment: .leading, spacing: 8) {
+        LazyVGrid(columns: infoGridColumns, alignment: .leading, spacing: 6) {
             ForEach(infoItems(for: item)) { item in
                 infoRow(item)
             }
@@ -194,8 +194,8 @@ struct PreviewPane: View {
 
     private var infoGridColumns: [GridItem] {
         [
-            GridItem(.flexible(minimum: 220), spacing: 16, alignment: .leading),
-            GridItem(.flexible(minimum: 220), spacing: 16, alignment: .leading)
+            GridItem(.flexible(minimum: 210), spacing: 14, alignment: .leading),
+            GridItem(.flexible(minimum: 210), spacing: 14, alignment: .leading)
         ]
     }
 
@@ -277,29 +277,29 @@ struct PreviewPane: View {
     private func infoRow(_ item: InfoItem) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(item.label)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.tertiary)
-                .frame(minWidth: 44, idealWidth: 56, maxWidth: 72, alignment: .leading)
+                .frame(minWidth: 40, idealWidth: 52, maxWidth: 68, alignment: .leading)
                 .lineLimit(1)
 
-            HStack(spacing: 5) {
+            HStack(spacing: 4) {
                 if let icon = item.icon {
                     Image(nsImage: icon)
                         .resizable()
-                        .frame(width: 12, height: 12)
-                        .opacity(0.74)
+                        .frame(width: 11, height: 11)
+                        .opacity(0.7)
                 }
 
                 Text(item.value)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(Color.primary.opacity(0.84))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.primary.opacity(0.8))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .textSelection(.enabled)
                     .help(item.value)
             }
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 4)
         }
     }
 

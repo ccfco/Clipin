@@ -107,6 +107,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         openSettingsWindow()
     }
 
+    func openSettingsFromCommand() {
+        openSettingsWindow()
+    }
+
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
     }

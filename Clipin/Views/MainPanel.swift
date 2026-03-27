@@ -115,13 +115,13 @@ struct MainPanel: View {
                 viewModel.cycleTypeFilter(reverse: reverse)
             }
         )
-        .padding(.horizontal, 14)
-        .padding(.top, 14)
-        .padding(.bottom, 6)
+        .padding(.horizontal, ClipinChrome.shellSectionInset)
+        .padding(.top, ClipinChrome.headerTopInset)
+        .padding(.bottom, ClipinChrome.headerBottomInset)
     }
 
     private var contentArea: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: ClipinChrome.shellSectionGap) {
             itemList
                 .frame(width: 292)
                 .background(
@@ -143,9 +143,9 @@ struct MainPanel: View {
                     )
                 )
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 6)
+        .padding(.horizontal, ClipinChrome.shellSectionInset)
+        .padding(.top, ClipinChrome.contentTopInset)
+        .padding(.bottom, ClipinChrome.contentBottomInset)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -242,7 +242,7 @@ struct MainPanel: View {
                 glass: glass
             )
         )
-        .padding(.horizontal, 14)
+        .padding(.horizontal, ClipinChrome.shellSectionInset)
         .padding(.top, ClipinChrome.footerOuterTopInset)
         .padding(.bottom, ClipinChrome.footerOuterBottomInset)
     }
