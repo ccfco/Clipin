@@ -55,9 +55,19 @@ final class SettingsNavigationModel: ObservableObject {
     }
 
     func ensureSelection(_ fallback: SettingsTab = .general) {
-        if selectedTab == nil {
-            selectedTab = fallback
-        }
+        if selectedTab == nil { selectedTab = fallback }
+    }
+
+    func selectNext() {
+        let all = SettingsTab.allCases
+        guard let current = selectedTab, let idx = all.firstIndex(of: current) else { return }
+        selectedTab = all[min(idx + 1, all.count - 1)]
+    }
+
+    func selectPrev() {
+        let all = SettingsTab.allCases
+        guard let current = selectedTab, let idx = all.firstIndex(of: current) else { return }
+        selectedTab = all[max(idx - 1, 0)]
     }
 }
 
@@ -68,67 +78,6 @@ private struct SettingsNotice {
     let isError: Bool
 }
 
-private struct SettingsSidebarChromeBridge: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.postsFrameChangedNotifications = true
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            guard let tableView = context.coordinator.findTableView(from: nsView) else { return }
-            if context.coordinator.tableView !== tableView {
-                context.coordinator.tableView = tableView
-            }
-            context.coordinator.configure(tableView: tableView)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    @MainActor
-    final class Coordinator {
-        weak var tableView: NSTableView?
-
-        func findTableView(from view: NSView) -> NSTableView? {
-            var current: NSView? = view
-            while let node = current {
-                if let tableView = node as? NSTableView {
-                    return tableView
-                }
-                if let tableView = findTableView(in: node) {
-                    return tableView
-                }
-                current = node.superview
-            }
-            return nil
-        }
-
-        private func findTableView(in root: NSView) -> NSTableView? {
-            for child in root.subviews {
-                if let tableView = child as? NSTableView {
-                    return tableView
-                }
-                if let tableView = findTableView(in: child) {
-                    return tableView
-                }
-            }
-            return nil
-        }
-
-        func configure(tableView: NSTableView) {
-            tableView.selectionHighlightStyle = .none
-            tableView.backgroundColor = .clear
-            tableView.intercellSpacing = NSSize(width: 0, height: 6)
-            tableView.enclosingScrollView?.drawsBackground = false
-            tableView.enclosingScrollView?.backgroundColor = .clear
-            tableView.enclosingScrollView?.focusRingType = .none
-        }
-    }
-}
 
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
@@ -151,22 +100,15 @@ struct SettingsView: View {
         .make(glass: glass, colorScheme: colorScheme)
     }
 
-    private var selectedSidebarTab: Binding<SettingsTab?> {
-        Binding(
-            get: { navigation.selectedTab },
-            set: { tab in navigation.select(tab) }
-        )
-    }
-
     var body: some View {
         ZStack {
             windowBackdrop
-            HStack(spacing: ClipinChrome.shellSectionGap) {
+            HStack(spacing: ClipinChrome.shellGap) {
                 sidebar
                 contentArea
                     .animation(ClipinMotion.panel, value: navigation.selectedTab)
             }
-            .padding(ClipinChrome.shellSectionInset)
+            .padding(ClipinChrome.shellGap)
         }
         .frame(width: 720, height: 608)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -195,25 +137,14 @@ struct SettingsView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        List(SettingsTab.allCases, selection: selectedSidebarTab) { tab in
-            settingsSidebarRow(tab)
-                .tag(tab)
-                .listRowInsets(
-                    EdgeInsets(
-                        top: 4,
-                        leading: ClipinChrome.listRowOuterInset,
-                        bottom: 4,
-                        trailing: ClipinChrome.listRowOuterInset
-                    )
-                )
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(SettingsTab.allCases) { tab in
+                    sidebarRow(tab)
+                }
+            }
+            .padding(.vertical, 6)
         }
-        .listStyle(.sidebar)
-        .alternatingRowBackgrounds(.disabled)
-        .scrollContentBackground(.hidden)
-        .background(Color.clear)
-        .background(SettingsSidebarChromeBridge())
         .background(
             ClipinSurfaceBackground(
                 role: .sidebar,
@@ -225,7 +156,7 @@ struct SettingsView: View {
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    private func settingsSidebarRow(_ tab: SettingsTab) -> some View {
+    private func sidebarRow(_ tab: SettingsTab) -> some View {
         let isSelected = navigation.selectedTab == tab
         let isHovered = hoveredTab == tab
 
@@ -253,10 +184,10 @@ struct SettingsView: View {
                 hoverStroke: glass.hoverStroke
             )
         )
+        .padding(.horizontal, ClipinChrome.listRowOuterInset)
         .contentShape(Rectangle())
-        .onHover { hovered in
-            hoveredTab = hovered ? tab : nil
-        }
+        .onTapGesture { navigation.select(tab) }
+        .onHover { hovered in hoveredTab = hovered ? tab : nil }
         .animation(ClipinMotion.selection, value: isSelected)
         .animation(ClipinMotion.feedback, value: isHovered)
     }

@@ -61,6 +61,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private enum KeyboardContext {
         case mainPanel(ClipboardViewModel)
         case actionsPalette(ClipboardViewModel)
+        case settingsWindow(SettingsNavigationModel)
         case none
     }
 
@@ -441,6 +442,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return self.handlePaletteKeyEvent(event, flags: flags, viewModel: vm)
             case .mainPanel(let vm):
                 return self.handlePanelKeyEvent(event, flags: flags, viewModel: vm)
+            case .settingsWindow(let nav):
+                return self.handleSettingsKeyEvent(event, navigation: nav)
             case .none:
                 return event
             }
@@ -527,8 +530,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let panel, panel.isVisible, panel.isKeyWindow, let viewModel {
             return viewModel.isShowingActions ? .actionsPalette(viewModel) : .mainPanel(viewModel)
         }
-
+        if let settingsWindow, settingsWindow.isVisible, settingsWindow.isKeyWindow {
+            return .settingsWindow(settingsNavigation)
+        }
         return .none
+    }
+
+    private func handleSettingsKeyEvent(_ event: NSEvent, navigation: SettingsNavigationModel) -> NSEvent? {
+        switch event.keyCode {
+        case 0x7E: navigation.selectPrev(); return nil
+        case 0x7D: navigation.selectNext(); return nil
+        default:   return event
+        }
     }
 
     private func handlePaletteKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {

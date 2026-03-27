@@ -31,27 +31,19 @@ enum ClipinChrome {
     static let paletteCornerRadius: CGFloat = 26
     static let primaryBadgeCornerRadius: CGFloat = 14
     static let badgeCornerRadius: CGFloat = 10
-    // 场景骨架：主面板 / 设置页 / 权限页统一使用 12pt panel gap，列表选中对象统一使用 8pt gutter
-    static let shellSectionInset: CGFloat = 12
-    static let shellSectionGap: CGFloat = 12
-    static let headerTopInset: CGFloat = 12
-    static let headerBottomInset: CGFloat = 12
-    static let contentTopInset: CGFloat = 0
-    static let contentBottomInset: CGFloat = 0
-    static let listContentInset: CGFloat = 12
+    // 全局间距节奏：所有 shell→section / section→section / section 垂直节奏统一用 shellGap
+    static let shellGap: CGFloat = 8
     static let listRowOuterInset: CGFloat = 8
     static let detailContentInset: CGFloat = 12
     static let detailObjectInset: CGFloat = 0
     static let detailStageInset: CGFloat = 12
     static let detailMetadataInset: CGFloat = 12
-    static let detailGroupSpacing: CGFloat = 12
+    static let detailGroupSpacing: CGFloat = 8
     static let detailStageCornerRadius: CGFloat = 14
     static let detailMetadataCornerRadius: CGFloat = 12
     static let detailMediaCornerRadius: CGFloat = 14
     static let footerMinHeight: CGFloat = 44
     static let footerContentInset: CGFloat = 6
-    static let footerOuterTopInset: CGFloat = 12
-    static let footerOuterBottomInset: CGFloat = 12
     static let footerCalloutVerticalInset: CGFloat = 4
     static let footerCalloutHorizontalLeading: CGFloat = 10
     static let footerCalloutHorizontalTrailing: CGFloat = 10

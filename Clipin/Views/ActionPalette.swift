@@ -79,8 +79,8 @@ struct ActionPalette: View {
                 .onTapGesture { dismiss() }
 
             palettePanel
-                .padding(.trailing, ClipinChrome.shellSectionInset)
-                .padding(.bottom, ClipinChrome.footerMinHeight + ClipinChrome.footerOuterBottomInset + 6)
+                .padding(.trailing, ClipinChrome.shellGap)
+                .padding(.bottom, ClipinChrome.footerMinHeight + ClipinChrome.shellGap + 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }

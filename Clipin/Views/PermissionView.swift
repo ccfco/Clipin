@@ -106,7 +106,7 @@ struct PermissionView: View {
                     glass: glass
                 )
             )
-            .padding(ClipinChrome.shellSectionInset)
+            .padding(ClipinChrome.shellGap)
         }
         .frame(width: 400, height: 420)
     }

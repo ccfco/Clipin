@@ -115,13 +115,13 @@ struct MainPanel: View {
                 viewModel.cycleTypeFilter(reverse: reverse)
             }
         )
-        .padding(.horizontal, ClipinChrome.shellSectionInset)
-        .padding(.top, ClipinChrome.headerTopInset)
-        .padding(.bottom, ClipinChrome.headerBottomInset)
+        .padding(.horizontal, ClipinChrome.shellGap)
+        .padding(.top, ClipinChrome.shellGap)
+        .padding(.bottom, ClipinChrome.shellGap)
     }
 
     private var contentArea: some View {
-        HStack(spacing: ClipinChrome.shellSectionGap) {
+        HStack(spacing: ClipinChrome.shellGap) {
             itemList
                 .frame(width: 292)
                 .background(
@@ -136,9 +136,7 @@ struct MainPanel: View {
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.horizontal, ClipinChrome.shellSectionInset)
-        .padding(.top, ClipinChrome.contentTopInset)
-        .padding(.bottom, ClipinChrome.contentBottomInset)
+        .padding(.horizontal, ClipinChrome.shellGap)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -235,9 +233,9 @@ struct MainPanel: View {
                 glass: glass
             )
         )
-        .padding(.horizontal, ClipinChrome.shellSectionInset)
-        .padding(.top, ClipinChrome.footerOuterTopInset)
-        .padding(.bottom, ClipinChrome.footerOuterBottomInset)
+        .padding(.horizontal, ClipinChrome.shellGap)
+        .padding(.top, ClipinChrome.shellGap)
+        .padding(.bottom, ClipinChrome.shellGap)
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
