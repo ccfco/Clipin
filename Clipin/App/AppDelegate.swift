@@ -638,11 +638,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openSettingsWindow() {
         let window: NSWindow
+        let isNew: Bool
 
         settingsNavigation.ensureSelection()
 
         if let existingWindow = settingsWindow {
             window = existingWindow
+            isNew = false
         } else {
             let newWindow = NSWindow(
                 contentRect: NSRect(origin: .zero, size: SettingsWindowMetrics.size),
@@ -670,14 +672,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             )
             settingsWindow = newWindow
             window = newWindow
+            isNew = true
         }
 
         settings.refreshLaunchAtLoginStatus()
-        window.center()
+        if isNew { window.center() }  // 复用窗口时保留上次位置，符合 macOS 惯例
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         focusSettingsSidebar(in: window)
     }
+
 
     private func focusSettingsSidebar(in window: NSWindow, attemptsRemaining: Int = 3) {
         DispatchQueue.main.async { [weak self, weak window] in
@@ -810,7 +814,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func performCopy(_ item: ClipItem) {
         monitor?.pause()
-        PasteService.writeToClipboard(item)
+        guard PasteService.writeToClipboard(item) else {
+            monitor?.resume()
+            return
+        }
         let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false
         if !continuousPasteEnabled { hidePanel() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
