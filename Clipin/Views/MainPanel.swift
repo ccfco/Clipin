@@ -51,7 +51,7 @@ struct MainPanel: View {
                 )
         )
         .overlay(alignment: .top) {
-            if viewModel.isPanelPinned {
+            if viewModel.isContinuousPasteEnabled {
                 LinearGradient(
                     colors: [glass.emphasisStrongFill, glass.emphasisFill],
                     startPoint: .leading,
@@ -61,7 +61,7 @@ struct MainPanel: View {
                 .transition(.opacity)
             }
         }
-        .animation(ClipinMotion.panel, value: viewModel.isPanelPinned)
+        .animation(ClipinMotion.panel, value: viewModel.isContinuousPasteEnabled)
         .overlay(alignment: .bottomTrailing) {
             if viewModel.isShowingActions {
                 ActionPalette(
@@ -214,11 +214,11 @@ struct MainPanel: View {
             }
             .buttonStyle(.plain)
 
-            Button { viewModel.togglePanelPin() } label: {
+            Button { viewModel.toggleContinuousPaste() } label: {
                 keyBadge(
-                    label: viewModel.isPanelPinned ? "Pinned" : "Stay",
+                    label: "Continuous Paste",
                     key: "⌘⇧L",
-                    emphasized: viewModel.isPanelPinned
+                    emphasized: viewModel.isContinuousPasteEnabled
                 )
             }
             .buttonStyle(.plain)
@@ -232,8 +232,9 @@ struct MainPanel: View {
             .buttonStyle(.borderless)
             .padding(.leading, 8)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, ClipinChrome.footerContentInset)
+        .padding(.vertical, ClipinChrome.footerContentInset)
+        .frame(minHeight: ClipinChrome.footerMinHeight)
         .background(
             ClipinSurfaceBackground(
                 role: .strip,
@@ -242,8 +243,8 @@ struct MainPanel: View {
             )
         )
         .padding(.horizontal, 14)
-        .padding(.top, 6)
-        .padding(.bottom, 12)
+        .padding(.top, ClipinChrome.footerOuterTopInset)
+        .padding(.bottom, ClipinChrome.footerOuterBottomInset)
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
@@ -255,7 +256,7 @@ struct MainPanel: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(hierarchy.command.iconInk)
             }
-            .frame(width: 25, height: 25)
+            .frame(width: ClipinChrome.footerCalloutIconSize, height: ClipinChrome.footerCalloutIconSize)
 
             Text(label)
                 .font(.system(size: 12.5, weight: .semibold))
@@ -269,9 +270,9 @@ struct MainPanel: View {
                 background: hierarchy.command.keycapFill
             )
         }
-        .padding(.leading, 10)
-        .padding(.trailing, 11)
-        .padding(.vertical, 8)
+        .padding(.leading, ClipinChrome.footerCalloutHorizontalLeading)
+        .padding(.trailing, ClipinChrome.footerCalloutHorizontalTrailing)
+        .padding(.vertical, ClipinChrome.footerCalloutVerticalInset)
         .background(
             ClipinRoundedSurface(
                 cornerRadius: ClipinChrome.primaryBadgeCornerRadius,
@@ -422,17 +423,18 @@ private struct ItemListView: View {
                 hoverStroke: glass.hoverStroke
             )
         )
+        .padding(.horizontal, ClipinChrome.listRowOuterInset)
         .animation(ClipinMotion.selection, value: isSelected)
         .animation(ClipinMotion.feedback, value: isHovered)
-            .contentShape(Rectangle())
-            .onTapGesture { selection.wrappedValue = item.id }
-            .onHover { hovered in hoveredID = hovered ? item.id : nil }
-            .contextMenu {
-                Button("Paste") { onActivate(item) }
-                Button(item.isPinned ? LocalizedStringKey("Unpin") : LocalizedStringKey("Pin")) { onPin(item) }
-                Divider()
-                Button("Delete", role: .destructive) { onDelete(item) }
-            }
+        .contentShape(Rectangle())
+        .onTapGesture { selection.wrappedValue = item.id }
+        .onHover { hovered in hoveredID = hovered ? item.id : nil }
+        .contextMenu {
+            Button("Paste") { onActivate(item) }
+            Button(item.isPinned ? LocalizedStringKey("Unpin") : LocalizedStringKey("Pin")) { onPin(item) }
+            Divider()
+            Button("Delete", role: .destructive) { onDelete(item) }
+        }
     }
 
     private var emptyState: some View {

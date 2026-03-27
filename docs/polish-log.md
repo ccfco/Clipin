@@ -7,6 +7,9 @@
 - Split preview-specific surfaces out of the old shared `grouped` role so the detail pane can stay elegant without adding another obvious card layer. `contentStage` now carries the main preview, while `metadata` stays as a quieter companion block instead of reusing the heavier settings-style grouping surface.
 - Tightened the right pane proportions instead of adding more chrome: smaller outer/detail insets, slightly smaller inner radii, and lighter stage contrast keep the preview framed without making it feel boxed in.
 - Let visual content breathe a little more by shaving stage padding and slightly increasing image preview height, while also softening media shadows so the content remains the focus.
+- Followed up on the next review by separating “container inset” from “object width”: the preview stage and metadata block now keep their own horizontal object inset inside the detail pane, so the right side stops reading as edge-to-edge even though it still uses a single shared detail surface.
+- Shrunk metadata density instead of only changing fonts: tighter block inset, smaller value typography, and narrower grid spacing give vertical space back to the preview stage so the bottom info block no longer outweighs the content it describes.
+- Rebalanced the footer as a fixed-height command strip and reduced the Paste CTA's internal padding/icon size, so the bottom bar keeps one height across normal and empty/filter states instead of being stretched by the selected-item callout.
 
 ### Window-aware keyboard routing and structural UI cleanup
 

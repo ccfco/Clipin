@@ -32,13 +32,23 @@ enum ClipinChrome {
     static let badgeCornerRadius: CGFloat = 10
     static let listContentInset: CGFloat = 12
     static let listScrollbarInset: CGFloat = 8
-    static let detailContentInset: CGFloat = 14
-    static let detailStageInset: CGFloat = 14
-    static let detailMetadataInset: CGFloat = 16
-    static let detailGroupSpacing: CGFloat = 14
+    static let listRowOuterInset: CGFloat = 8
+    static let detailContentInset: CGFloat = 12
+    static let detailObjectInset: CGFloat = 12
+    static let detailStageInset: CGFloat = 12
+    static let detailMetadataInset: CGFloat = 10
+    static let detailGroupSpacing: CGFloat = 10
     static let detailStageCornerRadius: CGFloat = 16
-    static let detailMetadataCornerRadius: CGFloat = 16
+    static let detailMetadataCornerRadius: CGFloat = 14
     static let detailMediaCornerRadius: CGFloat = 14
+    static let footerMinHeight: CGFloat = 50
+    static let footerContentInset: CGFloat = 6
+    static let footerOuterTopInset: CGFloat = 4
+    static let footerOuterBottomInset: CGFloat = 8
+    static let footerCalloutVerticalInset: CGFloat = 4
+    static let footerCalloutHorizontalLeading: CGFloat = 10
+    static let footerCalloutHorizontalTrailing: CGFloat = 10
+    static let footerCalloutIconSize: CGFloat = 20
 }
 
 enum ClipinMotion {

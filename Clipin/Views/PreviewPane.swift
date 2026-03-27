@@ -55,6 +55,7 @@ struct PreviewPane: View {
                     glass: glass
                 )
             )
+            .padding(.horizontal, ClipinChrome.detailObjectInset)
     }
 
     @ViewBuilder
@@ -98,9 +99,9 @@ struct PreviewPane: View {
                         Image(nsImage: image)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: .infinity, maxHeight: 360)
+                            .frame(maxWidth: .infinity, maxHeight: 392)
                             .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
-                            .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+                            .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
                     } else {
                         unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
                     }
@@ -153,9 +154,9 @@ struct PreviewPane: View {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: 336)
+                        .frame(maxWidth: .infinity, maxHeight: 360)
                         .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
-                        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+                        .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
                 } else {
                     SelectableTextPreview(
                         text: fileListText,
@@ -180,10 +181,11 @@ struct PreviewPane: View {
                     glass: glass
                 )
             )
+            .padding(.horizontal, ClipinChrome.detailObjectInset)
     }
 
     private func infoGrid(for item: ClipItem) -> some View {
-        LazyVGrid(columns: infoGridColumns, alignment: .leading, spacing: 10) {
+        LazyVGrid(columns: infoGridColumns, alignment: .leading, spacing: 8) {
             ForEach(infoItems(for: item)) { item in
                 infoRow(item)
             }
@@ -192,8 +194,8 @@ struct PreviewPane: View {
 
     private var infoGridColumns: [GridItem] {
         [
-            GridItem(.flexible(minimum: 220), spacing: 20, alignment: .leading),
-            GridItem(.flexible(minimum: 220), spacing: 20, alignment: .leading)
+            GridItem(.flexible(minimum: 220), spacing: 16, alignment: .leading),
+            GridItem(.flexible(minimum: 220), spacing: 16, alignment: .leading)
         ]
     }
 
@@ -273,31 +275,31 @@ struct PreviewPane: View {
     }
 
     private func infoRow(_ item: InfoItem) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(item.label)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.tertiary)
-                .frame(minWidth: 48, idealWidth: 60, maxWidth: 76, alignment: .leading)
+                .frame(minWidth: 44, idealWidth: 56, maxWidth: 72, alignment: .leading)
                 .lineLimit(1)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 if let icon = item.icon {
                     Image(nsImage: icon)
                         .resizable()
-                        .frame(width: 13, height: 13)
-                        .opacity(0.78)
+                        .frame(width: 12, height: 12)
+                        .opacity(0.74)
                 }
 
                 Text(item.value)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(Color.primary.opacity(0.88))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Color.primary.opacity(0.84))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .textSelection(.enabled)
                     .help(item.value)
             }
 
-            Spacer(minLength: 10)
+            Spacer(minLength: 6)
         }
     }
 
