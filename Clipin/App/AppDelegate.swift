@@ -453,12 +453,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             print("ℹ️ OCR backfill: \(pending.count) image(s) to process")
             for item in pending {
                 guard let path = item.imagePath,
-                      FileManager.default.fileExists(atPath: path) else { continue }
+                      FileManager.default.fileExists(atPath: path) else {
+                    // 图片文件已丢失（可能被清理），写入空字符串标记为已处理，避免重复扫描
+                    try? core.updateOcrText(id: item.id, ocrText: "")
+                    continue
+                }
                 let text = await OcrService.recognizeText(at: path)
-                guard !text.isEmpty else { continue }
+                // 无论是否识别到文字都写回（NULL=未处理，""=处理过但无文字）
                 do {
                     try core.updateOcrText(id: item.id, ocrText: text)
-                    NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
+                    if !text.isEmpty {
+                        NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
+                    }
                 } catch {
                     print("⚠️ OCR backfill write error for \(item.id): \(error)")
                 }
