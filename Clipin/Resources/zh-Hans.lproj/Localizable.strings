@@ -10,6 +10,7 @@
 "Dark" = "深色";
 "Theme" = "主题";
 "Changes the panel tint while keeping native materials." = "在保留原生材质的前提下，调整面板的整体色调。";
+"Native" = "原生";
 "Mist" = "雾蓝";
 "Graphite" = "石墨";
 "Sunrise" = "晨曦";

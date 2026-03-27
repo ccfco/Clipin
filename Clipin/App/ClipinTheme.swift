@@ -2,12 +2,15 @@ import Foundation
 import SwiftUI
 
 enum VisualTheme: String, CaseIterable {
+    case native = "native"
     case mist = "mist"
     case graphite = "graphite"
     case sunrise = "sunrise"
 
     var displayName: String {
         switch self {
+        case .native:
+            return NSLocalizedString("Native", comment: "")
         case .mist:
             return NSLocalizedString("Mist", comment: "")
         case .graphite:
@@ -69,7 +72,67 @@ extension ClipinGlassPalette {
     static func make(theme: VisualTheme, colorScheme: ColorScheme) -> Self {
         let isDark = colorScheme == .dark
 
+        let accent = Color.accentColor
+
         switch (theme, isDark) {
+        case (.native, false):
+            return Self(
+                shellTintTop: Color.primary.opacity(0.02),
+                shellTintBottom: Color.primary.opacity(0.01),
+                shellHighlight: Color.white.opacity(0.28),
+                shellWash: Color.white.opacity(0.10),
+                chromeTint: Color.primary.opacity(0.02),
+                sidebarTint: Color.primary.opacity(0.02),
+                detailTint: Color.white.opacity(0.18),
+                previewCanvasTint: Color.primary.opacity(0.03),
+                paletteTint: Color.white.opacity(0.28),
+                paletteHighlight: Color.white.opacity(0.36),
+                keycapTint: Color.primary.opacity(0.05),
+                emphasisInk: accent,
+                emphasisFill: accent.opacity(0.10),
+                emphasisStrongFill: accent.opacity(0.72),
+                emphasisOnStrongFill: .white,
+                emphasisStroke: accent.opacity(0.14),
+                hoverFill: Color.primary.opacity(0.04),
+                hoverStroke: Color.primary.opacity(0.06),
+                controlFill: Color.primary.opacity(0.04),
+                controlStroke: Color.primary.opacity(0.07),
+                separatorLine: Color.primary.opacity(0.05),
+                primaryActionTintTop: accent.opacity(0.82),
+                primaryActionTintBottom: accent.opacity(0.72),
+                primaryActionHighlight: Color.white.opacity(0.26),
+                primaryActionGlow: accent.opacity(0.16),
+                primaryActionKeycapTint: Color.white.opacity(0.16)
+            )
+        case (.native, true):
+            return Self(
+                shellTintTop: Color.white.opacity(0.02),
+                shellTintBottom: Color.white.opacity(0.01),
+                shellHighlight: Color.white.opacity(0.08),
+                shellWash: Color.white.opacity(0.04),
+                chromeTint: Color.white.opacity(0.02),
+                sidebarTint: Color.white.opacity(0.02),
+                detailTint: Color.white.opacity(0.04),
+                previewCanvasTint: Color.white.opacity(0.04),
+                paletteTint: Color.white.opacity(0.06),
+                paletteHighlight: Color.white.opacity(0.08),
+                keycapTint: Color.white.opacity(0.07),
+                emphasisInk: accent,
+                emphasisFill: accent.opacity(0.14),
+                emphasisStrongFill: accent.opacity(0.74),
+                emphasisOnStrongFill: .white,
+                emphasisStroke: accent.opacity(0.20),
+                hoverFill: Color.white.opacity(0.04),
+                hoverStroke: Color.white.opacity(0.06),
+                controlFill: Color.white.opacity(0.05),
+                controlStroke: Color.white.opacity(0.07),
+                separatorLine: Color.white.opacity(0.04),
+                primaryActionTintTop: accent.opacity(0.76),
+                primaryActionTintBottom: accent.opacity(0.66),
+                primaryActionHighlight: Color.white.opacity(0.16),
+                primaryActionGlow: accent.opacity(0.20),
+                primaryActionKeycapTint: Color.white.opacity(0.12)
+            )
         case (.mist, false):
             return Self(
                 shellTintTop: Color(red: 0.93, green: 0.95, blue: 1.0, opacity: 0.52),
