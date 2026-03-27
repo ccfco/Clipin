@@ -54,16 +54,11 @@ struct PermissionView: View {
                 }
                 .padding(16)
                 .background(
-                    RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                        .fill(.thinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                                .fill(glass.controlFill)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                                .strokeBorder(glass.controlStroke, lineWidth: 0.5)
-                        )
+                    ClipinSurfaceBackground(
+                        role: .grouped,
+                        cornerRadius: ClipinChrome.cardCornerRadius,
+                        glass: glass
+                    )
                 )
                 .padding(.horizontal, 28)
                 .padding(.bottom, 28)
@@ -100,9 +95,18 @@ struct PermissionView: View {
                     Text("Window closes automatically after permission is granted")
                         .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
-                        .padding(.bottom, 24)
+                    .padding(.bottom, 24)
                 }
             }
+            .padding(22)
+            .background(
+                ClipinSurfaceBackground(
+                    role: .detail,
+                    cornerRadius: ClipinChrome.sectionCornerRadius,
+                    glass: glass
+                )
+            )
+            .padding(18)
         }
         .frame(width: 400, height: 420)
     }

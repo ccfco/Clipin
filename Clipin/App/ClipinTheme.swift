@@ -30,6 +30,7 @@ enum ClipinChrome {
     static let paletteCornerRadius: CGFloat = 26
     static let primaryBadgeCornerRadius: CGFloat = 14
     static let badgeCornerRadius: CGFloat = 10
+    static let listRowInset: CGFloat = 12
 }
 
 enum ClipinMotion {
@@ -111,6 +112,81 @@ struct ClipinKeycap: View {
     }
 }
 
+enum ClipinSurfaceRole {
+    case sidebar
+    case detail
+    case floating
+    case control
+    case strip
+    case grouped
+}
+
+/// 共享 surface 语义，避免主面板、动作面板、设置页各自手搓一套玻璃参数。
+struct ClipinSurfaceStyle {
+    let material: Material
+    let tint: Color
+    let stroke: Color
+    let highlight: Color
+    let shadowColor: Color
+    let shadowRadius: CGFloat
+    let shadowYOffset: CGFloat
+}
+
+/// 统一把 surface 角色映射到具体 material / tint / stroke / shadow。
+struct ClipinSurfaceBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let role: ClipinSurfaceRole
+    let cornerRadius: CGFloat
+    let glass: ClipinGlassPalette
+
+    var body: some View {
+        let style = glass.surfaceStyle(for: role, colorScheme: colorScheme)
+        ClipinRoundedSurface(
+            cornerRadius: cornerRadius,
+            material: style.material,
+            tint: style.tint,
+            stroke: style.stroke,
+            highlight: style.highlight,
+            shadowColor: style.shadowColor,
+            shadowRadius: style.shadowRadius,
+            shadowYOffset: style.shadowYOffset
+        )
+    }
+}
+
+/// 所有列表型界面的选中/悬停底板，主列表、动作面板、设置侧栏共用。
+struct ClipinSelectableRowBackground: View {
+    let isSelected: Bool
+    let isHovered: Bool
+    let selectionFill: Color
+    let selectionStroke: Color
+    let hoverFill: Color
+    let hoverStroke: Color
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+            .fill(
+                isSelected
+                    ? selectionFill
+                    : isHovered
+                        ? hoverFill
+                        : Color.clear
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+                    .strokeBorder(
+                        isSelected
+                            ? selectionStroke
+                            : isHovered
+                                ? hoverStroke
+                                : Color.clear,
+                        lineWidth: 0.5
+                    )
+            )
+    }
+}
+
 struct ClipinGlassPalette {
     let shellTintTop: Color
     let shellTintBottom: Color
@@ -120,8 +196,6 @@ struct ClipinGlassPalette {
     let sidebarTint: Color
     let detailTint: Color
     let previewCanvasTint: Color
-    let paletteTint: Color
-    let paletteHighlight: Color
     let keycapTint: Color
     let emphasisInk: Color
     let emphasisFill: Color
@@ -133,12 +207,6 @@ struct ClipinGlassPalette {
     let hoverStroke: Color
     let controlFill: Color
     let controlStroke: Color
-    let separatorLine: Color
-    let primaryActionTintTop: Color
-    let primaryActionTintBottom: Color
-    let primaryActionHighlight: Color
-    let primaryActionGlow: Color
-    let primaryActionKeycapTint: Color
 }
 
 /// 主面板的任务层级语义：
@@ -208,6 +276,80 @@ extension ClipinPanelHierarchy {
 }
 
 extension ClipinGlassPalette {
+    func surfaceStyle(for role: ClipinSurfaceRole, colorScheme: ColorScheme) -> ClipinSurfaceStyle {
+        let isDark = colorScheme == .dark
+
+        switch role {
+        case .sidebar:
+            return ClipinSurfaceStyle(
+                material: .thinMaterial,
+                tint: sidebarTint,
+                stroke: controlStroke,
+                highlight: shellHighlight.opacity(isDark ? 0.08 : 0.22),
+                shadowColor: .black.opacity(0.10),
+                shadowRadius: 20,
+                shadowYOffset: 10
+            )
+
+        case .detail:
+            return ClipinSurfaceStyle(
+                material: .regularMaterial,
+                tint: detailTint,
+                stroke: controlStroke,
+                highlight: shellHighlight.opacity(isDark ? 0.10 : 0.24),
+                shadowColor: .black.opacity(0.12),
+                shadowRadius: 24,
+                shadowYOffset: 12
+            )
+
+        case .floating:
+            return ClipinSurfaceStyle(
+                material: .regularMaterial,
+                tint: detailTint,
+                stroke: controlStroke,
+                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.28),
+                shadowColor: .black.opacity(0.12),
+                shadowRadius: 34,
+                shadowYOffset: 18
+            )
+
+        case .control:
+            return ClipinSurfaceStyle(
+                material: .regularMaterial,
+                tint: controlFill,
+                stroke: controlStroke,
+                highlight: shellHighlight.opacity(isDark ? 0.14 : 0.28),
+                shadowColor: .clear,
+                shadowRadius: 0,
+                shadowYOffset: 0
+            )
+
+        case .strip:
+            return ClipinSurfaceStyle(
+                material: .ultraThinMaterial,
+                tint: controlFill.opacity(isDark ? 0.94 : 0.88),
+                stroke: controlStroke.opacity(isDark ? 0.92 : 0.84),
+                highlight: shellHighlight.opacity(isDark ? 0.08 : 0.18),
+                shadowColor: .clear,
+                shadowRadius: 0,
+                shadowYOffset: 0
+            )
+
+        case .grouped:
+            return ClipinSurfaceStyle(
+                material: .thinMaterial,
+                tint: controlFill.opacity(isDark ? 0.92 : 0.84),
+                stroke: hoverStroke,
+                highlight: shellHighlight.opacity(isDark ? 0.04 : 0.12),
+                shadowColor: .clear,
+                shadowRadius: 0,
+                shadowYOffset: 0
+            )
+        }
+    }
+}
+
+extension ClipinGlassPalette {
     static func make(theme: VisualTheme, colorScheme: ColorScheme) -> Self {
         let isDark = colorScheme == .dark
 
@@ -224,24 +366,16 @@ extension ClipinGlassPalette {
                 sidebarTint: Color.primary.opacity(0.015),
                 detailTint: Color.white.opacity(0.12),
                 previewCanvasTint: Color.primary.opacity(0.02),
-                paletteTint: Color.white.opacity(0.24),
-                paletteHighlight: Color.white.opacity(0.30),
                 keycapTint: Color.primary.opacity(0.04),
                 emphasisInk: Color.primary,
-                emphasisFill: Color.primary.opacity(0.07),
+                emphasisFill: Color.primary.opacity(0.11),
                 emphasisStrongFill: accent.opacity(0.68),
                 emphasisOnStrongFill: .white,
-                emphasisStroke: Color.primary.opacity(0.09),
+                emphasisStroke: Color.primary.opacity(0.15),
                 hoverFill: Color.primary.opacity(0.03),
                 hoverStroke: Color.primary.opacity(0.05),
                 controlFill: Color.primary.opacity(0.03),
-                controlStroke: Color.primary.opacity(0.05),
-                separatorLine: Color.primary.opacity(0.04),
-                primaryActionTintTop: accent.opacity(0.50),
-                primaryActionTintBottom: accent.opacity(0.40),
-                primaryActionHighlight: Color.white.opacity(0.16),
-                primaryActionGlow: accent.opacity(0.05),
-                primaryActionKeycapTint: Color.white.opacity(0.12)
+                controlStroke: Color.primary.opacity(0.05)
             )
         case (.native, true):
             return Self(
@@ -253,24 +387,16 @@ extension ClipinGlassPalette {
                 sidebarTint: Color.white.opacity(0.015),
                 detailTint: Color.white.opacity(0.03),
                 previewCanvasTint: Color.white.opacity(0.03),
-                paletteTint: Color.white.opacity(0.05),
-                paletteHighlight: Color.white.opacity(0.06),
                 keycapTint: Color.white.opacity(0.05),
                 emphasisInk: Color.primary,
-                emphasisFill: Color.white.opacity(0.09),
+                emphasisFill: Color.white.opacity(0.13),
                 emphasisStrongFill: accent.opacity(0.70),
                 emphasisOnStrongFill: .white,
-                emphasisStroke: Color.white.opacity(0.10),
+                emphasisStroke: Color.white.opacity(0.14),
                 hoverFill: Color.white.opacity(0.03),
                 hoverStroke: Color.white.opacity(0.05),
                 controlFill: Color.white.opacity(0.03),
-                controlStroke: Color.white.opacity(0.05),
-                separatorLine: Color.white.opacity(0.03),
-                primaryActionTintTop: accent.opacity(0.46),
-                primaryActionTintBottom: accent.opacity(0.36),
-                primaryActionHighlight: Color.white.opacity(0.10),
-                primaryActionGlow: accent.opacity(0.06),
-                primaryActionKeycapTint: Color.white.opacity(0.10)
+                controlStroke: Color.white.opacity(0.05)
             )
         case (.mist, false):
             return Self(
@@ -282,8 +408,6 @@ extension ClipinGlassPalette {
                 sidebarTint: Color(red: 0.89, green: 0.91, blue: 0.99, opacity: 0.24),
                 detailTint: Color.white.opacity(0.34),
                 previewCanvasTint: Color(red: 0.95, green: 0.96, blue: 1.0, opacity: 0.82),
-                paletteTint: Color(red: 0.96, green: 0.97, blue: 1.0, opacity: 0.42),
-                paletteHighlight: Color.white.opacity(0.52),
                 keycapTint: Color.white.opacity(0.20),
                 emphasisInk: Color(red: 0.23, green: 0.48, blue: 0.94),
                 emphasisFill: Color(red: 0.23, green: 0.48, blue: 0.94, opacity: 0.12),
@@ -293,13 +417,7 @@ extension ClipinGlassPalette {
                 hoverFill: Color.white.opacity(0.34),
                 hoverStroke: Color.white.opacity(0.22),
                 controlFill: Color.white.opacity(0.32),
-                controlStroke: Color.white.opacity(0.20),
-                separatorLine: Color.primary.opacity(0.06),
-                primaryActionTintTop: Color(red: 0.37, green: 0.62, blue: 1.0, opacity: 0.96),
-                primaryActionTintBottom: Color(red: 0.23, green: 0.48, blue: 0.96, opacity: 0.90),
-                primaryActionHighlight: Color.white.opacity(0.34),
-                primaryActionGlow: Color(red: 0.27, green: 0.50, blue: 0.96, opacity: 0.26),
-                primaryActionKeycapTint: Color.white.opacity(0.18)
+                controlStroke: Color.white.opacity(0.20)
             )
         case (.mist, true):
             return Self(
@@ -311,8 +429,6 @@ extension ClipinGlassPalette {
                 sidebarTint: Color(red: 0.20, green: 0.20, blue: 0.28, opacity: 0.22),
                 detailTint: Color(red: 0.18, green: 0.19, blue: 0.27, opacity: 0.30),
                 previewCanvasTint: Color(red: 0.24, green: 0.24, blue: 0.32, opacity: 0.24),
-                paletteTint: Color(red: 0.24, green: 0.22, blue: 0.34, opacity: 0.28),
-                paletteHighlight: Color(red: 0.64, green: 0.60, blue: 0.92, opacity: 0.14),
                 keycapTint: Color.white.opacity(0.10),
                 emphasisInk: Color(red: 0.63, green: 0.75, blue: 1.0),
                 emphasisFill: Color(red: 0.48, green: 0.62, blue: 0.98, opacity: 0.18),
@@ -322,13 +438,7 @@ extension ClipinGlassPalette {
                 hoverFill: Color.white.opacity(0.06),
                 hoverStroke: Color.white.opacity(0.08),
                 controlFill: Color.white.opacity(0.07),
-                controlStroke: Color.white.opacity(0.09),
-                separatorLine: Color.white.opacity(0.05),
-                primaryActionTintTop: Color(red: 0.44, green: 0.58, blue: 0.98, opacity: 0.78),
-                primaryActionTintBottom: Color(red: 0.26, green: 0.38, blue: 0.84, opacity: 0.72),
-                primaryActionHighlight: Color.white.opacity(0.18),
-                primaryActionGlow: Color(red: 0.30, green: 0.43, blue: 0.90, opacity: 0.24),
-                primaryActionKeycapTint: Color.white.opacity(0.12)
+                controlStroke: Color.white.opacity(0.09)
             )
         case (.graphite, false):
             return Self(
@@ -340,8 +450,6 @@ extension ClipinGlassPalette {
                 sidebarTint: Color(red: 0.91, green: 0.92, blue: 0.95, opacity: 0.20),
                 detailTint: Color.white.opacity(0.30),
                 previewCanvasTint: Color(red: 0.95, green: 0.95, blue: 0.97, opacity: 0.80),
-                paletteTint: Color.white.opacity(0.36),
-                paletteHighlight: Color.white.opacity(0.44),
                 keycapTint: Color.white.opacity(0.16),
                 emphasisInk: Color(red: 0.34, green: 0.40, blue: 0.50),
                 emphasisFill: Color(red: 0.34, green: 0.40, blue: 0.50, opacity: 0.12),
@@ -351,13 +459,7 @@ extension ClipinGlassPalette {
                 hoverFill: Color.white.opacity(0.28),
                 hoverStroke: Color.white.opacity(0.18),
                 controlFill: Color.white.opacity(0.26),
-                controlStroke: Color.white.opacity(0.18),
-                separatorLine: Color.primary.opacity(0.06),
-                primaryActionTintTop: Color(red: 0.46, green: 0.54, blue: 0.67, opacity: 0.94),
-                primaryActionTintBottom: Color(red: 0.30, green: 0.37, blue: 0.49, opacity: 0.90),
-                primaryActionHighlight: Color.white.opacity(0.30),
-                primaryActionGlow: Color(red: 0.30, green: 0.37, blue: 0.49, opacity: 0.18),
-                primaryActionKeycapTint: Color.white.opacity(0.16)
+                controlStroke: Color.white.opacity(0.18)
             )
         case (.graphite, true):
             return Self(
@@ -369,8 +471,6 @@ extension ClipinGlassPalette {
                 sidebarTint: Color.white.opacity(0.05),
                 detailTint: Color.white.opacity(0.08),
                 previewCanvasTint: Color.white.opacity(0.08),
-                paletteTint: Color.white.opacity(0.08),
-                paletteHighlight: Color.white.opacity(0.10),
                 keycapTint: Color.white.opacity(0.10),
                 emphasisInk: Color(red: 0.75, green: 0.79, blue: 0.88),
                 emphasisFill: Color(red: 0.62, green: 0.68, blue: 0.82, opacity: 0.15),
@@ -380,13 +480,7 @@ extension ClipinGlassPalette {
                 hoverFill: Color.white.opacity(0.05),
                 hoverStroke: Color.white.opacity(0.07),
                 controlFill: Color.white.opacity(0.06),
-                controlStroke: Color.white.opacity(0.08),
-                separatorLine: Color.white.opacity(0.05),
-                primaryActionTintTop: Color(red: 0.39, green: 0.45, blue: 0.55, opacity: 0.76),
-                primaryActionTintBottom: Color(red: 0.23, green: 0.28, blue: 0.36, opacity: 0.70),
-                primaryActionHighlight: Color.white.opacity(0.14),
-                primaryActionGlow: Color(red: 0.22, green: 0.26, blue: 0.34, opacity: 0.22),
-                primaryActionKeycapTint: Color.white.opacity(0.12)
+                controlStroke: Color.white.opacity(0.08)
             )
         case (.sunrise, false):
             return Self(
@@ -398,8 +492,6 @@ extension ClipinGlassPalette {
                 sidebarTint: Color(red: 0.99, green: 0.92, blue: 0.86, opacity: 0.22),
                 detailTint: Color.white.opacity(0.32),
                 previewCanvasTint: Color(red: 1.0, green: 0.96, blue: 0.92, opacity: 0.80),
-                paletteTint: Color(red: 1.0, green: 0.95, blue: 0.90, opacity: 0.38),
-                paletteHighlight: Color.white.opacity(0.48),
                 keycapTint: Color.white.opacity(0.20),
                 emphasisInk: Color(red: 0.90, green: 0.42, blue: 0.20),
                 emphasisFill: Color(red: 0.90, green: 0.42, blue: 0.20, opacity: 0.13),
@@ -410,13 +502,7 @@ extension ClipinGlassPalette {
                 hoverFill: Color.white.opacity(0.30),
                 hoverStroke: Color.white.opacity(0.18),
                 controlFill: Color.white.opacity(0.28),
-                controlStroke: Color.white.opacity(0.18),
-                separatorLine: Color.primary.opacity(0.06),
-                primaryActionTintTop: Color(red: 1.0, green: 0.63, blue: 0.36, opacity: 0.96),
-                primaryActionTintBottom: Color(red: 0.96, green: 0.44, blue: 0.28, opacity: 0.92),
-                primaryActionHighlight: Color.white.opacity(0.34),
-                primaryActionGlow: Color(red: 0.92, green: 0.44, blue: 0.22, opacity: 0.24),
-                primaryActionKeycapTint: Color.white.opacity(0.18)
+                controlStroke: Color.white.opacity(0.18)
             )
         case (.sunrise, true):
             return Self(
@@ -428,8 +514,6 @@ extension ClipinGlassPalette {
                 sidebarTint: Color(red: 0.28, green: 0.20, blue: 0.16, opacity: 0.18),
                 detailTint: Color(red: 0.26, green: 0.19, blue: 0.14, opacity: 0.22),
                 previewCanvasTint: Color(red: 0.30, green: 0.22, blue: 0.17, opacity: 0.18),
-                paletteTint: Color(red: 0.31, green: 0.22, blue: 0.17, opacity: 0.22),
-                paletteHighlight: Color(red: 1.0, green: 0.88, blue: 0.78, opacity: 0.12),
                 keycapTint: Color.white.opacity(0.10),
                 emphasisInk: Color(red: 1.0, green: 0.72, blue: 0.58),
                 emphasisFill: Color(red: 0.96, green: 0.58, blue: 0.42, opacity: 0.18),
@@ -439,13 +523,7 @@ extension ClipinGlassPalette {
                 hoverFill: Color.white.opacity(0.05),
                 hoverStroke: Color.white.opacity(0.07),
                 controlFill: Color.white.opacity(0.06),
-                controlStroke: Color.white.opacity(0.08),
-                separatorLine: Color.white.opacity(0.05),
-                primaryActionTintTop: Color(red: 0.82, green: 0.46, blue: 0.26, opacity: 0.78),
-                primaryActionTintBottom: Color(red: 0.58, green: 0.28, blue: 0.18, opacity: 0.74),
-                primaryActionHighlight: Color.white.opacity(0.16),
-                primaryActionGlow: Color(red: 0.46, green: 0.23, blue: 0.15, opacity: 0.24),
-                primaryActionKeycapTint: Color.white.opacity(0.12)
+                controlStroke: Color.white.opacity(0.08)
             )
         }
     }

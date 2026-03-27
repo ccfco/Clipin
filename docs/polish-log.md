@@ -10,6 +10,10 @@
 - Removed the hard divider approach after review and regrouped preview metadata with subtle layered surfaces and whitespace instead, so the lower info block still reads as a separate group without breaking the panel into line-cut regions.
 - Rebuilt the info panel from stacked two-line fields into a compact inline metadata grid with a dedicated `InfoItem` model, so secondary details use less vertical space and behave more like dense metadata than mini content blocks.
 - Pulled the action palette back into the same design family as the main panel by sharing rounded-surface primitives, keycap chrome, and the same quiet selected-row language instead of letting the palette keep its own independent glass skin.
+- Followed up with a structural unification pass after visual review: replaced repeated per-view surface recipes with shared `ClipinSurfaceBackground` roles, so sidebar/detail/control/footer surfaces now come from one semantic mapping instead of ad-hoc material constants in each screen.
+- Matched the main list spacing to the action palette by increasing shared row inset, moving selection away from the container edges, and reusing one `ClipinSelectableRowBackground` for the main panel, action palette, and settings sidebar.
+- Removed the preview footer card and turned metadata into an inline group under the content stage, so the right pane keeps one clear focal object while still exposing source/type/count/dimension details compactly.
+- Rebuilt Settings and Permission windows onto the same design grammar: custom settings sidebar rows instead of `List` chrome, grouped surfaces instead of `Divider()`, and theme-aware recorder/notice surfaces so edge-case windows no longer feel like a different app.
 
 Acceptance:
 

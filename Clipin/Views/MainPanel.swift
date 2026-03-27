@@ -116,8 +116,9 @@ struct MainPanel: View {
                 viewModel.cycleTypeFilter(reverse: reverse)
             }
         )
-        .padding(.horizontal, 2)
-        .padding(.top, 6)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 6)
     }
 
     private var contentArea: some View {
@@ -125,15 +126,10 @@ struct MainPanel: View {
             itemList
                 .frame(width: 292)
                 .background(
-                    ClipinRoundedSurface(
+                    ClipinSurfaceBackground(
+                        role: .sidebar,
                         cornerRadius: ClipinChrome.sectionCornerRadius,
-                        material: .thinMaterial,
-                        tint: glass.sidebarTint,
-                        stroke: glass.controlStroke,
-                        highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.08 : 0.24),
-                        shadowColor: .black.opacity(0.1),
-                        shadowRadius: 20,
-                        shadowYOffset: 10
+                        glass: glass
                     )
                 )
 
@@ -141,15 +137,10 @@ struct MainPanel: View {
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
-                    ClipinRoundedSurface(
+                    ClipinSurfaceBackground(
+                        role: .detail,
                         cornerRadius: ClipinChrome.sectionCornerRadius,
-                        material: .regularMaterial,
-                        tint: glass.detailTint,
-                        stroke: glass.controlStroke,
-                        highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.10 : 0.28),
-                        shadowColor: .black.opacity(0.12),
-                        shadowRadius: 24,
-                        shadowYOffset: 12
+                        glass: glass
                     )
                 )
         }
@@ -243,13 +234,17 @@ struct MainPanel: View {
             .padding(.leading, 8)
         }
         .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            ClipinSurfaceBackground(
+                role: .strip,
+                cornerRadius: ClipinChrome.sectionCornerRadius,
+                glass: glass
+            )
+        )
+        .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 12)
-        .background(
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(glass.chromeTint)
-        )
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
@@ -307,13 +302,12 @@ struct MainPanel: View {
         .padding(.vertical, emphasized ? 6 : 0)
         .background(
             RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                .fill(emphasized ? glass.emphasisFill : Color.clear)
+                .fill(emphasized ? hierarchy.selection.fill : Color.clear)
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                        .strokeBorder(emphasized ? glass.emphasisStroke : Color.clear, lineWidth: 0.5)
+                        .strokeBorder(emphasized ? hierarchy.selection.stroke : Color.clear, lineWidth: 0.5)
                 )
         )
-        .shadow(color: emphasized ? glass.primaryActionGlow.opacity(0.35) : .clear, radius: 10, y: 4)
     }
 }
 
@@ -415,28 +409,18 @@ private struct ItemListView: View {
             isHovered: isHovered,
             hierarchy: hierarchy
         )
-        .padding(.horizontal, 8)
+        .padding(.horizontal, ClipinChrome.listRowInset)
+        .padding(.vertical, 2)
         .id(item.id)
         .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
-                .fill(
-                    isSelected
-                        ? hierarchy.selection.fill
-                        : isHovered
-                            ? glass.hoverFill
-                            : Color.clear
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
-                        .strokeBorder(
-                            isSelected
-                                ? hierarchy.selection.stroke
-                                : isHovered
-                                    ? glass.hoverStroke
-                                    : Color.clear,
-                            lineWidth: 0.5
-                        )
-                )
+            ClipinSelectableRowBackground(
+                isSelected: isSelected,
+                isHovered: isHovered,
+                selectionFill: hierarchy.selection.fill,
+                selectionStroke: hierarchy.selection.stroke,
+                hoverFill: glass.hoverFill,
+                hoverStroke: glass.hoverStroke
+            )
         )
         .animation(ClipinMotion.selection, value: isSelected)
         .animation(ClipinMotion.feedback, value: isHovered)
@@ -481,15 +465,10 @@ private struct ItemListView: View {
     }
 
     private func badgeCapsule(_ key: String) -> some View {
-        Text(key)
-            .font(.system(size: 10.5, weight: .medium, design: .rounded))
-            .foregroundStyle(Color(nsColor: .secondaryLabelColor))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(glass.controlFill)
-                    .overlay(Capsule(style: .continuous).strokeBorder(glass.controlStroke, lineWidth: 0.5))
-            )
+        ClipinKeycap(
+            key: key,
+            foreground: Color(nsColor: .secondaryLabelColor),
+            background: glass.keycapTint
+        )
     }
 }

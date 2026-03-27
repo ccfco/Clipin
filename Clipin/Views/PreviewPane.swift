@@ -17,11 +17,11 @@ struct PreviewPane: View {
     var body: some View {
         Group {
             if let item {
-                VStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 24) {
                     content(for: item)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                    infoSection(for: item)
+                    metadataSection(for: item)
                 }
                 .padding(28)
             } else {
@@ -127,20 +127,10 @@ struct PreviewPane: View {
         }
     }
 
-    private func infoSection(for item: ClipItem) -> some View {
+    private func metadataSection(for item: ClipItem) -> some View {
         infoGrid(for: item)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            .padding(.top, 2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                ClipinRoundedSurface(
-                    cornerRadius: ClipinChrome.cardCornerRadius,
-                    material: .thinMaterial,
-                    tint: glass.controlFill.opacity(colorScheme == .dark ? 0.96 : 0.9),
-                    stroke: glass.hoverStroke,
-                    highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.04 : 0.16)
-                )
-            )
     }
 
     private func infoGrid(for item: ClipItem) -> some View {
@@ -153,8 +143,8 @@ struct PreviewPane: View {
 
     private var infoGridColumns: [GridItem] {
         [
-            GridItem(.flexible(minimum: 0), spacing: 24, alignment: .leading),
-            GridItem(.flexible(minimum: 0), spacing: 24, alignment: .leading)
+            GridItem(.flexible(minimum: 220), spacing: 28, alignment: .leading),
+            GridItem(.flexible(minimum: 220), spacing: 28, alignment: .leading)
         ]
     }
 
@@ -236,9 +226,9 @@ struct PreviewPane: View {
     private func infoRow(_ item: InfoItem) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(item.label)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.tertiary)
-                .frame(minWidth: 54, idealWidth: 72, maxWidth: 88, alignment: .leading)
+                .frame(minWidth: 46, idealWidth: 60, maxWidth: 74, alignment: .leading)
                 .lineLimit(1)
 
             HStack(spacing: 6) {
@@ -250,15 +240,15 @@ struct PreviewPane: View {
                 }
 
                 Text(item.value)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.primary.opacity(0.76))
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(Color.primary.opacity(0.84))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .textSelection(.enabled)
                     .help(item.value)
             }
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 10)
         }
     }
 

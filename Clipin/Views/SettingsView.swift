@@ -44,22 +44,25 @@ struct SettingsView: View {
     @State private var dismissTask: Task<Void, Never>?
     @State private var now: Date = .now
     @State private var tickTimer: Timer?
+    @State private var hoveredTab: SettingsTab?
 
     private var glass: ClipinGlassPalette {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
     }
 
+    private var hierarchy: ClipinPanelHierarchy {
+        .make(glass: glass, colorScheme: colorScheme)
+    }
+
     var body: some View {
         ZStack {
             windowBackdrop
-            HStack(spacing: 0) {
+            HStack(spacing: 14) {
                 sidebar
-                Rectangle()
-                    .fill(glass.separatorLine)
-                    .frame(width: 1)
                 contentArea
                     .animation(ClipinMotion.panel, value: selectedTab)
             }
+            .padding(14)
         }
         .frame(width: 680, height: 600)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -88,40 +91,61 @@ struct SettingsView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        List(SettingsTab.allCases, id: \.self, selection: $selectedTab) { tab in
-            let isSelected = selectedTab == tab
-            Label {
-                Text(tab.title)
-                    .font(.system(size: 13))
-                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-            } icon: {
-                Image(systemName: tab.icon)
-                    .foregroundStyle(isSelected ? glass.emphasisInk : Color.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(SettingsTab.allCases) { tab in
+                settingsSidebarRow(tab)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                    .fill(isSelected ? glass.emphasisFill : Color.clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                            .strokeBorder(isSelected ? glass.emphasisStroke : Color.clear, lineWidth: 0.5)
-                    )
-            )
-            .tag(tab)
-            .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
-            .listRowBackground(Color.clear)
         }
-        .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
+        .padding(10)
         .background(
-                Rectangle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(Rectangle().fill(glass.sidebarTint))
-                    .overlay(Rectangle().frame(width: 0.5).foregroundStyle(glass.controlStroke), alignment: .trailing)
+            ClipinSurfaceBackground(
+                role: .sidebar,
+                cornerRadius: ClipinChrome.sectionCornerRadius,
+                glass: glass
+            )
         )
-        .frame(width: 180)
+        .frame(width: 188)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private func settingsSidebarRow(_ tab: SettingsTab) -> some View {
+        let isSelected = selectedTab == tab
+        let isHovered = hoveredTab == tab
+
+        return Button {
+            selectedTab = tab
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.secondary)
+
+                Text(tab.title)
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.primary.opacity(0.88))
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                ClipinSelectableRowBackground(
+                    isSelected: isSelected,
+                    isHovered: isHovered,
+                    selectionFill: hierarchy.selection.fill,
+                    selectionStroke: hierarchy.selection.stroke,
+                    hoverFill: glass.hoverFill,
+                    hoverStroke: glass.hoverStroke
+                )
+            )
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .onHover { hovered in
+            hoveredTab = hovered ? tab : nil
+        }
+        .animation(ClipinMotion.selection, value: isSelected)
+        .animation(ClipinMotion.feedback, value: isHovered)
     }
 
     // MARK: - Content Area
@@ -145,6 +169,13 @@ struct SettingsView: View {
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .background(
+            ClipinSurfaceBackground(
+                role: .detail,
+                cornerRadius: ClipinChrome.sectionCornerRadius,
+                glass: glass
+            )
+        )
     }
 
     // MARK: - General
@@ -161,7 +192,8 @@ struct SettingsView: View {
                             shortcut: Binding(
                                 get: { settings.shortcut },
                                 set: { settings.shortcut = $0 }
-                            )
+                            ),
+                            glass: glass
                         )
                         .frame(width: 180, height: 34)
 
@@ -179,7 +211,7 @@ struct SettingsView: View {
             }
 
             contentGroup {
-                VStack(spacing: 12) {
+                VStack(spacing: 18) {
                     HStack(alignment: .firstTextBaseline) {
                         Text("Appearance")
                             .font(.system(size: 13, weight: .medium))
@@ -193,8 +225,6 @@ struct SettingsView: View {
                         .pickerStyle(.segmented)
                         .frame(width: 200)
                     }
-
-                    Divider()
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline) {
@@ -214,8 +244,6 @@ struct SettingsView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
-
-                    Divider()
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline) {
@@ -343,7 +371,7 @@ struct SettingsView: View {
     private var retentionContent: some View {
         VStack(spacing: 14) {
             contentGroup {
-                VStack(spacing: 10) {
+                VStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline) {
                             Text("Keep unpinned history for")
@@ -362,7 +390,6 @@ struct SettingsView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.secondary)
                     }
-                    Divider()
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(alignment: .firstTextBaseline) {
                             Text("Max unpinned items")
@@ -534,17 +561,11 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
             .background(
-                RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                    .fill(.thinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                            .fill(glass.controlFill)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                            .strokeBorder(glass.controlStroke, lineWidth: 0.5)
-                    )
-                    .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
+                ClipinSurfaceBackground(
+                    role: .grouped,
+                    cornerRadius: ClipinChrome.cardCornerRadius,
+                    glass: glass
+                )
             )
     }
 
@@ -560,16 +581,11 @@ struct SettingsView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                        .fill(glass.controlFill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                        .strokeBorder(glass.controlStroke, lineWidth: 0.5)
-                )
+            ClipinSurfaceBackground(
+                role: .control,
+                cornerRadius: ClipinChrome.searchCornerRadius,
+                glass: glass
+            )
         )
     }
 

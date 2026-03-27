@@ -52,6 +52,7 @@ struct ActionPalette: View {
     let actions: [PaletteAction]
     @Binding var selectedIndex: Int
     let onSelect: (Int) -> Void
+    @State private var hoveredIndex: Int?
 
     private var glass: ClipinGlassPalette {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
@@ -102,16 +103,6 @@ struct ActionPalette: View {
                         actionRow(action: actions[index], index: index)
                     }
                 }
-                .padding(6)
-                .background(
-                    ClipinRoundedSurface(
-                        cornerRadius: ClipinChrome.cardCornerRadius,
-                        material: .thinMaterial,
-                        tint: glass.controlFill.opacity(colorScheme == .dark ? 0.96 : 0.9),
-                        stroke: glass.hoverStroke,
-                        highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.04 : 0.18)
-                    )
-                )
             }
 
             if actions.isEmpty {
@@ -121,15 +112,10 @@ struct ActionPalette: View {
         .padding(12)
         .frame(width: 372, alignment: .leading)
         .background(
-            ClipinRoundedSurface(
+            ClipinSurfaceBackground(
+                role: .floating,
                 cornerRadius: ClipinChrome.paletteCornerRadius,
-                material: .regularMaterial,
-                tint: glass.detailTint,
-                stroke: glass.controlStroke,
-                highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.10 : 0.28),
-                shadowColor: .black.opacity(0.12),
-                shadowRadius: 34,
-                shadowYOffset: 18
+                glass: glass
             )
         )
         .shadow(color: .black.opacity(0.04), radius: 10, y: 3)
@@ -161,12 +147,10 @@ struct ActionPalette: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 11)
             .background(
-                ClipinRoundedSurface(
+                ClipinSurfaceBackground(
+                    role: .control,
                     cornerRadius: ClipinChrome.searchCornerRadius,
-                    material: .regularMaterial,
-                    tint: glass.controlFill,
-                    stroke: glass.controlStroke,
-                    highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.16 : 0.34)
+                    glass: glass
                 )
             )
 
@@ -187,6 +171,7 @@ struct ActionPalette: View {
 
     private func actionRow(action: PaletteAction, index: Int) -> some View {
         let isSelected = selectedIndex == index
+        let isHovered = hoveredIndex == index
         let selectedFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.18 : 0.12) : hierarchy.selection.fill
         let selectedStroke = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.30 : 0.22) : hierarchy.selection.stroke
         let selectedInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.92 : 0.82) : hierarchy.selection.ink
@@ -218,16 +203,14 @@ struct ActionPalette: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
         .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
-                .fill(
-                    isSelected
-                        ? selectedFill
-                        : Color.clear
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
-                        .strokeBorder(isSelected ? selectedStroke : Color.clear, lineWidth: 0.5)
-                )
+            ClipinSelectableRowBackground(
+                isSelected: isSelected,
+                isHovered: isHovered,
+                selectionFill: selectedFill,
+                selectionStroke: selectedStroke,
+                hoverFill: glass.hoverFill,
+                hoverStroke: glass.hoverStroke
+            )
         )
         .contentShape(Rectangle())
         .onTapGesture {
@@ -235,7 +218,7 @@ struct ActionPalette: View {
             onSelect(index)
         }
         .onHover { hovered in
-            if hovered { selectedIndex = index }
+            hoveredIndex = hovered ? index : nil
         }
         .animation(ClipinMotion.feedback, value: isSelected)
     }

@@ -156,17 +156,12 @@ struct SearchBar: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
-            ClipinRoundedSurface(
+            ClipinSurfaceBackground(
+                role: .control,
                 cornerRadius: ClipinChrome.searchCornerRadius,
-                material: .regularMaterial,
-                tint: glass.controlFill,
-                stroke: glass.controlStroke,
-                highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.2 : 0.5)
+                glass: glass
             )
         )
-        .padding(.horizontal, 14)
-        .padding(.top, 8)
-        .padding(.bottom, 6)
     }
 
     private var filterPills: some View {

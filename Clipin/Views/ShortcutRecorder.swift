@@ -4,12 +4,14 @@ import SwiftUI
 
 struct ShortcutRecorder: NSViewRepresentable {
     @Binding var shortcut: HotKeyShortcut
+    let glass: ClipinGlassPalette
 
     func makeNSView(context: Context) -> ShortcutRecorderField {
         let field = ShortcutRecorderField()
         field.onShortcutChange = { newShortcut in
             shortcut = newShortcut
         }
+        field.applyTheme(glass: glass)
         field.update(shortcut: shortcut)
         return field
     }
@@ -18,6 +20,7 @@ struct ShortcutRecorder: NSViewRepresentable {
         nsView.onShortcutChange = { newShortcut in
             shortcut = newShortcut
         }
+        nsView.applyTheme(glass: glass)
         nsView.update(shortcut: shortcut)
     }
 }
@@ -25,6 +28,12 @@ struct ShortcutRecorder: NSViewRepresentable {
 final class ShortcutRecorderField: NSTextField {
     var onShortcutChange: ((HotKeyShortcut) -> Void)?
     private var currentDisplayString = ""
+    private var idleBorderColor = NSColor.separatorColor.withAlphaComponent(0.5)
+    private var activeBorderColor = NSColor.controlAccentColor.withAlphaComponent(0.38)
+    private var idleBackgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.72)
+    private var activeBackgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08)
+    private var idleTextColor = NSColor.secondaryLabelColor
+    private var activeTextColor = NSColor.labelColor
     private var isCapturing = false {
         didSet { updateAppearance() }
     }
@@ -100,18 +109,24 @@ final class ShortcutRecorderField: NSTextField {
         }
     }
 
+    func applyTheme(glass: ClipinGlassPalette) {
+        idleBorderColor = NSColor(glass.controlStroke)
+        activeBorderColor = NSColor(glass.emphasisStroke)
+        idleBackgroundColor = NSColor(glass.controlFill)
+        activeBackgroundColor = NSColor(glass.emphasisFill)
+        idleTextColor = NSColor.secondaryLabelColor
+        activeTextColor = NSColor(glass.emphasisInk)
+        updateAppearance()
+    }
+
     private func updateAppearance() {
         guard let layer else { return }
 
         layer.cornerRadius = 8
         layer.cornerCurve = .continuous
         layer.borderWidth = 1
-        textColor = isCapturing ? NSColor.labelColor : NSColor.secondaryLabelColor
-        layer.borderColor = isCapturing
-            ? NSColor.controlAccentColor.withAlphaComponent(0.38).cgColor
-            : NSColor.separatorColor.withAlphaComponent(0.5).cgColor
-        layer.backgroundColor = isCapturing
-            ? NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
-            : NSColor.textBackgroundColor.withAlphaComponent(0.72).cgColor
+        textColor = isCapturing ? activeTextColor : idleTextColor
+        layer.borderColor = (isCapturing ? activeBorderColor : idleBorderColor).cgColor
+        layer.backgroundColor = (isCapturing ? activeBackgroundColor : idleBackgroundColor).cgColor
     }
 }
