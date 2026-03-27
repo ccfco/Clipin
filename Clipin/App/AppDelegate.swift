@@ -16,10 +16,13 @@ private final class ClipinSettingsWindow: NSWindow {
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown,
-           let delta = directionalDelta(for: event),
-           shouldHandleDirectionalNavigation?(firstResponder) != false,
-           onDirectionalNavigation?(delta) == true {
-            return
+           let delta = directionalDelta(for: event) {
+            let responder = firstResponder
+            let shouldHandle = shouldHandleDirectionalNavigation?(responder) != false
+            if shouldHandle,
+               onDirectionalNavigation?(delta) == true {
+                return
+            }
         }
         super.sendEvent(event)
     }
@@ -707,6 +710,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settings.refreshLaunchAtLoginStatus()
         window.center()
         window.makeKeyAndOrderFront(nil)
+        // 避免设置窗口初始焦点落到 ShortcutRecorder 等文本控件，导致方向键被解释成输入内导航。
+        window.makeFirstResponder(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
