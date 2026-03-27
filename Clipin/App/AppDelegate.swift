@@ -157,7 +157,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
