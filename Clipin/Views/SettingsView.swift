@@ -194,7 +194,14 @@ struct SettingsView: View {
         List(SettingsTab.allCases, selection: selectedSidebarTab) { tab in
             settingsSidebarRow(tab)
                 .tag(tab)
-                .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                .listRowInsets(
+                    EdgeInsets(
+                        top: 4,
+                        leading: ClipinChrome.listRowOuterInset,
+                        bottom: 4,
+                        trailing: ClipinChrome.listRowOuterInset
+                    )
+                )
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
         }
