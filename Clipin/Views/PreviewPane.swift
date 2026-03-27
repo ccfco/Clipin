@@ -22,7 +22,6 @@ struct PreviewPane: View {
 
                     metadataSection(for: item)
                 }
-                .padding(ClipinChrome.detailContentInset)
             } else {
                 contentStage {
                     placeholder(
@@ -31,7 +30,6 @@ struct PreviewPane: View {
                         subtitle: "Choose a clipboard item from the list to inspect it here."
                     )
                 }
-                .padding(ClipinChrome.detailContentInset)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -167,7 +167,7 @@ struct ActionPalette: View {
                 background: isSelected ? selectedBadgeFill : glass.keycapTint
             )
         }
-        .padding(.horizontal, ClipinChrome.listRowOuterInset)
+        .padding(.horizontal, 12)
         .padding(.vertical, 11)
         .background(
             ClipinSelectableRowBackground(
@@ -179,6 +179,7 @@ struct ActionPalette: View {
                 hoverStroke: glass.hoverStroke
             )
         )
+        .padding(.horizontal, ClipinChrome.listRowOuterInset)
         .contentShape(Rectangle())
         .onTapGesture {
             selectedIndex = index

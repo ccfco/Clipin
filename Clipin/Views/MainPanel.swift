@@ -368,7 +368,6 @@ private struct ItemListView: View {
                     }
                 }
                 .padding(.vertical, 6)
-                .padding(.horizontal, ClipinChrome.listContentInset)
             }
             .onChange(of: selection.wrappedValue) { _, newID in
                 guard let newID else { return }
