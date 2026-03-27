@@ -101,12 +101,12 @@ struct PermissionView: View {
             .padding(22)
             .background(
                 ClipinSurfaceBackground(
-                    role: .detail,
+                    role: .column,
                     cornerRadius: ClipinChrome.sectionCornerRadius,
                     glass: glass
                 )
             )
-            .padding(18)
+            .padding(ClipinChrome.shellSectionInset)
         }
         .frame(width: 400, height: 420)
     }

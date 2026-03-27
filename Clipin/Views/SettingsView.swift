@@ -44,14 +44,20 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 
 @MainActor
 final class SettingsNavigationModel: ObservableObject {
-    @Published private(set) var selectedTab: SettingsTab
+    @Published private(set) var selectedTab: SettingsTab?
 
     init(selectedTab: SettingsTab = .general) {
         self.selectedTab = selectedTab
     }
 
-    func select(_ tab: SettingsTab) {
+    func select(_ tab: SettingsTab?) {
         selectedTab = tab
+    }
+
+    func ensureSelection(_ fallback: SettingsTab = .general) {
+        if selectedTab == nil {
+            selectedTab = fallback
+        }
     }
 }
 
@@ -148,21 +154,19 @@ struct SettingsView: View {
     private var selectedSidebarTab: Binding<SettingsTab?> {
         Binding(
             get: { navigation.selectedTab },
-            set: { tab in
-                navigation.select(tab ?? navigation.selectedTab)
-            }
+            set: { tab in navigation.select(tab) }
         )
     }
 
     var body: some View {
         ZStack {
             windowBackdrop
-            HStack(spacing: 16) {
+            HStack(spacing: ClipinChrome.shellSectionGap) {
                 sidebar
                 contentArea
                     .animation(ClipinMotion.panel, value: navigation.selectedTab)
             }
-            .padding(16)
+            .padding(ClipinChrome.shellSectionInset)
         }
         .frame(width: 720, height: 608)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -237,7 +241,7 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(
             ClipinSelectableRowBackground(
@@ -260,26 +264,29 @@ struct SettingsView: View {
     // MARK: - Content Area
 
     private var contentArea: some View {
-        let tab = navigation.selectedTab
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                detailHeader(for: tab)
+        ScrollView {
+            VStack(alignment: .leading, spacing: ClipinChrome.detailGroupSpacing) {
+                if let tab = navigation.selectedTab {
+                    detailHeader(for: tab)
 
-                switch tab {
-                case .general:    generalContent
-                case .privacy:    privacyContent
-                case .retention:  retentionContent
-                case .transfer:   transferContent
-                case .autoBackup: autoBackupContent
+                    switch tab {
+                    case .general:    generalContent
+                    case .privacy:    privacyContent
+                    case .retention:  retentionContent
+                    case .transfer:   transferContent
+                    case .autoBackup: autoBackupContent
+                    }
+                } else {
+                    settingsSelectionPlaceholder
                 }
             }
-            .id(tab)
-            .padding(22)
+            .id(navigation.selectedTab?.rawValue)
+            .padding(ClipinChrome.detailContentInset)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(
             ClipinSurfaceBackground(
-                role: .detail,
+                role: .column,
                 cornerRadius: ClipinChrome.sectionCornerRadius,
                 glass: glass
             )
@@ -642,6 +649,19 @@ struct SettingsView: View {
         Rectangle()
             .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.06))
             .frame(height: 1)
+    }
+
+    private var settingsSelectionPlaceholder: some View {
+        contentGroup(role: .control, padding: 16) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Choose a section")
+                    .font(.system(size: 13, weight: .medium))
+
+                Text("Select a section from the sidebar to edit Clipin preferences.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     private func settingFieldRow<Control: View>(

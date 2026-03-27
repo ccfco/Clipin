@@ -626,6 +626,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func openSettingsWindow() {
         let window: NSWindow
 
+        settingsNavigation.ensureSelection()
+
         if let existingWindow = settingsWindow {
             window = existingWindow
         } else {

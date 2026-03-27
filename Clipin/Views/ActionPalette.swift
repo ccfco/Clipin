@@ -79,8 +79,8 @@ struct ActionPalette: View {
                 .onTapGesture { dismiss() }
 
             palettePanel
-                .padding(.trailing, 18)
-                .padding(.bottom, 62)
+                .padding(.trailing, ClipinChrome.shellSectionInset)
+                .padding(.bottom, ClipinChrome.footerMinHeight + ClipinChrome.footerOuterBottomInset + 6)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
@@ -114,7 +114,6 @@ struct ActionPalette: View {
                 glass: glass
             )
         )
-        .shadow(color: .black.opacity(0.04), radius: 10, y: 3)
         .onAppear { selectedIndex = 0 }
     }
 

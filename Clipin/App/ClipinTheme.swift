@@ -22,35 +22,36 @@ enum VisualTheme: String, CaseIterable {
 }
 
 enum ClipinChrome {
+    // 圆角层级：shell 24 → section 16 → contentStage/search 14 → metadata 12 → row 12 → badge 10/7
     static let shellCornerRadius: CGFloat = 24
-    static let sectionCornerRadius: CGFloat = 20
+    static let sectionCornerRadius: CGFloat = 16
     static let cardCornerRadius: CGFloat = 18
-    static let searchCornerRadius: CGFloat = 16
+    static let searchCornerRadius: CGFloat = 14
     static let rowCornerRadius: CGFloat = 12
     static let paletteCornerRadius: CGFloat = 26
     static let primaryBadgeCornerRadius: CGFloat = 14
     static let badgeCornerRadius: CGFloat = 10
-    static let shellSectionInset: CGFloat = 16
-    static let shellSectionGap: CGFloat = 16
-    static let headerTopInset: CGFloat = 14
-    static let headerBottomInset: CGFloat = 8
-    static let contentTopInset: CGFloat = 10
-    static let contentBottomInset: CGFloat = 8
+    // 场景骨架：主面板 / 设置页 / 权限页统一使用 12pt panel gap，列表选中对象统一使用 8pt gutter
+    static let shellSectionInset: CGFloat = 12
+    static let shellSectionGap: CGFloat = 12
+    static let headerTopInset: CGFloat = 12
+    static let headerBottomInset: CGFloat = 12
+    static let contentTopInset: CGFloat = 0
+    static let contentBottomInset: CGFloat = 0
     static let listContentInset: CGFloat = 12
-    static let listScrollbarInset: CGFloat = 8
-    static let listRowOuterInset: CGFloat = 10
-    static let detailContentInset: CGFloat = 14
-    static let detailObjectInset: CGFloat = 18
+    static let listRowOuterInset: CGFloat = 8
+    static let detailContentInset: CGFloat = 12
+    static let detailObjectInset: CGFloat = 0
     static let detailStageInset: CGFloat = 12
-    static let detailMetadataInset: CGFloat = 8
+    static let detailMetadataInset: CGFloat = 12
     static let detailGroupSpacing: CGFloat = 12
-    static let detailStageCornerRadius: CGFloat = 16
-    static let detailMetadataCornerRadius: CGFloat = 14
+    static let detailStageCornerRadius: CGFloat = 14
+    static let detailMetadataCornerRadius: CGFloat = 12
     static let detailMediaCornerRadius: CGFloat = 14
-    static let footerMinHeight: CGFloat = 48
-    static let footerContentInset: CGFloat = 5
-    static let footerOuterTopInset: CGFloat = 8
-    static let footerOuterBottomInset: CGFloat = 10
+    static let footerMinHeight: CGFloat = 44
+    static let footerContentInset: CGFloat = 6
+    static let footerOuterTopInset: CGFloat = 12
+    static let footerOuterBottomInset: CGFloat = 12
     static let footerCalloutVerticalInset: CGFloat = 4
     static let footerCalloutHorizontalLeading: CGFloat = 10
     static let footerCalloutHorizontalTrailing: CGFloat = 10
@@ -138,7 +139,7 @@ struct ClipinKeycap: View {
 
 enum ClipinSurfaceRole {
     case sidebar
-    case detail
+    case column
     case floating
     case control
     case strip
@@ -312,20 +313,20 @@ extension ClipinGlassPalette {
                 tint: sidebarTint,
                 stroke: controlStroke,
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.22),
-                shadowColor: .black.opacity(0.10),
-                shadowRadius: 16,
-                shadowYOffset: 8
+                shadowColor: .black.opacity(isDark ? 0.14 : 0.08),
+                shadowRadius: 8,
+                shadowYOffset: 4
             )
 
-        case .detail:
+        case .column:
             return ClipinSurfaceStyle(
                 material: .regularMaterial,
                 tint: detailTint,
                 stroke: controlStroke,
                 highlight: shellHighlight.opacity(isDark ? 0.10 : 0.24),
-                shadowColor: .black.opacity(0.12),
-                shadowRadius: 18,
-                shadowYOffset: 9
+                shadowColor: .black.opacity(isDark ? 0.16 : 0.08),
+                shadowRadius: 8,
+                shadowYOffset: 4
             )
 
         case .floating:
@@ -334,9 +335,9 @@ extension ClipinGlassPalette {
                 tint: detailTint,
                 stroke: controlStroke,
                 highlight: shellHighlight.opacity(isDark ? 0.12 : 0.28),
-                shadowColor: .black.opacity(0.12),
-                shadowRadius: 34,
-                shadowYOffset: 18
+                shadowColor: .black.opacity(isDark ? 0.18 : 0.10),
+                shadowRadius: 18,
+                shadowYOffset: 10
             )
 
         case .control:
@@ -356,9 +357,9 @@ extension ClipinGlassPalette {
                 tint: controlFill.opacity(isDark ? 0.94 : 0.88),
                 stroke: controlStroke.opacity(isDark ? 0.92 : 0.84),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.18),
-                shadowColor: .clear,
-                shadowRadius: 0,
-                shadowYOffset: 0
+                shadowColor: .black.opacity(isDark ? 0.12 : 0.05),
+                shadowRadius: 6,
+                shadowYOffset: 3
             )
 
         case .grouped:
@@ -367,9 +368,9 @@ extension ClipinGlassPalette {
                 tint: controlFill.opacity(isDark ? 0.92 : 0.84),
                 stroke: hoverStroke,
                 highlight: shellHighlight.opacity(isDark ? 0.04 : 0.12),
-                shadowColor: .clear,
-                shadowRadius: 0,
-                shadowYOffset: 0
+                shadowColor: .black.opacity(isDark ? 0.10 : 0.04),
+                shadowRadius: 6,
+                shadowYOffset: 2
             )
 
         case .contentStage:
@@ -378,9 +379,9 @@ extension ClipinGlassPalette {
                 tint: previewCanvasTint.opacity(isDark ? 0.74 : 0.52),
                 stroke: controlStroke.opacity(isDark ? 0.56 : 0.42),
                 highlight: shellHighlight.opacity(isDark ? 0.03 : 0.08),
-                shadowColor: .clear,
-                shadowRadius: 0,
-                shadowYOffset: 0
+                shadowColor: .black.opacity(isDark ? 0.18 : 0.08),
+                shadowRadius: 8,
+                shadowYOffset: 3
             )
 
         case .metadata:
@@ -389,9 +390,9 @@ extension ClipinGlassPalette {
                 tint: controlFill.opacity(isDark ? 0.86 : 0.76),
                 stroke: hoverStroke.opacity(isDark ? 0.92 : 0.72),
                 highlight: shellHighlight.opacity(isDark ? 0.03 : 0.10),
-                shadowColor: .clear,
-                shadowRadius: 0,
-                shadowYOffset: 0
+                shadowColor: .black.opacity(isDark ? 0.08 : 0.04),
+                shadowRadius: 6,
+                shadowYOffset: 2
             )
         }
     }

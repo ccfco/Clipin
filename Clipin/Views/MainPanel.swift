@@ -135,13 +135,6 @@ struct MainPanel: View {
             PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(
-                    ClipinSurfaceBackground(
-                        role: .detail,
-                        cornerRadius: ClipinChrome.sectionCornerRadius,
-                        glass: glass
-                    )
-                )
         }
         .padding(.horizontal, ClipinChrome.shellSectionInset)
         .padding(.top, ClipinChrome.contentTopInset)
@@ -375,8 +368,7 @@ private struct ItemListView: View {
                     }
                 }
                 .padding(.vertical, 6)
-                .padding(.leading, ClipinChrome.listContentInset)
-                .padding(.trailing, ClipinChrome.listContentInset + ClipinChrome.listScrollbarInset)
+                .padding(.horizontal, ClipinChrome.listContentInset)
             }
             .onChange(of: selection.wrappedValue) { _, newID in
                 guard let newID else { return }
@@ -392,7 +384,7 @@ private struct ItemListView: View {
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(.tertiary)
             .tracking(0.35)
-            .padding(.horizontal, 6)
+            .padding(.horizontal, ClipinChrome.listRowOuterInset)
             .padding(.top, 14)
             .padding(.bottom, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
