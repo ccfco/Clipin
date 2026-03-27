@@ -8,42 +8,6 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// 设置窗口的方向键导航是窗口级语义，不应依赖 AppDelegate 的全局事件监视器。
-/// 直接在 sendEvent 截获 keyDown，能稳定覆盖 SwiftUI/AppKit 子控件各自的 responder 细节。
-private final class ClipinSettingsWindow: NSWindow {
-    var shouldHandleDirectionalNavigation: ((NSResponder?) -> Bool)?
-    var onDirectionalNavigation: ((Int) -> Bool)?
-
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown,
-           let delta = directionalDelta(for: event) {
-            let responder = firstResponder
-            let shouldHandle = shouldHandleDirectionalNavigation?(responder) != false
-            if shouldHandle,
-               onDirectionalNavigation?(delta) == true {
-                return
-            }
-        }
-        super.sendEvent(event)
-    }
-
-    private func directionalDelta(for event: NSEvent) -> Int? {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if flags.contains(.command) || flags.contains(.control) || flags.contains(.option) || flags.contains(.function) {
-            return nil
-        }
-
-        switch event.keyCode {
-        case 0x7E:
-            return -1
-        case 0x7D:
-            return 1
-        default:
-            return nil
-        }
-    }
-}
-
 /// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
 private final class ClipinPanel: NSPanel {
@@ -63,7 +27,7 @@ private final class ClipinPanel: NSPanel {
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: ClipinPanel?
-    private var settingsWindow: ClipinSettingsWindow?
+    private var settingsWindow: NSWindow?
     private let appState = AppState.shared
     private let settings = SettingsStore.shared
     private let settingsNavigation = SettingsNavigationModel()
@@ -655,23 +619,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private static func shouldHandleSettingsNavigation(for responder: NSResponder?) -> Bool {
-        if responder is ShortcutRecorderField {
-            return false
-        }
-        if let textView = responder as? NSTextView, textView.isFieldEditor {
-            return false
-        }
-        return true
-    }
-
     private func openSettingsWindow() {
         let window: NSWindow
 
         if let existingWindow = settingsWindow {
             window = existingWindow
         } else {
-            let newWindow = ClipinSettingsWindow(
+            let newWindow = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 680, height: 600),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
@@ -687,14 +641,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isMovableByWindowBackground = true
             newWindow.hasShadow = true
             newWindow.isReleasedWhenClosed = false
-            newWindow.shouldHandleDirectionalNavigation = { responder in
-                Self.shouldHandleSettingsNavigation(for: responder)
-            }
-            newWindow.onDirectionalNavigation = { [weak self] delta in
-                guard let self else { return false }
-                self.settingsNavigation.navigate(delta: delta)
-                return true
-            }
             newWindow.contentView = ClipinHostingView(
                 rootView: SettingsView(
                     settings: settings,
@@ -710,8 +656,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settings.refreshLaunchAtLoginStatus()
         window.center()
         window.makeKeyAndOrderFront(nil)
-        // 避免设置窗口初始焦点落到 ShortcutRecorder 等文本控件，导致方向键被解释成输入内导航。
-        window.makeFirstResponder(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 

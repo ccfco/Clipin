@@ -78,6 +78,16 @@ struct SettingsView: View {
         .make(glass: glass, colorScheme: colorScheme)
     }
 
+    private var selectedSidebarTab: Binding<SettingsTab?> {
+        Binding(
+            get: { navigation.selectedTab },
+            set: { tab in
+                guard let tab else { return }
+                navigation.select(tab)
+            }
+        )
+    }
+
     var body: some View {
         ZStack {
             windowBackdrop
@@ -115,12 +125,16 @@ struct SettingsView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(SettingsTab.allCases) { tab in
-                settingsSidebarRow(tab)
-            }
+        List(SettingsTab.allCases, selection: selectedSidebarTab) { tab in
+            settingsSidebarRow(tab)
+                .tag(tab)
+                .listRowInsets(EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 10))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
         }
-        .padding(10)
+        .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
         .background(
             ClipinSurfaceBackground(
                 role: .sidebar,
@@ -136,34 +150,30 @@ struct SettingsView: View {
         let isSelected = navigation.selectedTab == tab
         let isHovered = hoveredTab == tab
 
-        return Button {
-            navigation.select(tab)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.secondary)
+        return HStack(spacing: 10) {
+            Image(systemName: tab.icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.secondary)
 
-                Text(tab.title)
-                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                    .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.primary.opacity(0.88))
+            Text(tab.title)
+                .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.primary.opacity(0.88))
 
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(
-                ClipinSelectableRowBackground(
-                    isSelected: isSelected,
-                    isHovered: isHovered,
-                    selectionFill: hierarchy.selection.fill,
-                    selectionStroke: hierarchy.selection.stroke,
-                    hoverFill: glass.hoverFill,
-                    hoverStroke: glass.hoverStroke
-                )
-            )
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            ClipinSelectableRowBackground(
+                isSelected: isSelected,
+                isHovered: isHovered,
+                selectionFill: hierarchy.selection.fill,
+                selectionStroke: hierarchy.selection.stroke,
+                hoverFill: glass.hoverFill,
+                hoverStroke: glass.hoverStroke
+            )
+        )
         .contentShape(Rectangle())
         .onHover { hovered in
             hoveredTab = hovered ? tab : nil
