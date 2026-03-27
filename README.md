@@ -13,8 +13,12 @@
   <img src="https://img.shields.io/badge/macOS-15.0%2B-blue" alt="macOS 15.0+">
   <img src="https://img.shields.io/badge/Rust-1.75%2B-orange" alt="Rust 1.75+">
   <img src="https://img.shields.io/badge/Swift-6.0-red" alt="Swift 6.0">
-  <img src="https://img.shields.io/badge/version-0.1.3-brightgreen" alt="v0.1.3">
+  <img src="https://img.shields.io/badge/version-0.1.5-brightgreen" alt="v0.1.5">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
+</p>
+
+<p align="center">
+  <img src="docs/preview.png" width="800" alt="Clipin Preview">
 </p>
 
 <p align="center">
@@ -22,7 +26,7 @@
 </p>
 
 <p align="center">
-  小体积原生应用 · 本地优先 · 菜单栏常驻 · 为连续粘贴而设计
+  图片 OCR 搜索 · 系统级玻璃质感 · 位置记忆 · 连续粘贴
 </p>
 
 ## 为什么是 Clipin
@@ -39,27 +43,23 @@
 
 🪶 **轻量原生** — 原生 `SwiftUI` 外壳 + `Rust` 核心，安装包和运行负担都更克制，适合长期常驻
 
+🖼️ **图片 OCR** — 基于 Apple Vision Framework 实现本地图片文字识别，支持中英文搜索图片内容
+
+🎨 **Liquid Glass 主题** — 适配 macOS 26 风格设计，提供 Native/Mist/Graphite/Sunrise 四种精选主题
+
 🔍 **即时搜索** — 中英文全文检索（FTS5 trigram），输入即匹配，短查询自动回退 `LIKE`
 
 ⌨️ **键盘优先** — 方向键导航、回车粘贴、`⌘1-9` 快速粘贴前 9 条
 
 📌 **连续粘贴** — `⌘⇧L` 开启连续粘贴模式，跨应用点击输入框后面板自动夺回焦点，连续选择并粘贴
 
+📍 **位置记忆** — 面板自动记住上次在屏幕上的位置，支持跨重启持久化留存
+
 🎯 **动作面板** — `⌘K` 打开静态命令面板，空态下也始终可用
 
-🧠 **低负担列表** — 列表只展示轻量摘要，完整内容按需加载，大文本历史也不容易拖慢面板
+🔒 **隐私优先** — 数据全部本地 SQLite 存储，自动跳过密码管理器等敏感内容
 
-🔒 **隐私优先** — 数据全部本地 SQLite 存储，自动跳过密码管理器等敏感剪贴板内容
-
-☁️ **自动备份** — 可备份到 iCloud Drive 或任意文件夹，支持剪贴板变化 / 日 / 周 / 月频率
-
-🌐 **双语界面** — 内建简体中文 / English，兼顾中文搜索与界面切换
-
-📁 **多文件感知** — Finder 多选复制完整保留，粘贴和 Reveal 都按整组处理
-
-♾️ **长期存储** — 支持 7 天到永久保留，条目上限最高 50K 或不限
-
-⚡ **为常驻优化** — 菜单栏应用，不出现在 Dock；默认流程克制，尽量把打扰感压到最低
+☁️ **自动备份** — 可备份到 iCloud Drive 或任意文件夹，支持多种同步频率
 
 ## 安装
 
@@ -111,19 +111,20 @@ xcodegen generate
 
 **计划中：**
 
-- [ ] iCloud 同步
-- [ ] 浮动笔记模式
+- [ ] 拼音/首字母模糊搜索
+- [ ] 空格键快速预览 (QuickLook)
+- [ ] 浮动便签/参考面板模式
+- [ ] iCloud 云同步
 
 **已完成：**
 
-- [x] 连续粘贴模式
-- [x] 长期/永久历史保留
-- [x] FTS5 全文搜索
-- [x] 动作面板
-- [x] 隐私感知采集
+- [x] 图片 OCR 文字识别与搜索
+- [x] Native Liquid Glass 主题系统
+- [x] 面板位置记忆 (持久化)
+- [x] 连续粘贴模式 (Continuous Paste)
 - [x] 自动备份到 iCloud Drive / 本地文件夹
-- [x] 多主题支持
-- [x] 多语言（i18n）
+- [x] FTS5 全文搜索与动作面板
+- [x] 隐私感知采集与多语言支持
 
 ## 架构
 
@@ -170,12 +171,13 @@ Clipin/
 Clipin is a tiny, keyboard-first clipboard manager for macOS. It is built to launch fast, search fast, and stay quietly in your menu bar without feeling heavy.
 
 **Why it stands out:**
-- Small native footprint: current local Release build is about `6.6 MB` (`~2.7 MB` zipped)
-- Fast search: `Rust + SQLite + FTS5 trigram` with Chinese and English full-text lookup
-- Low-overhead UI: lightweight list items in the main panel, full details loaded on demand
-- Keyboard-first flow: arrow keys, Enter to paste, `⌘1-9` quick paste, `⌘K` action palette
-- Continuous Paste mode (`⌘⇧L`): continuous paste across apps without repeated hotkey presses
-- Privacy-first: all data stays local, and sensitive clipboard content is automatically skipped
+- Image OCR search: built-in text recognition for images (zh/en support)
+- Native Liquid Glass theme: modern macOS 26 style with 4 curated themes
+- Instant search: fast FTS5-based search for text and image content
+- Keyboard-first flow: arrow keys, Enter to paste, `⌘1-9` quick paste, `⌘K` palette
+- Position memory: panel automatically remembers its last position on screen
+- Continuous Paste mode (`⌘⇧L`): paste multiple items across apps seamlessly
+- Privacy-first: all data stays local, automatically skips password managers
 
 ## Install
 
