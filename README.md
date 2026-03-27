@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/macOS-15.0%2B-blue" alt="macOS 15.0+">
   <img src="https://img.shields.io/badge/Rust-1.75%2B-orange" alt="Rust 1.75+">
   <img src="https://img.shields.io/badge/Swift-6.0-red" alt="Swift 6.0">
-  <img src="https://img.shields.io/badge/version-0.1.2-brightgreen" alt="v0.1.2">
+  <img src="https://img.shields.io/badge/version-0.1.3-brightgreen" alt="v0.1.3">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
 </p>
 
@@ -50,6 +50,10 @@
 🧠 **低负担列表** — 列表只展示轻量摘要，完整内容按需加载，大文本历史也不容易拖慢面板
 
 🔒 **隐私优先** — 数据全部本地 SQLite 存储，自动跳过密码管理器等敏感剪贴板内容
+
+☁️ **自动备份** — 可备份到 iCloud Drive 或任意文件夹，支持剪贴板变化 / 日 / 周 / 月频率
+
+🌐 **双语界面** — 内建简体中文 / English，兼顾中文搜索与界面切换
 
 📁 **多文件感知** — Finder 多选复制完整保留，粘贴和 Reveal 都按整组处理
 
@@ -108,8 +112,6 @@ xcodegen generate
 **计划中：**
 
 - [ ] iCloud 同步
-- [ ] 多主题支持
-- [ ] 多语言（i18n）
 - [ ] 浮动笔记模式
 
 **已完成：**
@@ -119,6 +121,9 @@ xcodegen generate
 - [x] FTS5 全文搜索
 - [x] 动作面板
 - [x] 隐私感知采集
+- [x] 自动备份到 iCloud Drive / 本地文件夹
+- [x] 多主题支持
+- [x] 多语言（i18n）
 
 ## 架构
 
