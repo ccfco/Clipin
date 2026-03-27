@@ -30,6 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private let appState = AppState.shared
     private let settings = SettingsStore.shared
+    private let updateReminder = UpdateReminderService.shared
     private let settingsNavigation = SettingsNavigationModel()
     private var monitor: ClipboardMonitor?
     private var viewModel: ClipboardViewModel?
@@ -80,6 +81,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startKeyMonitor()
         runCleanupAndReload()
         showLaunchExperienceIfNeeded()
+        updateReminder.start()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()
     }
@@ -100,6 +102,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let event = NSApp.currentEvent else { return }
         if event.type == .rightMouseUp {
             let menu = NSMenu()
+            if let latestRelease = updateReminder.latestRelease {
+                let updateTitle = String(
+                    format: NSLocalizedString("New Version Available: %@", comment: ""),
+                    latestRelease.displayVersion
+                )
+                let updateItem = NSMenuItem(title: updateTitle, action: #selector(openUpdateDetails), keyEquivalent: "")
+                updateItem.target = self
+                menu.addItem(updateItem)
+
+                let downloadItem = NSMenuItem(title: NSLocalizedString("Download Latest", comment: ""), action: #selector(downloadLatestRelease), keyEquivalent: "")
+                downloadItem.target = self
+                menu.addItem(downloadItem)
+
+                let releaseItem = NSMenuItem(title: NSLocalizedString("View Release", comment: ""), action: #selector(openReleasePage), keyEquivalent: "")
+                releaseItem.target = self
+                menu.addItem(releaseItem)
+
+                menu.addItem(NSMenuItem.separator())
+            }
+
+            let checkUpdatesItem = NSMenuItem(title: NSLocalizedString("Check for Updates...", comment: ""), action: #selector(checkForUpdates), keyEquivalent: "")
+            checkUpdatesItem.target = self
+            menu.addItem(checkUpdatesItem)
             menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
             menu.addItem(NSMenuItem.separator())
             menu.addItem(NSMenuItem(title: "Quit Clipin", action: #selector(quitApp), keyEquivalent: "q"))
@@ -120,8 +145,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         openSettingsWindow()
     }
 
+    func checkForUpdatesFromCommand() {
+        checkForUpdates()
+    }
+
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func checkForUpdates() {
+        openSettingsWindow(select: .general)
+        updateReminder.checkNow()
+    }
+
+    @objc private func openUpdateDetails() {
+        openSettingsWindow(select: .general)
+    }
+
+    @objc private func openReleasePage() {
+        updateReminder.openReleasePage()
+    }
+
+    @objc private func downloadLatestRelease() {
+        updateReminder.downloadLatestRelease()
     }
 
     // MARK: - Panel
@@ -647,11 +693,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func openSettingsWindow() {
+    private func openSettingsWindow(select tab: SettingsTab? = nil) {
         let window: NSWindow
         let isNew: Bool
 
-        settingsNavigation.ensureSelection()
+        if let tab {
+            settingsNavigation.select(tab)
+        } else {
+            settingsNavigation.ensureSelection()
+        }
 
         if let existingWindow = settingsWindow {
             window = existingWindow
@@ -676,6 +726,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.contentView = ClipinHostingView(
                 rootView: SettingsView(
                     settings: settings,
+                    updateReminder: updateReminder,
                     autoBackup: autoBackupService,
                     navigation: settingsNavigation,
                     core: appState.core

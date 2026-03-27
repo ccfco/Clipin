@@ -142,6 +142,29 @@
 "Language" = "Language";
 "Restart Clipin to apply the language change." = "Restart Clipin to apply the language change.";
 "Press shortcut" = "Press shortcut";
+"Updates" = "Updates";
+"Current version" = "Current version";
+"Clipin checks GitHub Releases and lets you download the newest build manually." = "Clipin checks GitHub Releases and lets you download the newest build manually.";
+"Automatically check for updates" = "Automatically check for updates";
+"Check GitHub Releases in the background and surface a reminder when a new version is available." = "Check GitHub Releases in the background and surface a reminder when a new version is available.";
+"Update status" = "Update status";
+"Check Now" = "Check Now";
+"Checking for updates..." = "Checking for updates...";
+"Published %@." = "Published %@.";
+"Update available: %@" = "Update available: %@";
+"You're up to date. Last checked %@." = "You're up to date. Last checked %@.";
+"Checks GitHub Releases in the background and lets you download the latest version manually." = "Checks GitHub Releases in the background and lets you download the latest version manually.";
+"Couldn't check for updates right now." = "Couldn't check for updates right now.";
+"Release notes" = "Release notes";
+"No release notes provided." = "No release notes provided.";
+"Get the latest build" = "Get the latest build";
+"Open the GitHub release page, or jump straight to the latest installer asset." = "Open the GitHub release page, or jump straight to the latest installer asset.";
+"View Release" = "View Release";
+"Download Latest" = "Download Latest";
+
+/* App update */
+"Check for Updates..." = "Check for Updates...";
+"New Version Available: %@" = "New Version Available: %@";
 
 /* OnboardingView */
 "Keyboard-first clipboard, refined for focus." = "Keyboard-first clipboard, refined for focus.";

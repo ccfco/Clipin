@@ -81,6 +81,7 @@ private struct SettingsNotice {
 
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
+    @ObservedObject var updateReminder: UpdateReminderService
     @ObservedObject var autoBackup: AutoBackupService
     @ObservedObject var navigation: SettingsNavigationModel
     let core: ClipinCore
@@ -98,6 +99,45 @@ struct SettingsView: View {
 
     private var hierarchy: ClipinPanelHierarchy {
         .make(glass: glass, colorScheme: colorScheme)
+    }
+
+    private var updateAutoCheckBinding: Binding<Bool> {
+        Binding(
+            get: { updateReminder.autoCheckEnabled },
+            set: { updateReminder.setAutoCheckEnabled($0) }
+        )
+    }
+
+    private var updateStatusDescription: String {
+        if updateReminder.isChecking {
+            return NSLocalizedString("Checking for updates...", comment: "")
+        }
+
+        if let latestRelease = updateReminder.latestRelease {
+            let publishedSuffix = latestRelease.publishedAt.map {
+                String(
+                    format: NSLocalizedString("Published %@.", comment: ""),
+                    relativeString(from: $0, to: now)
+                )
+            } ?? ""
+            return String(
+                format: NSLocalizedString("Update available: %@", comment: ""),
+                latestRelease.displayVersion
+            ) + (publishedSuffix.isEmpty ? "" : " " + publishedSuffix)
+        }
+
+        if updateReminder.didLastCheckFail {
+            return NSLocalizedString("Couldn't check for updates right now.", comment: "")
+        }
+
+        if let lastCheckedAt = updateReminder.lastCheckedAt {
+            return String(
+                format: NSLocalizedString("You're up to date. Last checked %@.", comment: ""),
+                relativeString(from: lastCheckedAt, to: now)
+            )
+        }
+
+        return NSLocalizedString("Checks GitHub Releases in the background and lets you download the latest version manually.", comment: "")
     }
 
     var body: some View {
@@ -315,6 +355,77 @@ struct SettingsView: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .frame(width: 170)
+                    }
+                }
+            }
+
+            contentGroup {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Updates")
+                        .font(.system(size: 13, weight: .medium))
+
+                    settingFieldRow("Current version", description: "Clipin checks GitHub Releases and lets you download the newest build manually.") {
+                        Text("v\(updateReminder.currentVersion) (\(updateReminder.currentBuild))")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    groupDivider
+
+                    toggleSettingRow(
+                        "Automatically check for updates",
+                        description: "Check GitHub Releases in the background and surface a reminder when a new version is available.",
+                        isOn: updateAutoCheckBinding
+                    )
+
+                    groupDivider
+
+                    actionRow(
+                        "Update status",
+                        description: updateStatusDescription,
+                        buttonTitle: "Check Now",
+                        action: { updateReminder.checkNow() }
+                    )
+
+                    if let latestRelease = updateReminder.latestRelease {
+                        groupDivider
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Release notes")
+                                .font(.system(size: 13, weight: .medium))
+
+                            Text(latestRelease.notesPreview.isEmpty ? NSLocalizedString("No release notes provided.", comment: "") : latestRelease.notesPreview)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        groupDivider
+
+                        HStack(alignment: .top, spacing: 18) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Get the latest build")
+                                    .font(.system(size: 13, weight: .medium))
+
+                                Text("Open the GitHub release page, or jump straight to the latest installer asset.")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            HStack(spacing: 8) {
+                                Button("View Release") {
+                                    updateReminder.openReleasePage()
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button("Download Latest") {
+                                    updateReminder.downloadLatestRelease()
+                                }
+                                .buttonStyle(.borderedProminent)
+                            }
+                        }
                     }
                 }
             }

@@ -142,6 +142,29 @@
 "Language" = "语言";
 "Restart Clipin to apply the language change." = "切换语言后需要重启 Clipin 才能生效。";
 "Press shortcut" = "按下快捷键";
+"Updates" = "更新";
+"Current version" = "当前版本";
+"Clipin checks GitHub Releases and lets you download the newest build manually." = "Clipin 会检查 GitHub Releases，并允许你手动下载最新版本。";
+"Automatically check for updates" = "自动检查更新";
+"Check GitHub Releases in the background and surface a reminder when a new version is available." = "在后台检查 GitHub Releases，并在发现新版本时显示提醒。";
+"Update status" = "更新状态";
+"Check Now" = "立即检查";
+"Checking for updates..." = "正在检查更新…";
+"Published %@." = "发布于 %@。";
+"Update available: %@" = "发现新版本：%@";
+"You're up to date. Last checked %@." = "当前已是最新版本。上次检查于 %@。";
+"Checks GitHub Releases in the background and lets you download the latest version manually." = "Clipin 会在后台检查 GitHub Releases，并允许你手动下载最新版本。";
+"Couldn't check for updates right now." = "暂时无法检查更新。";
+"Release notes" = "更新说明";
+"No release notes provided." = "这次发布没有提供更新说明。";
+"Get the latest build" = "获取最新版本";
+"Open the GitHub release page, or jump straight to the latest installer asset." = "打开 GitHub Release 页面，或直接跳转到最新安装包资源。";
+"View Release" = "查看 Release";
+"Download Latest" = "下载最新版";
+
+/* App update */
+"Check for Updates..." = "检查更新…";
+"New Version Available: %@" = "发现新版本：%@";
 
 /* OnboardingView */
 "Keyboard-first clipboard, refined for focus." = "键盘优先的剪贴板管理，克制而专注。";
