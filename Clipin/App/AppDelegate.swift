@@ -43,8 +43,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var appSwitchObserver: Any?
     private var suppressResignKey = false
     private var hideGeneration: Int = 0
-    private var savedPanelOrigin: NSPoint? = nil
+    private var savedPanelOrigin: NSPoint?
     private var isProgrammaticMove = false
+    private var savePositionTask: Task<Void, Never>?
 
     private enum PanelPositionKeys {
         static let originX = "panel.savedOriginX"
@@ -312,13 +313,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func positionPanelForShow() {
         guard let panel else { return }
 
-        // 有记忆位置且原点仍在某个屏幕可见区域内 → 直接还原
-        if let saved = savedPanelOrigin,
-           NSScreen.screens.contains(where: { $0.visibleFrame.contains(saved) }) {
-            isProgrammaticMove = true
-            panel.setFrameOrigin(saved)
-            isProgrammaticMove = false
-            return
+        // 有记忆位置且面板矩形与某个屏幕可见区域相交 → 直接还原
+        if let saved = savedPanelOrigin {
+            let savedRect = NSRect(origin: saved, size: panel.frame.size)
+            if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(savedRect) }) {
+                isProgrammaticMove = true
+                panel.setFrameOrigin(saved)
+                isProgrammaticMove = false
+                return
+            }
+            savedPanelOrigin = nil   // 记忆位置已失效（如拔掉外接屏），清除避免重复检查
         }
 
         // 默认位置：跟随鼠标所在屏幕，面板中心位于可见区域 58% 高度处，确保不超出边界
@@ -727,14 +731,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSWindowDelegate {
     /// 用户拖拽面板后更新记忆位置。
     /// isProgrammaticMove 防止 showPanel() 里的 setFrameOrigin 误触发。
+    /// UserDefaults 写入做 0.3s 防抖，避免拖拽过程中每帧都写。
     func windowDidMove(_ notification: Notification) {
         guard !isProgrammaticMove,
               let panel = self.panel,
-              notification.object as? NSPanel === panel else { return }
-        savedPanelOrigin = panel.frame.origin
-        if settings.rememberPanelPosition {
-            UserDefaults.standard.set(panel.frame.origin.x, forKey: PanelPositionKeys.originX)
-            UserDefaults.standard.set(panel.frame.origin.y, forKey: PanelPositionKeys.originY)
+              notification.object as? ClipinPanel === panel else { return }
+        savedPanelOrigin = panel.frame.origin       // 内存即时更新
+        guard settings.rememberPanelPosition else { return }
+        savePositionTask?.cancel()
+        let origin = panel.frame.origin
+        savePositionTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(0.3))
+            guard !Task.isCancelled else { return }
+            UserDefaults.standard.set(origin.x, forKey: PanelPositionKeys.originX)
+            UserDefaults.standard.set(origin.y, forKey: PanelPositionKeys.originY)
         }
     }
 }
