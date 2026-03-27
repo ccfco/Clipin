@@ -85,3 +85,27 @@ Acceptance:
 Acceptance:
 
 - `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build`
+
+## 2026-03-26
+
+### Unified settings chrome and primary paste CTA
+
+- Rebuilt the settings window onto the same glass palette and material layering as the clipboard panel so both surfaces now read as one product instead of two visual systems.
+- Replaced the footer's generic tinted badge for `Paste to …` with a dedicated primary call-to-action that uses theme-aware gradients, a separate keycap layer, and spring-driven press feedback.
+- Moved the footer CTA tinting into `ClipinTheme` so `Mist`, `Graphite`, and `Sunrise` can each carry their own emphasis color without falling back to a generic system accent.
+
+Acceptance:
+
+- `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release -derivedDataPath ./.derived-data build`
+
+### Semantic interaction system and preference-window cleanup
+
+- Promoted interaction colors and motion into shared semantic tokens instead of leaving row selection, hover, search pills, palette focus, and notice states on ad-hoc `accentColor` and per-view timing curves.
+- Simplified the main panel hierarchy by flattening the search surface, softening nested metadata chrome, and making list, footer, and palette emphasis all read from the same visual language.
+- Tuned the settings window toward a more native macOS preference feel: monochrome sidebar icons, lighter content cards, subtler separators, and a less branded overall chrome.
+- Pulled the shortcut recorder and accessibility permission window back into the same glass/material family so edge-case windows no longer feel like a second app.
+
+Acceptance:
+
+- `cd rust && cargo test --lib`
+- `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release -derivedDataPath ./.derived-data build`

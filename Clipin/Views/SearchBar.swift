@@ -128,7 +128,7 @@ struct SearchBar: View {
 
             InterceptingTextFieldView(
                 text: $query,
-                placeholder: "Search...",
+                placeholder: NSLocalizedString("Search...", comment: ""),
                 onNavigate: onNavigate,
                 onSubmit: onSubmit,
                 onEscape: onEscape,
@@ -153,29 +153,29 @@ struct SearchBar: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
+                .fill(.regularMaterial)
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                        .fill(glass.searchInnerTint)
+                        .fill(glass.controlFill)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                        .strokeBorder(glass.controlStroke, lineWidth: 0.5)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [glass.shellHighlight.opacity(colorScheme == .dark ? 0.2 : 0.5), Color.clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                 )
         )
-        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous))
-        .shadow(color: .white.opacity(0.18), radius: 6, y: 1)
-        .shadow(color: .black.opacity(0.03), radius: 10, y: 6)
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                .fill(.thinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                        .fill(glass.searchOuterTint)
-                )
-        )
+        .padding(.top, 8)
+        .padding(.bottom, 6)
     }
 
     private var filterPills: some View {
@@ -197,20 +197,24 @@ struct SearchBar: View {
             HStack(spacing: 3) {
                 Text(label)
                     .font(.system(size: 12, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? Color.accentColor : Color.secondary.opacity(0.88))
+                    .foregroundStyle(isActive ? glass.emphasisInk : Color.secondary.opacity(0.88))
                 Text(shortcut)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isActive ? Color.accentColor.opacity(0.55) : Color(nsColor: .quaternaryLabelColor))
+                    .foregroundStyle(isActive ? glass.emphasisInk.opacity(0.62) : Color(nsColor: .quaternaryLabelColor))
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? Color.accentColor.opacity(0.12) : Color.clear)
+                    .fill(isActive ? glass.emphasisFill : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(isActive ? glass.emphasisStroke : Color.clear, lineWidth: 0.5)
+                    )
             )
         }
         .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.15), value: isActive)
+        .animation(ClipinMotion.feedback, value: isActive)
     }
 
 }

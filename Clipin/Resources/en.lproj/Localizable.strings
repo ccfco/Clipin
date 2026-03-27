@@ -130,6 +130,7 @@
 "Images" = "Images";
 "Files" = "Files";
 "URLs" = "URLs";
+"Search..." = "Search...";
 
 /* SettingsView – tab titles */
 "General" = "General";
@@ -142,6 +143,7 @@
 "System Default" = "System Default";
 "Language" = "Language";
 "Restart Clipin to apply the language change." = "Restart Clipin to apply the language change.";
+"Press shortcut" = "Press shortcut";
 
 /* PermissionView */
 "Accessibility Permission Required" = "Accessibility Permission Required";

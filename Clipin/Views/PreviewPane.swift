@@ -79,8 +79,8 @@ struct PreviewPane: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: .infinity, maxHeight: 400)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
+                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous))
+                        .shadow(color: .black.opacity(0.10), radius: 12, y: 6)
                 } else {
                     unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
                 }
@@ -116,8 +116,8 @@ struct PreviewPane: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: .infinity, maxHeight: 320)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .shadow(color: .black.opacity(0.12), radius: 16, y: 8)
+                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous))
+                        .shadow(color: .black.opacity(0.10), radius: 12, y: 6)
                 } else {
                     SelectableTextPreview(
                         text: fileListText,
@@ -140,16 +140,11 @@ struct PreviewPane: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(glass.controlFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                            .fill(glass.infoTint)
+                            .strokeBorder(glass.controlStroke, lineWidth: 0.5)
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                            .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
-                    )
-                    .shadow(color: .black.opacity(0.1), radius: 12, y: 4)
             )
     }
 
@@ -238,7 +233,7 @@ struct PreviewPane: View {
 
                 Text(value)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.primary.opacity(0.72))
+                    .foregroundStyle(Color.primary.opacity(0.76))
                     .textSelection(.enabled)
             }
         }
@@ -362,7 +357,7 @@ private struct ColorSwatchPreview: View {
                 RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
                     .fill(color)
                 RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(glass.controlStroke, lineWidth: 1)
             }
             .frame(height: 120)
 

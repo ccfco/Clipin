@@ -122,7 +122,7 @@ struct ActionPalette: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
-                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.06 : 0.22), lineWidth: 0.5)
+                        .strokeBorder(glass.controlStroke, lineWidth: 0.5)
                 )
         )
         .shadow(color: .black.opacity(0.12), radius: 34, y: 18)
@@ -188,14 +188,14 @@ struct ActionPalette: View {
             .foregroundStyle(
                 action.isDestructive
                     ? (isSelected ? Color.white : Color.red)
-                    : (isSelected ? Color.white : Color.primary)
+                    : (isSelected ? glass.emphasisOnStrongFill : Color.primary)
             )
 
             Spacer()
 
             Text(action.badge)
                 .font(.system(size: 11, weight: .medium, design: .rounded))
-                .foregroundStyle(isSelected ? Color.white.opacity(0.68) : Color.secondary.opacity(0.88))
+                .foregroundStyle(isSelected ? glass.emphasisOnStrongFill.opacity(0.68) : Color.secondary.opacity(0.88))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(
@@ -209,7 +209,7 @@ struct ActionPalette: View {
             RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                 .fill(
                     isSelected
-                        ? (action.isDestructive ? Color.red.opacity(0.84) : Color.accentColor.opacity(0.78))
+                        ? (action.isDestructive ? Color.red.opacity(0.84) : glass.emphasisStrongFill)
                         : Color.clear
                 )
         )
@@ -221,7 +221,7 @@ struct ActionPalette: View {
         .onHover { hovered in
             if hovered { selectedIndex = index }
         }
-        .animation(.easeOut(duration: 0.08), value: isSelected)
+        .animation(ClipinMotion.feedback, value: isSelected)
     }
 
     private var emptyState: some View {

@@ -130,6 +130,7 @@
 "Images" = "图片";
 "Files" = "文件";
 "URLs" = "链接";
+"Search..." = "搜索…";
 
 /* SettingsView – tab titles */
 "General" = "通用";
@@ -142,6 +143,7 @@
 "System Default" = "跟随系统";
 "Language" = "语言";
 "Restart Clipin to apply the language change." = "切换语言后需要重启 Clipin 才能生效。";
+"Press shortcut" = "按下快捷键";
 
 /* PermissionView */
 "Accessibility Permission Required" = "需要辅助功能权限";

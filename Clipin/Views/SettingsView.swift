@@ -24,15 +24,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .autoBackup: return "icloud.and.arrow.up"
         }
     }
-    var accent: Color {
-        switch self {
-        case .general:   return .accentColor
-        case .privacy:   return .green
-        case .retention: return .orange
-        case .transfer:  return .blue
-        case .autoBackup: return .cyan
-        }
-    }
 }
 
 // MARK: - SettingsView
@@ -63,9 +54,11 @@ struct SettingsView: View {
             windowBackdrop
             HStack(spacing: 0) {
                 sidebar
-                Divider().opacity(colorScheme == .dark ? 0.3 : 0.5)
+                Rectangle()
+                    .fill(glass.separatorLine)
+                    .frame(width: 1)
                 contentArea
-                    .animation(.spring(response: 0.3, dampingFraction: 0.82), value: selectedTab)
+                    .animation(ClipinMotion.panel, value: selectedTab)
             }
         }
         .frame(width: 680, height: 600)
@@ -96,21 +89,37 @@ struct SettingsView: View {
 
     private var sidebar: some View {
         List(SettingsTab.allCases, id: \.self, selection: $selectedTab) { tab in
+            let isSelected = selectedTab == tab
             Label {
                 Text(tab.title)
                     .font(.system(size: 13))
+                    .foregroundStyle(isSelected ? Color.primary : Color.secondary)
             } icon: {
                 Image(systemName: tab.icon)
-                    .foregroundStyle(tab.accent)
+                    .foregroundStyle(isSelected ? glass.emphasisInk : Color.secondary)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
+                    .fill(isSelected ? glass.emphasisFill : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
+                            .strokeBorder(isSelected ? glass.emphasisStroke : Color.clear, lineWidth: 0.5)
+                    )
+            )
             .tag(tab)
+            .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
+            .listRowBackground(Color.clear)
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .overlay(Rectangle().fill(glass.sidebarTint))
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(Rectangle().fill(glass.sidebarTint))
+                    .overlay(Rectangle().frame(width: 0.5).foregroundStyle(glass.controlStroke), alignment: .trailing)
         )
         .frame(width: 180)
     }
@@ -500,6 +509,13 @@ struct SettingsView: View {
                     endPoint: .bottom
                 )
             )
+            .overlay(
+                LinearGradient(
+                    colors: [glass.shellHighlight.opacity(colorScheme == .dark ? 0.18 : 0.42), Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             .ignoresSafeArea()
     }
 
@@ -512,24 +528,24 @@ struct SettingsView: View {
                     .fill(.thinMaterial)
                     .overlay(
                         RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                            .fill(glass.detailTint)
+                            .fill(glass.controlFill)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                            .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                            .strokeBorder(glass.controlStroke, lineWidth: 0.5)
                     )
-                    .shadow(color: .black.opacity(0.08), radius: 16, y: 6)
+                    .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
             )
     }
 
     private func noticeView(_ notice: SettingsNotice) -> some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(notice.isError ? Color.red : Color.accentColor)
+                .fill(notice.isError ? Color.red : glass.emphasisInk)
                 .frame(width: 8, height: 8)
             Text(notice.text)
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.primary.opacity(0.78))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -538,7 +554,11 @@ struct SettingsView: View {
                 .fill(.ultraThinMaterial)
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                        .fill(glass.controlFill)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                        .strokeBorder(glass.controlStroke, lineWidth: 0.5)
                 )
         )
     }

@@ -119,6 +119,7 @@ struct ClipItemRow: View {
     var searchQuery: String = ""
     var isSelected: Bool = false
     var isHovered: Bool = false
+    let glass: ClipinGlassPalette
 
     var body: some View {
         HStack(spacing: 9) {
@@ -134,7 +135,7 @@ struct ClipItemRow: View {
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(isSelected ? Color.accentColor.opacity(0.58) : Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(isSelected ? glass.emphasisInk.opacity(0.72) : Color(nsColor: .tertiaryLabelColor))
                     .opacity(isSelected || isHovered ? 1 : 0)
             }
 
@@ -144,7 +145,7 @@ struct ClipItemRow: View {
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(
                         isSelected
-                            ? Color.accentColor.opacity(0.7)
+                            ? glass.emphasisInk.opacity(0.82)
                             : Color.secondary.opacity(0.78)
                     )
                     .padding(.horizontal, 4)
@@ -153,7 +154,7 @@ struct ClipItemRow: View {
                         RoundedRectangle(cornerRadius: 3, style: .continuous)
                             .fill(
                                 isSelected
-                                    ? Color.white.opacity(0.6)
+                                    ? glass.controlFill
                                     : Color.primary.opacity(isHovered ? 0.08 : 0.05)
                             )
                     )
@@ -166,7 +167,7 @@ struct ClipItemRow: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 8)
-        .animation(.easeOut(duration: 0.1), value: isSelected)
+        .animation(ClipinMotion.selection, value: isSelected)
     }
 
     /// 类型指示器：图片显示缩略图，颜色值显示色块，其他显示单色图标
@@ -189,7 +190,7 @@ struct ClipItemRow: View {
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isSelected ? Color.accentColor.opacity(0.72) : Color.secondary)
+                .foregroundStyle(isSelected ? glass.emphasisInk : Color.secondary)
                 .frame(width: 24, height: 24)
         }
     }
@@ -219,7 +220,7 @@ struct ClipItemRow: View {
         while searchStart < text.endIndex,
               let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
             if let attrRange = Range(range, in: result) {
-                result[attrRange].backgroundColor = .accentColor.opacity(0.17)
+                result[attrRange].backgroundColor = glass.emphasisFill
                 result[attrRange].foregroundColor = .primary
             }
             searchStart = range.upperBound

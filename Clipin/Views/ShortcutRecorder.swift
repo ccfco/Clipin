@@ -58,7 +58,7 @@ final class ShortcutRecorderField: NSTextField {
         let became = super.becomeFirstResponder()
         if became {
             isCapturing = true
-            stringValue = "Press shortcut"
+            stringValue = NSLocalizedString("Press shortcut", comment: "")
         }
         return became
     }
@@ -104,12 +104,14 @@ final class ShortcutRecorderField: NSTextField {
         guard let layer else { return }
 
         layer.cornerRadius = 8
+        layer.cornerCurve = .continuous
         layer.borderWidth = 1
+        textColor = isCapturing ? NSColor.labelColor : NSColor.secondaryLabelColor
         layer.borderColor = isCapturing
-            ? NSColor.controlAccentColor.cgColor
-            : NSColor.separatorColor.cgColor
+            ? NSColor.controlAccentColor.withAlphaComponent(0.38).cgColor
+            : NSColor.separatorColor.withAlphaComponent(0.5).cgColor
         layer.backgroundColor = isCapturing
             ? NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
-            : NSColor.quaternaryLabelColor.withAlphaComponent(0.06).cgColor
+            : NSColor.textBackgroundColor.withAlphaComponent(0.72).cgColor
     }
 }

@@ -49,7 +49,7 @@ struct MainPanel: View {
         .overlay(alignment: .top) {
             if viewModel.isPanelPinned {
                 LinearGradient(
-                    colors: [Color.accentColor.opacity(0.65), Color.accentColor.opacity(0.25)],
+                    colors: [glass.emphasisStrongFill, glass.emphasisFill],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
@@ -57,7 +57,7 @@ struct MainPanel: View {
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: viewModel.isPanelPinned)
+        .animation(ClipinMotion.panel, value: viewModel.isPanelPinned)
         .overlay(alignment: .bottomTrailing) {
             if viewModel.isShowingActions {
                 ActionPalette(
@@ -129,7 +129,7 @@ struct MainPanel: View {
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                                .strokeBorder(glass.controlStroke, lineWidth: 0.5)
                         )
                         .shadow(color: .black.opacity(0.1), radius: 20, y: 10)
                 )
@@ -146,7 +146,7 @@ struct MainPanel: View {
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.05 : 0.18), lineWidth: 0.5)
+                                .strokeBorder(glass.controlStroke, lineWidth: 0.5)
                         )
                         .shadow(color: .black.opacity(0.12), radius: 24, y: 12)
                 )
@@ -180,13 +180,12 @@ struct MainPanel: View {
         HStack(spacing: 0) {
             if viewModel.selectedListItem != nil {
                 Button { viewModel.pasteSelected() } label: {
-                    keyBadge(
+                    pasteCallToAction(
                         label: viewModel.targetAppName.map { String(format: NSLocalizedString("Paste to %@", comment: ""), $0) } ?? NSLocalizedString("Paste", comment: ""),
-                        key: "↵",
-                        primary: true
+                        key: "↵"
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PrimaryFooterButtonStyle())
 
                 keyBadge(label: "Plain Text", key: "⇧↵")
                     .padding(.leading, 10)
@@ -227,7 +226,7 @@ struct MainPanel: View {
                 keyBadge(
                     label: viewModel.isPanelPinned ? "Pinned" : "Stay",
                     key: "⌘⇧L",
-                    primary: viewModel.isPanelPinned
+                    emphasized: viewModel.isPanelPinned
                 )
             }
             .buttonStyle(.plain)
@@ -251,34 +250,113 @@ struct MainPanel: View {
                 .overlay(
                     Rectangle()
                         .frame(height: 0.5)
-                        .foregroundColor(Color.primary.opacity(0.06)),
+                        .foregroundColor(glass.separatorLine),
                     alignment: .top
                 )
         )
     }
 
-    private func keyBadge(label: String, key: String, primary: Bool = false) -> some View {
+    private func pasteCallToAction(label: String, key: String) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.18 : 0.26))
+                Image(systemName: "arrow.up.forward.app.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.96))
+            }
+            .frame(width: 25, height: 25)
+
+            Text(label)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Color.white)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            keycap(
+                key: key,
+                foreground: Color.white.opacity(0.82),
+                background: glass.primaryActionKeycapTint
+            )
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, 11)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [glass.primaryActionTintTop, glass.primaryActionTintBottom],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [glass.primaryActionHighlight, Color.clear],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.primaryBadgeCornerRadius, style: .continuous)
+                        .strokeBorder(glass.emphasisStroke.opacity(colorScheme == .dark ? 0.9 : 1), lineWidth: 0.75)
+                )
+        )
+        .shadow(color: glass.primaryActionGlow, radius: 18, y: 10)
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 10, y: 4)
+    }
+
+    private func keyBadge(label: String, key: String, emphasized: Bool = false) -> some View {
         HStack(spacing: 5) {
             Text(LocalizedStringKey(label))
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(primary ? Color.white : Color.secondary)
-            Text(key)
-                .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                .foregroundStyle(primary ? Color.white.opacity(0.82) : Color(nsColor: .tertiaryLabelColor))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(primary ? Color.white.opacity(0.14) : glass.keycapTint)
-                )
+                .foregroundStyle(emphasized ? glass.emphasisInk : Color.secondary)
+            keycap(
+                key: key,
+                foreground: emphasized ? glass.emphasisInk.opacity(0.82) : Color(nsColor: .tertiaryLabelColor),
+                background: emphasized ? glass.controlFill : glass.keycapTint
+            )
         }
-        .padding(.horizontal, primary ? 12 : 0)
-        .padding(.vertical, primary ? 7 : 0)
+        .padding(.horizontal, emphasized ? 10 : 0)
+        .padding(.vertical, emphasized ? 6 : 0)
         .background(
             RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                .fill(primary ? Color.accentColor.opacity(0.94) : Color.clear)
+                .fill(emphasized ? glass.emphasisFill : Color.clear)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
+                        .strokeBorder(emphasized ? glass.emphasisStroke : Color.clear, lineWidth: 0.5)
+                )
         )
-        .shadow(color: primary ? Color.accentColor.opacity(0.16) : .clear, radius: 12, y: 4)
+        .shadow(color: emphasized ? glass.primaryActionGlow.opacity(0.35) : .clear, radius: 10, y: 4)
+    }
+
+    private func keycap(key: String, foreground: Color, background: Color) -> some View {
+        Text(key)
+            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(background)
+            )
+    }
+}
+
+private struct PrimaryFooterButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .brightness(configuration.isPressed ? -0.02 : 0)
+            .animation(ClipinMotion.feedback, value: configuration.isPressed)
     }
 }
 
@@ -334,9 +412,9 @@ private struct ItemListView: View {
                 }
                 .padding(.vertical, 6)
             }
-            .onChange(of: selection.wrappedValue) { _, newID in
-                guard let newID else { return }
-                withAnimation(.easeInOut(duration: 0.12)) {
+                .onChange(of: selection.wrappedValue) { _, newID in
+                    guard let newID else { return }
+                withAnimation(ClipinMotion.selection) {
                     proxy.scrollTo(newID, anchor: .center)
                 }
             }
@@ -364,33 +442,34 @@ private struct ItemListView: View {
             shortcutNumber: number,
             searchQuery: searchQuery,
             isSelected: isSelected,
-            isHovered: isHovered
+            isHovered: isHovered,
+            glass: glass
         )
         .id(item.id)
         .background(
             RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                 .fill(
                     isSelected
-                        ? Color.accentColor.opacity(0.12)
+                        ? glass.emphasisFill
                         : isHovered
-                            ? glass.keycapTint
+                            ? glass.hoverFill
                             : Color.clear
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
                         .strokeBorder(
                             isSelected
-                                ? Color.accentColor.opacity(0.16)
+                                ? glass.emphasisStroke
                                 : isHovered
-                                    ? Color.white.opacity(colorScheme == .dark ? 0.04 : 0.14)
+                                    ? glass.hoverStroke
                                     : Color.clear,
                             lineWidth: 0.5
                         )
                 )
                 .padding(.horizontal, 8)
         )
-        .animation(.easeOut(duration: 0.1), value: isSelected)
-        .animation(.easeOut(duration: 0.08), value: isHovered)
+        .animation(ClipinMotion.selection, value: isSelected)
+        .animation(ClipinMotion.feedback, value: isHovered)
             .contentShape(Rectangle())
             .onTapGesture { selection.wrappedValue = item.id }
             .onHover { hovered in hoveredID = hovered ? item.id : nil }
@@ -439,7 +518,8 @@ private struct ItemListView: View {
             .padding(.vertical, 3)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(0.06))
+                    .fill(glass.controlFill)
+                    .overlay(Capsule(style: .continuous).strokeBorder(glass.controlStroke, lineWidth: 0.5))
             )
     }
 }
