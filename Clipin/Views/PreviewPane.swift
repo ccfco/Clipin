@@ -93,16 +93,36 @@ struct PreviewPane: View {
 
         case .image:
             ScrollView {
-                if let path = item.imagePath, let image = NSImage(contentsOfFile: path) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: 420)
-                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
-                        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-                } else {
-                    unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
+                VStack(alignment: .leading, spacing: 16) {
+                    if let path = item.imagePath, let image = NSImage(contentsOfFile: path) {
+                        Image(nsImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: 360)
+                            .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
+                            .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
+                    } else {
+                        unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
+                    }
+
+                    // OCR 识别文字区域（有结果时展示，可选中复制，支持搜索高亮）
+                    if let ocr = item.ocrText, !ocr.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("OCR", systemImage: "text.viewfinder")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.secondary)
+
+                            SelectableTextPreview(
+                                text: ocr,
+                                font: .systemFont(ofSize: 13, weight: .regular),
+                                searchQuery: searchQuery,
+                                vm: vm
+                            )
+                            .frame(minHeight: 60, maxHeight: 200)
+                        }
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 

@@ -126,6 +126,11 @@ impl ClipinCore {
         self.storage.trim_unpinned(keep_latest)
     }
 
+    /// 写入 OCR 识别结果（图片保存后异步调用）
+    pub fn update_ocr_text(&self, id: String, ocr_text: String) -> Result<(), ClipinError> {
+        self.storage.update_ocr_text(&id, &ocr_text)
+    }
+
     /// 获取图片存储目录
     pub fn image_dir(&self) -> String {
         self.storage.image_dir().to_string()

@@ -203,6 +203,14 @@ struct ClipItemRow: View {
             if trimmed.isEmpty { return "(empty)" }
             return trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
         case .image:
+            // OCR 有结果时显示识别文字，否则回退到本地化 "Image" 占位
+            if item.preview != "image" && !item.preview.isEmpty {
+                let firstLine = item.preview.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.preview
+                let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
+                }
+            }
             return NSLocalizedString("Image", comment: "")
         case .file:
             return FileClipboardContent.displayTitle(for: item.preview)

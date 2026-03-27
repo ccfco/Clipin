@@ -20,7 +20,7 @@ final class ClipboardViewModel: ObservableObject {
     @Published var isShowingActions = false
     @Published var selectedActionIndex = 0
     @Published private(set) var paletteActions: [PaletteAction] = []
-    @Published var isPanelPinned: Bool = false
+    @Published var isContinuousPasteEnabled: Bool = false
 
     func navigatePalette(delta: Int) {
         let count = paletteActions.count
@@ -71,6 +71,7 @@ final class ClipboardViewModel: ObservableObject {
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
     private var debounce: AnyCancellable?
+    private var ocrSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
     private var skipNextDebouncedLoad = false
 
@@ -93,6 +94,11 @@ final class ClipboardViewModel: ObservableObject {
                 }
                 self.loadItems()
             }
+        // OCR 完成后刷新列表，让图片条目显示识别文字
+        ocrSubscription = NotificationCenter.default
+            .publisher(for: .clipboardItemOcrUpdated)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.loadItems() }
     }
 
     // MARK: - Load
@@ -214,7 +220,7 @@ final class ClipboardViewModel: ObservableObject {
 
     func openSettings() { onOpenSettingsRequested?() }
 
-    func togglePanelPin() { isPanelPinned.toggle() }
+    func toggleContinuousPaste() { isContinuousPasteEnabled.toggle() }
 
     func setTypeFilterByIndex(_ index: Int) {
         switch index {

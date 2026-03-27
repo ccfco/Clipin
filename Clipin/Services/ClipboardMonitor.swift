@@ -133,13 +133,20 @@ final class ClipboardMonitor: ObservableObject {
                     let path = (imageDir as NSString).appendingPathComponent(filename)
                     let pngData = try Self.makePNGData(from: data)
                     try pngData.write(to: URL(fileURLWithPath: path), options: .atomic)
-                    _ = try core.saveItem(
+                    let saved = try core.saveItem(
                         content: "image",
                         clipType: .image,
                         sourceApp: sourceApp,
                         sourceName: sourceName,
                         imagePath: path
                     )
+                    // OCR 在同一后台 Task 内串行执行，不阻塞监控轮询
+                    let itemId = saved.id
+                    let ocrText = await OcrService.recognizeText(at: path)
+                    if !ocrText.isEmpty {
+                        try? core.updateOcrText(id: itemId, ocrText: ocrText)
+                        NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
+                    }
                 }
 
                 guard let self else { return }

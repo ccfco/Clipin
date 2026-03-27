@@ -150,6 +150,51 @@ impl Storage {
             )?;
         }
 
+        if from_version < 4 {
+            // 添加 OCR 文字列，并重建 FTS5 以索引 ocr_text，使图片内容可搜索
+            conn.execute_batch(
+                "
+                ALTER TABLE clip_items ADD COLUMN ocr_text TEXT;
+
+                DROP TRIGGER IF EXISTS clip_items_ai;
+                DROP TRIGGER IF EXISTS clip_items_ad;
+                DROP TRIGGER IF EXISTS clip_items_au;
+                DROP TABLE IF EXISTS clip_fts;
+
+                CREATE VIRTUAL TABLE clip_fts USING fts5(
+                    content,
+                    source_name,
+                    ocr_text,
+                    content='clip_items',
+                    content_rowid='rowid',
+                    tokenize='trigram'
+                );
+
+                CREATE TRIGGER clip_items_ai AFTER INSERT ON clip_items BEGIN
+                    INSERT INTO clip_fts(rowid, content, source_name, ocr_text)
+                    VALUES (new.rowid, new.content, new.source_name, new.ocr_text);
+                END;
+
+                CREATE TRIGGER clip_items_ad AFTER DELETE ON clip_items BEGIN
+                    INSERT INTO clip_fts(clip_fts, rowid, content, source_name, ocr_text)
+                    VALUES ('delete', old.rowid, old.content, old.source_name, old.ocr_text);
+                END;
+
+                CREATE TRIGGER clip_items_au AFTER UPDATE ON clip_items BEGIN
+                    INSERT INTO clip_fts(clip_fts, rowid, content, source_name, ocr_text)
+                    VALUES ('delete', old.rowid, old.content, old.source_name, old.ocr_text);
+                    INSERT INTO clip_fts(rowid, content, source_name, ocr_text)
+                    VALUES (new.rowid, new.content, new.source_name, new.ocr_text);
+                END;
+
+                INSERT INTO clip_fts(rowid, content, source_name, ocr_text)
+                SELECT rowid, content, source_name, ocr_text FROM clip_items;
+
+                PRAGMA user_version = 4;
+                ",
+            )?;
+        }
+
         Ok(())
     }
 
@@ -319,6 +364,7 @@ impl Storage {
             char_count,
             copy_count,
             first_copied_at,
+            ocr_text: None,
         })
     }
 
@@ -334,7 +380,7 @@ impl Storage {
         let result = if let Some(t) = type_filter {
             let filter_val = t.as_str().to_string();
             sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
+                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
                  FROM clip_items WHERE clip_type = ?1
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?2 OFFSET ?3"
@@ -345,7 +391,7 @@ impl Storage {
             })
         } else {
             sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
+                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
                  FROM clip_items
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?1 OFFSET ?2"
@@ -371,13 +417,14 @@ impl Storage {
         let result = if let Some(t) = type_filter {
             let filter_val = t.as_str().to_string();
             sql = format!(
-                "SELECT id, substr(content, 1, {preview_chars}), clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count
+                "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                        clip_type, source_app, source_name, is_pinned,
+                        created_at, image_path, char_count
                  FROM clip_items
                  WHERE clip_type = ?1
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?2 OFFSET ?3",
-                preview_chars = Self::LIST_PREVIEW_CHARS
+                p = Self::LIST_PREVIEW_CHARS
             );
             conn.prepare(&sql).and_then(|mut stmt| {
                 stmt.query_map(params![filter_val, limit, offset], Self::row_to_list_item)
@@ -385,12 +432,13 @@ impl Storage {
             })
         } else {
             sql = format!(
-                "SELECT id, substr(content, 1, {preview_chars}), clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count
+                "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                        clip_type, source_app, source_name, is_pinned,
+                        created_at, image_path, char_count
                  FROM clip_items
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?1 OFFSET ?2",
-                preview_chars = Self::LIST_PREVIEW_CHARS
+                p = Self::LIST_PREVIEW_CHARS
             );
             conn.prepare(&sql).and_then(|mut stmt| {
                 stmt.query_map(params![limit, offset], Self::row_to_list_item)
@@ -414,7 +462,7 @@ impl Storage {
             let fts_query = Self::escape_fts5_query(query);
             let sql = if type_filter.is_some() {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
@@ -422,7 +470,7 @@ impl Storage {
                  LIMIT 50"
             } else {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1
@@ -445,16 +493,16 @@ impl Storage {
             let pattern = format!("%{}%", query);
             let sql = if type_filter.is_some() {
                 "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
                  FROM clip_items
-                 WHERE content LIKE ?1 AND clip_type = ?2
+                 WHERE (content LIKE ?1 OR ocr_text LIKE ?1) AND clip_type = ?2
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT 50"
             } else {
                 "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
                  FROM clip_items
-                 WHERE content LIKE ?1
+                 WHERE content LIKE ?1 OR ocr_text LIKE ?1
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT 50"
             };
@@ -484,8 +532,9 @@ impl Storage {
             let fts_query = Self::escape_fts5_query(query);
             let sql = if type_filter.is_some() {
                 format!(
-                    "SELECT ci.id, substr(ci.content, 1, {p}), ci.clip_type, ci.source_app,
-                            ci.source_name, ci.is_pinned, ci.created_at, ci.image_path, ci.char_count
+                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
+                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
+                            ci.created_at, ci.image_path, ci.char_count
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
@@ -495,8 +544,9 @@ impl Storage {
                 )
             } else {
                 format!(
-                    "SELECT ci.id, substr(ci.content, 1, {p}), ci.clip_type, ci.source_app,
-                            ci.source_name, ci.is_pinned, ci.created_at, ci.image_path, ci.char_count
+                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
+                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
+                            ci.created_at, ci.image_path, ci.char_count
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
@@ -521,20 +571,22 @@ impl Storage {
             let pattern = format!("%{}%", query);
             let sql = if type_filter.is_some() {
                 format!(
-                    "SELECT id, substr(content, 1, {p}), clip_type, source_app,
-                            source_name, is_pinned, created_at, image_path, char_count
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count
                      FROM clip_items
-                     WHERE content LIKE ?1 AND clip_type = ?2
+                     WHERE (content LIKE ?1 OR ocr_text LIKE ?1) AND clip_type = ?2
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT 50",
                     p = Self::LIST_PREVIEW_CHARS
                 )
             } else {
                 format!(
-                    "SELECT id, substr(content, 1, {p}), clip_type, source_app,
-                            source_name, is_pinned, created_at, image_path, char_count
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count
                      FROM clip_items
-                     WHERE content LIKE ?1
+                     WHERE content LIKE ?1 OR ocr_text LIKE ?1
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT 50",
                     p = Self::LIST_PREVIEW_CHARS
@@ -558,7 +610,7 @@ impl Storage {
     pub fn get_item(&self, id: &str) -> Result<ClipItem, ClipinError> {
         let conn = self.conn.lock().unwrap();
         conn.query_row(
-            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at
+            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
              FROM clip_items
              WHERE id = ?1",
             params![id],
@@ -567,6 +619,18 @@ impl Storage {
         .map_err(|_| ClipinError::NotFound {
             id: id.to_string(),
         })
+    }
+
+    pub fn update_ocr_text(&self, id: &str, ocr_text: &str) -> Result<(), ClipinError> {
+        let conn = self.conn.lock().unwrap();
+        let affected = conn.execute(
+            "UPDATE clip_items SET ocr_text = ?1 WHERE id = ?2",
+            params![ocr_text, id],
+        )?;
+        if affected == 0 {
+            return Err(ClipinError::NotFound { id: id.to_string() });
+        }
+        Ok(())
     }
 
     pub fn toggle_pin(&self, id: &str) -> Result<bool, ClipinError> {
@@ -655,6 +719,7 @@ impl Storage {
             char_count,
             copy_count: 1,
             first_copied_at: created_at,
+            ocr_text: None,
         })
     }
 
@@ -722,6 +787,7 @@ impl Storage {
             char_count: row.get(8)?,
             copy_count: row.get(9)?,
             first_copied_at: row.get(10)?,
+            ocr_text: row.get(11)?,
         })
     }
 
@@ -754,7 +820,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 3, "新建数据库应为 v3");
+        assert_eq!(storage.schema_version(), 4, "新建数据库应为 v4");
     }
 
     #[test]
@@ -773,7 +839,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 3, "旧数据库应 migrate 到 v3");
+        assert_eq!(storage.schema_version(), 4, "旧数据库应 migrate 到 v4");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -800,7 +866,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 3);
+        assert_eq!(s2.schema_version(), 4);
     }
 
     #[test]

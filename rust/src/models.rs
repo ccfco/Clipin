@@ -41,6 +41,8 @@ pub struct ClipItem {
     pub char_count: i32,
     pub copy_count: i32,
     pub first_copied_at: i64,
+    /// Vision OCR 识别结果，仅 image 类型有值，异步写入
+    pub ocr_text: Option<String>,
 }
 
 /// 列表使用的轻量摘要记录，避免长文本拖慢整个面板
