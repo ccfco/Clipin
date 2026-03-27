@@ -14,7 +14,7 @@ private final class ClipinPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
-    /// Stay 模式下面板失去 key window 时的回调
+    /// 连续粘贴模式下面板失去 key window 时的回调
     var onResignKey: (() -> Void)?
 
     override func resignKey() {
@@ -71,6 +71,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         runCleanupAndReload()
         checkPermissionOnLaunch()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
+        backfillOcrForExistingImages()
     }
 
     // MARK: - Menu Bar
@@ -127,7 +128,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         vm.onOpenSettingsRequested = { [weak self] in
             guard let self else { return }
-            if !(self.viewModel?.isPanelPinned ?? false) {
+            if !(self.viewModel?.isContinuousPasteEnabled ?? false) {
                 self.hidePanel()
             }
             self.openSettingsWindow()
@@ -244,8 +245,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func togglePanel() {
         guard let panel else { return }
         if panel.isVisible {
-            if viewModel?.isPanelPinned == true {
-                // Pinned 模式下热键不关闭面板，而是夺回键盘焦点
+            if viewModel?.isContinuousPasteEnabled == true {
+                // 连续粘贴模式下热键不关闭面板，而是夺回键盘焦点
                 panel.makeKeyAndOrderFront(nil)
                 NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
             } else {
@@ -290,7 +291,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hidePanel() {
         guard let panel else { return }
-        viewModel?.isPanelPinned = false
+        viewModel?.isContinuousPasteEnabled = false
         viewModel?.hideActionsPalette()
         suppressResignKey = false
         stopClickOutsideMonitor()
@@ -354,18 +355,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         savedPanelOrigin = NSPoint(x: x, y: y)
     }
 
-    /// Stay 模式下面板失去 key window 时，短暂延迟后自动夺回焦点。
+    /// 连续粘贴模式下面板失去 key window 时，短暂延迟后自动夺回焦点。
     /// 延迟是为了让用户的鼠标点击先完成（目标输入框获得焦点、frontmostApplication 更新）。
     private func handlePanelResignKey() {
         guard !suppressResignKey,
-              viewModel?.isPanelPinned == true,
+              viewModel?.isContinuousPasteEnabled == true,
               settingsWindow?.isVisible != true,
               permissionWindow?.isVisible != true,
               let panel else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
             guard let self,
                   !self.suppressResignKey,
-                  self.viewModel?.isPanelPinned == true,
+                  self.viewModel?.isContinuousPasteEnabled == true,
                   self.settingsWindow?.isVisible != true,
                   self.permissionWindow?.isVisible != true,
                   panel.isVisible else { return }
@@ -377,7 +378,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func startClickOutsideMonitor() {
         guard clickOutsideMonitor == nil else { return }
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            guard let self, !(self.viewModel?.isPanelPinned ?? false) else { return }
+            guard let self, !(self.viewModel?.isContinuousPasteEnabled ?? false) else { return }
             self.hidePanel()
         }
     }
@@ -389,7 +390,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - App Switch Observer (Pinned 模式下提前更新底栏目标应用名)
+    // MARK: - App Switch Observer (连续粘贴模式下提前更新底栏目标应用名)
 
     private func startAppSwitchObserver() {
         guard appSwitchObserver == nil else { return }
@@ -403,7 +404,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let name = app?.localizedName
             Task { @MainActor [weak self] in
                 guard let self,
-                      self.viewModel?.isPanelPinned == true,
+                      self.viewModel?.isContinuousPasteEnabled == true,
                       let app,
                       bundleId != Bundle.main.bundleIdentifier else { return }
                 self.previousApp = app
@@ -437,6 +438,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             case .none:
                 return event
             }
+        }
+    }
+
+    /// 为历史图片补跑 OCR（仅处理 ocr_text 为空的条目）
+    /// 使用 .background 优先级串行处理，不影响 UI 和正常的新图片 OCR
+    private func backfillOcrForExistingImages() {
+        let core = appState.core
+        Task.detached(priority: .background) {
+            let images = core.getItems(limit: 1000, offset: 0, typeFilter: .image)
+            let pending = images.filter { $0.ocrText == nil }
+            guard !pending.isEmpty else { return }
+
+            print("ℹ️ OCR backfill: \(pending.count) image(s) to process")
+            for item in pending {
+                guard let path = item.imagePath,
+                      FileManager.default.fileExists(atPath: path) else { continue }
+                let text = await OcrService.recognizeText(at: path)
+                guard !text.isEmpty else { continue }
+                do {
+                    try core.updateOcrText(id: item.id, ocrText: text)
+                    NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
+                } catch {
+                    print("⚠️ OCR backfill write error for \(item.id): \(error)")
+                }
+            }
+            print("ℹ️ OCR backfill complete")
         }
     }
 
@@ -534,11 +561,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             vm.toggleActionsPalette()
             return nil
         case 0x2B where flags == .command:
-            if !vm.isPanelPinned { self.hidePanel() }
+            if !vm.isContinuousPasteEnabled { self.hidePanel() }
             self.openSettingsWindow()
             return nil
         case 0x25 where flags == [.command, .shift]:
-            vm.togglePanelPin()
+            vm.toggleContinuousPaste()
             return nil
         default:
             if flags == .command,
@@ -680,11 +707,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         executePasteFlow()
     }
 
-    /// Pinned 模式下实时查询 frontmostApplication 作为粘贴目标（LSUIElement app 不会成为 frontmostApplication）；
-    /// 非 Pinned 模式使用 showPanel 时快照的 previousApp。
+    /// 连续粘贴模式下实时查询 frontmostApplication 作为粘贴目标（LSUIElement app 不会成为 frontmostApplication）；
+    /// 非连续粘贴模式使用 showPanel 时快照的 previousApp。
     private func resolveTargetApp() -> NSRunningApplication? {
-        let pinned = viewModel?.isPanelPinned ?? false
-        if pinned {
+        let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false
+        if continuousPasteEnabled {
             let front = NSWorkspace.shared.frontmostApplication
             if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
                 return front
@@ -694,13 +721,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func executePasteFlow() {
-        let pinned = viewModel?.isPanelPinned ?? false
+        let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false
         let targetApp = resolveTargetApp()
 
         // 粘贴流程中抑制 resignKey 自动夺回，避免和下面的手动夺回竞争
-        if pinned { suppressResignKey = true }
+        if continuousPasteEnabled { suppressResignKey = true }
 
-        if !pinned {
+        if !continuousPasteEnabled {
             hidePanel()
         }
 
@@ -711,7 +738,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             PasteService.simulatePaste(to: targetApp?.processIdentifier)
             self?.monitor?.resume()
 
-            if pinned {
+            if continuousPasteEnabled {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
                     guard let self else { return }
                     self.suppressResignKey = false
@@ -727,11 +754,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func performCopy(_ item: ClipItem) {
         monitor?.pause()
         PasteService.writeToClipboard(item)
-        let pinned = viewModel?.isPanelPinned ?? false
-        if !pinned { hidePanel() }
+        let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false
+        if !continuousPasteEnabled { hidePanel() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.monitor?.resume()
-            if pinned {
+            if continuousPasteEnabled {
                 NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
             }
         }
