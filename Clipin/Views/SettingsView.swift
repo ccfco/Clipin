@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - SettingsTab
 
@@ -37,17 +38,6 @@ final class SettingsNavigationModel: ObservableObject {
     func select(_ tab: SettingsTab) {
         selectedTab = tab
     }
-
-    func navigate(delta: Int) {
-        let tabs = SettingsTab.allCases
-        guard let currentIndex = tabs.firstIndex(of: selectedTab) else {
-            selectedTab = tabs.first ?? .general
-            return
-        }
-
-        let nextIndex = max(0, min(tabs.count - 1, currentIndex + delta))
-        selectedTab = tabs[nextIndex]
-    }
 }
 
 // MARK: - SettingsView
@@ -55,6 +45,68 @@ final class SettingsNavigationModel: ObservableObject {
 private struct SettingsNotice {
     let text: String
     let isError: Bool
+}
+
+private struct SettingsSidebarChromeBridge: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        view.postsFrameChangedNotifications = true
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let tableView = context.coordinator.findTableView(from: nsView) else { return }
+            if context.coordinator.tableView !== tableView {
+                context.coordinator.tableView = tableView
+            }
+            context.coordinator.configure(tableView: tableView)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    @MainActor
+    final class Coordinator {
+        weak var tableView: NSTableView?
+
+        func findTableView(from view: NSView) -> NSTableView? {
+            var current: NSView? = view
+            while let node = current {
+                if let tableView = node as? NSTableView {
+                    return tableView
+                }
+                if let tableView = findTableView(in: node) {
+                    return tableView
+                }
+                current = node.superview
+            }
+            return nil
+        }
+
+        private func findTableView(in root: NSView) -> NSTableView? {
+            for child in root.subviews {
+                if let tableView = child as? NSTableView {
+                    return tableView
+                }
+                if let tableView = findTableView(in: child) {
+                    return tableView
+                }
+            }
+            return nil
+        }
+
+        func configure(tableView: NSTableView) {
+            tableView.selectionHighlightStyle = .none
+            tableView.backgroundColor = .clear
+            tableView.intercellSpacing = NSSize(width: 0, height: 6)
+            tableView.enclosingScrollView?.drawsBackground = false
+            tableView.enclosingScrollView?.backgroundColor = .clear
+            tableView.enclosingScrollView?.focusRingType = .none
+        }
+    }
 }
 
 struct SettingsView: View {
@@ -82,8 +134,7 @@ struct SettingsView: View {
         Binding(
             get: { navigation.selectedTab },
             set: { tab in
-                guard let tab else { return }
-                navigation.select(tab)
+                navigation.select(tab ?? navigation.selectedTab)
             }
         )
     }
@@ -133,8 +184,10 @@ struct SettingsView: View {
                 .listRowBackground(Color.clear)
         }
         .listStyle(.sidebar)
+        .alternatingRowBackgrounds(.disabled)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
+        .background(SettingsSidebarChromeBridge())
         .background(
             ClipinSurfaceBackground(
                 role: .sidebar,
