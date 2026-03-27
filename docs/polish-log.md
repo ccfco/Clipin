@@ -2,6 +2,12 @@
 
 ## 2026-03-27
 
+### Preview detail stage refinement
+
+- Split preview-specific surfaces out of the old shared `grouped` role so the detail pane can stay elegant without adding another obvious card layer. `contentStage` now carries the main preview, while `metadata` stays as a quieter companion block instead of reusing the heavier settings-style grouping surface.
+- Tightened the right pane proportions instead of adding more chrome: smaller outer/detail insets, slightly smaller inner radii, and lighter stage contrast keep the preview framed without making it feel boxed in.
+- Let visual content breathe a little more by shaving stage padding and slightly increasing image preview height, while also softening media shadows so the content remains the focus.
+
 ### Window-aware keyboard routing and structural UI cleanup
 
 - Moved keyboard navigation from a panel-first assumption to a window-aware router in `AppDelegate`, so `↑↓` now go to the active context instead of being silently stolen by the main panel. Settings uses a dedicated `SettingsNavigationModel`, which restores arrow-key sidebar switching without falling back to `List(selection:)`.

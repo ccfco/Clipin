@@ -32,9 +32,13 @@ enum ClipinChrome {
     static let badgeCornerRadius: CGFloat = 10
     static let listContentInset: CGFloat = 12
     static let listScrollbarInset: CGFloat = 8
-    static let detailContentInset: CGFloat = 18
-    static let detailGroupInset: CGFloat = 18
-    static let detailGroupSpacing: CGFloat = 16
+    static let detailContentInset: CGFloat = 14
+    static let detailStageInset: CGFloat = 14
+    static let detailMetadataInset: CGFloat = 16
+    static let detailGroupSpacing: CGFloat = 14
+    static let detailStageCornerRadius: CGFloat = 16
+    static let detailMetadataCornerRadius: CGFloat = 16
+    static let detailMediaCornerRadius: CGFloat = 14
 }
 
 enum ClipinMotion {
@@ -123,6 +127,8 @@ enum ClipinSurfaceRole {
     case control
     case strip
     case grouped
+    case contentStage
+    case metadata
 }
 
 /// 共享 surface 语义，避免主面板、动作面板、设置页各自手搓一套玻璃参数。
@@ -345,6 +351,28 @@ extension ClipinGlassPalette {
                 tint: controlFill.opacity(isDark ? 0.92 : 0.84),
                 stroke: hoverStroke,
                 highlight: shellHighlight.opacity(isDark ? 0.04 : 0.12),
+                shadowColor: .clear,
+                shadowRadius: 0,
+                shadowYOffset: 0
+            )
+
+        case .contentStage:
+            return ClipinSurfaceStyle(
+                material: .thinMaterial,
+                tint: previewCanvasTint.opacity(isDark ? 0.74 : 0.52),
+                stroke: controlStroke.opacity(isDark ? 0.56 : 0.42),
+                highlight: shellHighlight.opacity(isDark ? 0.03 : 0.08),
+                shadowColor: .clear,
+                shadowRadius: 0,
+                shadowYOffset: 0
+            )
+
+        case .metadata:
+            return ClipinSurfaceStyle(
+                material: .thinMaterial,
+                tint: controlFill.opacity(isDark ? 0.86 : 0.76),
+                stroke: hoverStroke.opacity(isDark ? 0.92 : 0.72),
+                highlight: shellHighlight.opacity(isDark ? 0.03 : 0.10),
                 shadowColor: .clear,
                 shadowRadius: 0,
                 shadowYOffset: 0

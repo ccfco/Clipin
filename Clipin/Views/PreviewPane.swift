@@ -46,12 +46,12 @@ struct PreviewPane: View {
 
     private func contentStage<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content()
-            .padding(ClipinChrome.detailGroupInset)
+            .padding(ClipinChrome.detailStageInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
                 ClipinSurfaceBackground(
-                    role: .grouped,
-                    cornerRadius: ClipinChrome.cardCornerRadius,
+                    role: .contentStage,
+                    cornerRadius: ClipinChrome.detailStageCornerRadius,
                     glass: glass
                 )
             )
@@ -97,9 +97,9 @@ struct PreviewPane: View {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: 400)
-                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous))
-                        .shadow(color: .black.opacity(0.10), radius: 12, y: 6)
+                        .frame(maxWidth: .infinity, maxHeight: 420)
+                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
+                        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
                 } else {
                     unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
                 }
@@ -133,9 +133,9 @@ struct PreviewPane: View {
                     Image(nsImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: 320)
-                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous))
-                        .shadow(color: .black.opacity(0.10), radius: 12, y: 6)
+                        .frame(maxWidth: .infinity, maxHeight: 336)
+                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
+                        .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
                 } else {
                     SelectableTextPreview(
                         text: fileListText,
@@ -151,12 +151,12 @@ struct PreviewPane: View {
 
     private func metadataSection(for item: ClipItem) -> some View {
         infoGrid(for: item)
-            .padding(ClipinChrome.detailGroupInset)
+            .padding(ClipinChrome.detailMetadataInset)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 ClipinSurfaceBackground(
-                    role: .grouped,
-                    cornerRadius: ClipinChrome.cardCornerRadius,
+                    role: .metadata,
+                    cornerRadius: ClipinChrome.detailMetadataCornerRadius,
                     glass: glass
                 )
             )
