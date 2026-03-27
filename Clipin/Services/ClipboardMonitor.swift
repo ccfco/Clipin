@@ -140,13 +140,27 @@ final class ClipboardMonitor: ObservableObject {
                         sourceName: sourceName,
                         imagePath: path
                     )
-                    // OCR 在同一后台 Task 内串行执行，不阻塞监控轮询
+                    // 图片入库后立即刷新列表，让条目即时出现，不等 OCR
+                    guard let self else { return }
+                    await self.notifyNewItem()
+
+                    // OCR 在同一后台 Task 内串行执行，完成后二次刷新显示文字
                     let itemId = saved.id
                     let ocrText = await OcrService.recognizeText(at: path)
                     if !ocrText.isEmpty {
-                        try? core.updateOcrText(id: itemId, ocrText: ocrText)
-                        NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
+                        do {
+                            try core.updateOcrText(id: itemId, ocrText: ocrText)
+                            NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
+                        } catch {
+                            if case ClipinError.NotFound = error {
+                                // 图片在 OCR 期间被去重替换（连续复制同一图片），OCR 结果丢弃是预期行为
+                                print("ℹ️ OCR result discarded: item \(itemId) was replaced by dedup")
+                            } else {
+                                print("⚠️ Failed to write OCR result: \(error)")
+                            }
+                        }
                     }
+                    return  // image case 已自行通知，跳过下方公共 notifyNewItem
                 }
 
                 guard let self else { return }

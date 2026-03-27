@@ -198,23 +198,25 @@ struct ClipItemRow: View {
     private var displayText: String {
         switch item.clipType {
         case .text, .url:
-            let firstLine = item.preview.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.preview
-            let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty { return "(empty)" }
-            return trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
+            return firstLineTruncated(item.preview) ?? "(empty)"
         case .image:
-            // OCR 有结果时显示识别文字，否则回退到本地化 "Image" 占位
-            if item.preview != "image" && !item.preview.isEmpty {
-                let firstLine = item.preview.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.preview
-                let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    return trimmed.count > 120 ? String(trimmed.prefix(120)) + "…" : trimmed
-                }
+            // preview 经 SQL COALESCE 处理：有 OCR 结果时为识别文字，否则为固定占位符 "image"
+            // 用 "image" 作为哨兵判断是否有可展示的 OCR 文字
+            if item.preview != "image", let line = firstLineTruncated(item.preview) {
+                return line
             }
             return NSLocalizedString("Image", comment: "")
         case .file:
             return FileClipboardContent.displayTitle(for: item.preview)
         }
+    }
+
+    /// 取文本首行，trim 后截断到 120 字符；空内容返回 nil
+    private func firstLineTruncated(_ text: String, limit: Int = 120) -> String? {
+        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.count > limit ? String(trimmed.prefix(limit)) + "…" : trimmed
     }
 
     private var highlightedDisplayText: AttributedString {
