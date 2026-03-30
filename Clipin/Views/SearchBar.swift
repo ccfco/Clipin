@@ -126,19 +126,21 @@ struct SearchBar: View {
         .make(glass: glass, colorScheme: colorScheme)
     }
 
-    private var idlePillFill: Color {
-        glass.keycapTint.opacity(colorScheme == .dark ? 0.88 : 1.0)
-    }
-
     private var idlePillStroke: Color {
         glass.hoverStroke.opacity(colorScheme == .dark ? 0.95 : 0.75)
     }
 
+    private var filterRailFill: Color {
+        glass.controlFill.opacity(colorScheme == .dark ? 0.68 : 0.52)
+    }
+
+    private var filterRailStroke: Color {
+        glass.controlStroke.opacity(colorScheme == .dark ? 0.68 : 0.46)
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(hierarchy.support.subduedInk)
-                .font(.system(size: 14))
+        HStack(spacing: 8) {
+            searchGlyph
 
             InterceptingTextFieldView(
                 text: $query,
@@ -149,16 +151,20 @@ struct SearchBar: View {
                 onTab: onCycleTypeFilter
             )
             .frame(height: 18)
-            .layoutPriority(-1)  // 让 pills 优先获得空间，textfield 填充剩余
+            .layoutPriority(-1)
 
-            // 类型过滤 pill tabs
-            filterPills
+            filterRail
 
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
                         .foregroundStyle(hierarchy.support.hintInk)
-                        .font(.system(size: 12))
+                        .frame(width: 24, height: 24)
+                        .background(
+                            Circle()
+                                .fill(glass.keycapTint.opacity(colorScheme == .dark ? 0.86 : 0.94))
+                        )
                 }
                 .buttonStyle(.plain)
             }
@@ -182,6 +188,31 @@ struct SearchBar: View {
             y: 2
         )
         .animation(ClipinMotion.focusShift, value: sceneState)
+    }
+
+    private var searchGlyph: some View {
+        ZStack {
+            Circle()
+                .fill(glass.keycapTint.opacity(colorScheme == .dark ? 0.92 : 1.0))
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(hierarchy.support.subduedInk)
+                .font(.system(size: 13, weight: .medium))
+        }
+        .frame(width: 28, height: 28)
+    }
+
+    private var filterRail: some View {
+        filterPills
+            .padding(.horizontal, 5)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(filterRailFill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(filterRailStroke, lineWidth: 0.5)
+                    )
+            )
     }
 
     private var filterPills: some View {
@@ -213,7 +244,7 @@ struct SearchBar: View {
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? hierarchy.scope.fill : idlePillFill)
+                    .fill(isActive ? hierarchy.scope.fill : Color.clear)
                     .overlay(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .strokeBorder(
@@ -247,7 +278,7 @@ struct SearchBar: View {
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? hierarchy.scope.fill : idlePillFill)
+                    .fill(isActive ? hierarchy.scope.fill : Color.clear)
                     .overlay(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .strokeBorder(

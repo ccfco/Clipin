@@ -148,7 +148,7 @@ struct MainPanel: View {
     }
 
     private var bottomBar: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             if viewModel.selectedListItem != nil {
                 Button { viewModel.pasteSelected() } label: {
                     pasteCallToAction(
@@ -158,19 +158,19 @@ struct MainPanel: View {
                 }
                 .buttonStyle(PrimaryFooterButtonStyle())
 
-                keyBadge(label: "Plain Text", key: "⇧↵")
-                    .padding(.leading, 10)
+                commandCluster {
+                    keyBadge(label: "Plain Text", key: "⇧↵")
 
-                keyBadge(
-                    label: viewModel.selectedQuickPasteLabel,
-                    key: viewModel.selectedQuickPasteKey
-                )
-                .padding(.leading, 10)
+                    keyBadge(
+                        label: viewModel.selectedQuickPasteLabel,
+                        key: viewModel.selectedQuickPasteKey
+                    )
 
-                if viewModel.canOpenSelectedItem {
-                    keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
-                        .padding(.leading, 10)
+                    if viewModel.canOpenSelectedItem {
+                        keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
+                    }
                 }
+                .padding(.leading, 8)
 
                 Spacer()
             } else {
@@ -188,28 +188,30 @@ struct MainPanel: View {
                 Spacer()
             }
 
-            Button { viewModel.toggleActionsPalette() } label: {
-                keyBadge(label: "Actions", key: "⌘K")
-            }
-            .buttonStyle(.plain)
+            commandCluster {
+                Button { viewModel.toggleActionsPalette() } label: {
+                    keyBadge(label: "Actions", key: "⌘K")
+                }
+                .buttonStyle(.plain)
 
-            Button { viewModel.toggleContinuousPaste() } label: {
-                keyBadge(
-                    label: "Continuous Paste",
-                    key: "⌘⇧L",
-                    emphasized: viewModel.isContinuousPasteEnabled
-                )
+                Button { viewModel.toggleContinuousPaste() } label: {
+                    keyBadge(
+                        label: "Continuous Paste",
+                        key: "⌘⇧L",
+                        emphasized: viewModel.isContinuousPasteEnabled
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button { viewModel.openSettings() } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12))
+                        .foregroundStyle(hierarchy.support.subduedInk)
+                        .frame(width: 24, height: 24)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.plain)
             .padding(.leading, 10)
-
-            Button { viewModel.openSettings() } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 12))
-                    .foregroundStyle(hierarchy.support.subduedInk)
-            }
-            .buttonStyle(.borderless)
-            .padding(.leading, 8)
         }
         .padding(.horizontal, ClipinChrome.footerContentInset)
         .padding(.vertical, ClipinChrome.footerContentInset)
@@ -235,6 +237,22 @@ struct MainPanel: View {
         .padding(.top, ClipinChrome.shellGap)
         .padding(.bottom, ClipinChrome.shellGap)
         .animation(ClipinMotion.focusShift, value: sceneState)
+    }
+
+    private func commandCluster<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 8) {
+            content()
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius + 2, style: .continuous)
+                .fill(glass.controlFill.opacity(colorScheme == .dark ? 0.64 : 0.48))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius + 2, style: .continuous)
+                        .strokeBorder(glass.controlStroke.opacity(colorScheme == .dark ? 0.64 : 0.42), lineWidth: 0.5)
+                )
+        )
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
@@ -280,7 +298,7 @@ struct MainPanel: View {
     private func keyBadge(label: String, key: String, emphasized: Bool = false) -> some View {
         HStack(spacing: 5) {
             Text(LocalizedStringKey(label))
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(emphasized ? glass.emphasisInk : hierarchy.support.subduedInk)
             ClipinKeycap(
                 key: key,

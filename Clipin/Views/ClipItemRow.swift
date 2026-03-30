@@ -130,12 +130,11 @@ struct ClipItemRow: View {
                 .animation(ClipinMotion.feedback, value: isHovered)
 
             Text(highlightedDisplayText)
-                .font(.system(size: 13.5, weight: isSelected ? .medium : .regular))
+                .font(.system(size: 13.5, weight: isSelected ? .semibold : .medium))
                 .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.primary.opacity(0.92))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Pin 标记 — 仅 hover/selected 时可见
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
@@ -143,31 +142,7 @@ struct ClipItemRow: View {
                     .opacity(isSelected || isHovered ? 1 : 0)
             }
 
-            // ⌘N 快捷键徽章 — 前 9 项默认可见，帮助用户形成编号映射
-            if let n = shortcutNumber {
-                Text("⌘\(n)")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(
-                        isSelected
-                            ? hierarchy.selection.dimInk
-                            : hierarchy.support.smallLabelInk
-                    )
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(
-                                isSelected
-                                    ? hierarchy.selection.badgeFill
-                                    : Color.primary.opacity(isHovered ? 0.08 : 0.05)
-                            )
-                    )
-            }
-
-            // 时间 — 右对齐，退场角色
-            Text(timeLabel)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(isSelected ? hierarchy.selection.dimInk : hierarchy.support.smallLabelInk)
+            trailingMeta
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
@@ -213,6 +188,58 @@ struct ClipItemRow: View {
                     y: 2
                 )
         }
+    }
+
+    private var trailingMeta: some View {
+        HStack(spacing: 6) {
+            if let n = shortcutNumber {
+                Text("⌘\(n)")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(
+                        isSelected
+                            ? hierarchy.selection.dimInk
+                            : hierarchy.support.smallLabelInk
+                    )
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(
+                                isSelected
+                                    ? hierarchy.selection.badgeFill
+                                    : Color.primary.opacity(isHovered ? 0.08 : 0.05)
+                            )
+                    )
+            }
+
+            Text(timeLabel)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(isSelected ? hierarchy.selection.dimInk : hierarchy.support.smallLabelInk)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            Capsule(style: .continuous)
+                .fill(metaFill)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(metaStroke, lineWidth: 0.5)
+                )
+        )
+    }
+
+    private var metaFill: Color {
+        if isSelected {
+            return hierarchy.selection.badgeFill.opacity(0.94)
+        }
+        return glass.controlFill.opacity(isHovered ? 0.62 : 0.42)
+    }
+
+    private var metaStroke: Color {
+        if isSelected {
+            return hierarchy.selection.stroke.opacity(0.72)
+        }
+        return glass.controlStroke.opacity(isHovered ? 0.58 : 0.38)
     }
 
     private var typeIndicatorScale: CGFloat {
