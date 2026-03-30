@@ -175,9 +175,8 @@
 "View Release" = "View Release";
 "Download Latest" = "Download Latest";
 
-"About Clipin" = "About Clipin";
-
 /* App update */
+"About Clipin" = "About Clipin";
 "Check for Updates..." = "Check for Updates...";
 "New Version Available: %@" = "New Version Available: %@";
 
@@ -217,18 +216,20 @@
 "Open System Settings." = "Open System Settings.";
 "Find Clipin in Privacy & Security → Accessibility." = "Find Clipin in Privacy & Security → Accessibility.";
 "Turn it on, then come back here." = "Turn it on, then come back here.";
-"You can keep browsing and copying history without this. Automatic paste starts working as soon as the permission is enabled." = "You can keep browsing and copying history without this. Automatic paste starts working as soon as the permission is enabled.";
+"Without Accessibility, Clipin can save history but cannot paste back into other apps. Turn it on to finish setup." = "Without Accessibility, Clipin can save history but cannot paste back into other apps. Turn it on to finish setup.";
 "Back" = "Back";
 "Maybe later" = "Maybe later";
 "Continue" = "Continue";
 "Open Clipin" = "Open Clipin";
+"Use ← → to move. Press Return to continue." = "Use ← → to move. Press Return to continue.";
+"Use ← → to move. Press Return to continue, or Esc to go back." = "Use ← → to move. Press Return to continue, or Esc to go back.";
+"Press Return to open System Settings, or Esc to go back." = "Press Return to open System Settings, or Esc to go back.";
+"Press Return to open Clipin, or Esc to go back." = "Press Return to open Clipin, or Esc to go back.";
 
 /* PermissionView */
 "Accessibility Permission Required" = "Accessibility Permission Required";
 "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item." = "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item.";
 "Open System Settings" = "Open System Settings";
-"Window closes automatically after permission is granted" = "Window closes automatically after permission is granted";
 "Permission Granted" = "Permission Granted";
-"Step 1: Click the button below to open System Settings." = "Step 1: Click the button below to open System Settings.";
-"Step 2: Find Clipin under Privacy & Security \u2192 Accessibility." = "Step 2: Find Clipin under Privacy & Security \u2192 Accessibility.";
-"Step 3: Enable the toggle and return." = "Step 3: Enable the toggle and return.";
+"Restarting Clipin..." = "Restarting Clipin...";
+"Clipin will restart automatically after permission is granted." = "Clipin will restart automatically after permission is granted.";

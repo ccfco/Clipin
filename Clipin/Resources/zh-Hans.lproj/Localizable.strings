@@ -175,15 +175,14 @@
 "View Release" = "查看 Release";
 "Download Latest" = "下载最新版";
 
-"About Clipin" = "关于 Clipin";
-
 /* App update */
+"About Clipin" = "关于 Clipin";
 "Check for Updates..." = "检查更新…";
 "New Version Available: %@" = "发现新版本：%@";
 
 /* OnboardingView */
 "Keyboard-first clipboard, refined for focus." = "键盘优先的剪贴板管理，克制而专注。";
-"A calmer home for everything you copy." = "给每一次复制，一个更从容的归处。";
+"A calmer home for everything you copy." = "给每一次复制，一个从容归处。";
 "Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus." = "Clipin 安静地待在菜单栏，把你复制过的文本、图片、链接和文件都收进可搜索的短期记忆里，让粘贴不再打断节奏。";
 "Open Launcher" = "呼出面板";
 "Paste" = "粘贴";
@@ -217,18 +216,20 @@
 "Open System Settings." = "打开系统设置。";
 "Find Clipin in Privacy & Security → Accessibility." = "在「隐私与安全性 → 辅助功能」中找到 Clipin。";
 "Turn it on, then come back here." = "打开开关，然后回到这里。";
-"You can keep browsing and copying history without this. Automatic paste starts working as soon as the permission is enabled." = "即使现在不授权，你仍然可以浏览和再次复制历史内容；只要权限打开，自动粘贴会立刻生效。";
+"Without Accessibility, Clipin can save history but cannot paste back into other apps. Turn it on to finish setup." = "没有辅助功能权限，Clipin 可以记录历史，但不能把内容送回其他应用；开启后才能完成设置。";
 "Back" = "返回";
 "Maybe later" = "稍后再说";
 "Continue" = "继续";
 "Open Clipin" = "打开 Clipin";
+"Use ← → to move. Press Return to continue." = "用 ← → 切换步骤，按 Return 继续。";
+"Use ← → to move. Press Return to continue, or Esc to go back." = "用 ← → 切换步骤，按 Return 继续，按 Esc 返回。";
+"Press Return to open System Settings, or Esc to go back." = "按 Return 打开系统设置，按 Esc 返回。";
+"Press Return to open Clipin, or Esc to go back." = "按 Return 打开 Clipin，按 Esc 返回。";
 
 /* PermissionView */
 "Accessibility Permission Required" = "需要辅助功能权限";
 "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item." = "Clipin 需要辅助功能权限，才能在你选择历史记录后自动将内容粘贴到当前应用。";
 "Open System Settings" = "打开系统设置";
-"Window closes automatically after permission is granted" = "授权后此窗口自动关闭";
 "Permission Granted" = "权限已授予";
-"Step 1: Click the button below to open System Settings." = "点击下方按钮，打开系统设置";
-"Step 2: Find Clipin under Privacy & Security \u2192 Accessibility." = "在「隐私与安全性 → 辅助功能」中找到 Clipin";
-"Step 3: Enable the toggle and return." = "打开开关，返回即可使用";
+"Restarting Clipin..." = "正在重启 Clipin…";
+"Clipin will restart automatically after permission is granted." = "授权后 Clipin 将自动重启。";

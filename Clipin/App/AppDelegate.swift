@@ -982,7 +982,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window = existingWindow
         } else {
             let newWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 400, height: 420),
+                contentRect: NSRect(x: 0, y: 0, width: 400, height: 460),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -999,9 +999,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             permissionGrantedObserver = pm.$isAccessibilityGranted
                 .filter { $0 }
                 .receive(on: RunLoop.main)
-                .sink { [weak self, weak newWindow] _ in
-                    newWindow?.close()
-                    self?.permissionGrantedObserver = nil
+                .sink { [weak self] _ in
+                    // 授权后需要重启让 CGEventTap 在受信任进程里重新创建
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                        self?.permissionGrantedObserver = nil
+                        Process.launchedProcess(launchPath: "/usr/bin/open", arguments: [Bundle.main.bundleURL.path])
+                        NSApp.terminate(nil)
+                    }
                 }
         }
 

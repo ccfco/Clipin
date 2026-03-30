@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 辅助功能权限引导页
+/// 辅助功能权限引导页（独立窗口，非 onboarding 路径）
 struct PermissionView: View {
     @ObservedObject var permission: PermissionManager
     @ObservedObject private var settings = SettingsStore.shared
@@ -24,35 +24,38 @@ struct PermissionView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
+                // 图标
                 ZStack {
                     Circle()
                         .fill(glass.emphasisFill)
-                        .frame(width: 84, height: 84)
+                        .frame(width: 72, height: 72)
                     Image(systemName: "keyboard.badge.ellipsis")
-                        .font(.system(size: 34, weight: .light))
+                        .font(.system(size: 28, weight: .light))
                         .foregroundStyle(glass.emphasisInk)
                 }
-                .padding(.top, 42)
-                .padding(.bottom, 18)
+                .padding(.top, 28)
+                .padding(.bottom, 14)
 
                 Text("Accessibility Permission Required")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .padding(.bottom, 8)
 
                 Text("Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(3)
-                    .padding(.horizontal, 40)
-                    .padding(.bottom, 28)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 20)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    StepRow(number: "1", text: "Step 1: Click the button below to open System Settings.", glass: glass)
-                    StepRow(number: "2", text: "Step 2: Find Clipin under Privacy & Security \u{2192} Accessibility.", glass: glass)
-                    StepRow(number: "3", text: "Step 3: Enable the toggle and return.", glass: glass)
+                // 步骤卡片
+                VStack(alignment: .leading, spacing: 10) {
+                    permStepRow("1", text: "Open System Settings.")
+                    permStepRow("2", text: "Find Clipin in Privacy & Security \u{2192} Accessibility.")
+                    permStepRow("3", text: "Turn it on, then come back here.")
                 }
-                .padding(16)
+                .padding(14)
                 .background(
                     ClipinSurfaceBackground(
                         role: .grouped,
@@ -60,22 +63,25 @@ struct PermissionView: View {
                         glass: glass
                     )
                 )
-                .padding(.horizontal, 28)
-                .padding(.bottom, 28)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 20)
 
+                // 主按钮
                 Button {
-                    permission.openSystemSettings()
+                    permission.requestAndPoll()
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "gear")
-                        Text("Open System Settings")
+                        Image(systemName: permission.isAccessibilityGranted ? "checkmark.circle.fill" : "gearshape")
+                        Text(permission.isAccessibilityGranted ? "Permission Granted" : "Open System Settings")
                     }
                     .foregroundStyle(glass.emphasisOnStrongFill)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
+                    .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(glass.emphasisStrongFill)
+                            .fill(permission.isAccessibilityGranted
+                                  ? Color.green.opacity(0.8)
+                                  : glass.emphasisStrongFill)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .strokeBorder(glass.emphasisStroke, lineWidth: 0.75)
@@ -83,53 +89,39 @@ struct PermissionView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 40)
-                .padding(.bottom, 12)
+                .keyboardShortcut(.defaultAction)
+                .disabled(permission.isAccessibilityGranted)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 10)
 
-                if permission.isAccessibilityGranted {
-                    Label("Permission Granted", systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .font(.system(size: 13, weight: .medium))
-                        .padding(.bottom, 24)
-                } else {
-                    Text("Window closes automatically after permission is granted")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
-                    .padding(.bottom, 24)
-                }
+                Text(permission.isAccessibilityGranted
+                     ? "Restarting Clipin..."
+                     : "Clipin will restart automatically after permission is granted.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(permission.isAccessibilityGranted ? AnyShapeStyle(Color.green.opacity(0.8)) : AnyShapeStyle(.tertiary))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 20)
             }
-            .padding(22)
-            .background(
-                ClipinSurfaceBackground(
-                    role: .column,
-                    cornerRadius: ClipinChrome.sectionCornerRadius,
-                    glass: glass
-                )
-            )
             .padding(ClipinChrome.shellGap)
         }
-        .frame(width: 400, height: 420)
+        .frame(width: 400, height: 460)
         .shadow(color: .black.opacity(0.16), radius: 48, y: 24)
         .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
     }
-}
 
-private struct StepRow: View {
-    let number: String
-    let text: LocalizedStringKey
-    let glass: ClipinGlassPalette
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+    private func permStepRow(_ number: String, text: LocalizedStringKey) -> some View {
+        HStack(alignment: .top, spacing: 10) {
             Text(number)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
-                .frame(width: 20, height: 20)
+                .frame(width: 18, height: 18)
                 .background(glass.emphasisInk)
                 .clipShape(Circle())
             Text(text)
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
