@@ -44,6 +44,11 @@ final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
     private static let currentOnboardingVersion = 1
 
+    private enum OnboardingCohort: String {
+        case newInstall
+        case legacyInstall
+    }
+
     @Published var retentionDays: Int {
         didSet {
             // 0 = 永久保留，否则最少 1 天
@@ -122,6 +127,9 @@ final class SettingsStore: ObservableObject {
 
     /// 首次引导版本。用版本号而不是 Bool，后续若需要重做 onboarding 可平滑升级。
     private(set) var onboardingVersion: Int
+    /// 首次看到 onboarding 功能时的安装归类。
+    /// 只在第一次判定时计算一次，避免真正的新用户因为首启已创建本地存储而在下次启动被误判成老用户。
+    private var onboardingCohort: OnboardingCohort?
 
     private let defaults = UserDefaults.standard
     private let encoder = JSONEncoder()
@@ -139,6 +147,7 @@ final class SettingsStore: ObservableObject {
         static let appLanguage = "settings.appLanguage"
         static let rememberPanelPosition = "settings.rememberPanelPosition"
         static let onboardingVersion = "settings.onboardingVersion"
+        static let onboardingCohort = "settings.onboardingCohort"
     }
 
     /// 老用户迁移信号：任意一个 key 已存在，就说明这个安装已经被实际使用过，不应突然弹欢迎页。
@@ -175,6 +184,8 @@ final class SettingsStore: ObservableObject {
         let storedAppLanguage = defaults.string(forKey: Keys.appLanguage)
             .flatMap { AppLanguage(rawValue: $0) } ?? .system
         let storedOnboardingVersion = defaults.object(forKey: Keys.onboardingVersion) as? Int ?? 0
+        let storedOnboardingCohort = defaults.string(forKey: Keys.onboardingCohort)
+            .flatMap { OnboardingCohort(rawValue: $0) }
 
         self.retentionDays = storedRetention
         self.maxHistoryItems = storedMaxItems
@@ -188,6 +199,7 @@ final class SettingsStore: ObservableObject {
         self.appLanguage = storedAppLanguage
         self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
         self.onboardingVersion = storedOnboardingVersion
+        self.onboardingCohort = storedOnboardingCohort
         // init 赋值不触发 didSet，需手动同步确保 AppleLanguages 和持久化值一致
         if let langs = storedAppLanguage.appleLanguagesValue {
             defaults.set(langs, forKey: "AppleLanguages")
@@ -232,7 +244,8 @@ final class SettingsStore: ObservableObject {
     }
 
     /// 只对真正的新安装展示首次引导。
-    /// 现有用户如果在本次启动前就已经有本地存储、已有历史数据/偏好，或已经授予辅助功能权限，都直接视为已完成。
+    /// 现有用户会在第一次判定时被归类为 legacy install 并直接视为已完成；
+    /// 真正的新安装会被归类为 new install，在完成 onboarding 前始终继续展示。
     func shouldShowOnboarding(
         core: ClipinCore,
         permissionGranted: Bool,
@@ -240,16 +253,17 @@ final class SettingsStore: ObservableObject {
     ) -> Bool {
         guard !hasCompletedOnboarding else { return false }
 
-        if looksLikeExistingInstall(
+        switch resolveOnboardingCohort(
             core: core,
             permissionGranted: permissionGranted,
             hadExistingStorageBeforeBootstrap: hadExistingStorageBeforeBootstrap
         ) {
+        case .legacyInstall:
             markOnboardingCompleted()
             return false
+        case .newInstall:
+            return true
         }
-
-        return true
     }
 
     func markOnboardingCompleted() {
@@ -262,10 +276,32 @@ final class SettingsStore: ObservableObject {
     /// 调试辅助：把 onboarding 还原为“未完成”，方便重复验证首次启动路径。
     func resetOnboardingForTesting() {
         onboardingVersion = 0
+        onboardingCohort = nil
         defaults.removeObject(forKey: Keys.onboardingVersion)
+        defaults.removeObject(forKey: Keys.onboardingCohort)
     }
 
-    private func looksLikeExistingInstall(
+    private func resolveOnboardingCohort(
+        core: ClipinCore,
+        permissionGranted: Bool,
+        hadExistingStorageBeforeBootstrap: Bool
+    ) -> OnboardingCohort {
+        if let onboardingCohort {
+            return onboardingCohort
+        }
+
+        let cohort: OnboardingCohort = looksLikeLegacyInstall(
+            core: core,
+            permissionGranted: permissionGranted,
+            hadExistingStorageBeforeBootstrap: hadExistingStorageBeforeBootstrap
+        ) ? .legacyInstall : .newInstall
+
+        onboardingCohort = cohort
+        defaults.set(cohort.rawValue, forKey: Keys.onboardingCohort)
+        return cohort
+    }
+
+    private func looksLikeLegacyInstall(
         core: ClipinCore,
         permissionGranted: Bool,
         hadExistingStorageBeforeBootstrap: Bool

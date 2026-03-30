@@ -27,6 +27,15 @@ struct ClipinApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandMenu("Onboarding") {
+                Button("Show Onboarding") {
+                    appDelegate.showOnboardingFromCommand()
+                }
+
+                Button("Reset Onboarding State") {
+                    appDelegate.resetOnboardingStateFromCommand()
+                }
+            }
         }
     }
 }
