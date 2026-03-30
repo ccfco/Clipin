@@ -231,11 +231,11 @@ final class ClipboardViewModel: ObservableObject {
 
     func setTypeFilterByIndex(_ index: Int) {
         switch index {
-        case 0: isPinnedView = false; typeFilter = .text
-        case 1: isPinnedView = false; typeFilter = .image
-        case 2: isPinnedView = false; typeFilter = .file
-        case 3: isPinnedView = false; typeFilter = .url
-        case 4: isPinnedView = true;  typeFilter = nil
+        case 0: isPinnedView = true;  typeFilter = nil
+        case 1: isPinnedView = false; typeFilter = .text
+        case 2: isPinnedView = false; typeFilter = .image
+        case 3: isPinnedView = false; typeFilter = .file
+        case 4: isPinnedView = false; typeFilter = .url
         default: break
         }
     }

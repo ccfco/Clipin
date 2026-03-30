@@ -6,6 +6,11 @@ import Combine
 /// 需要两次点击（第一次激活窗口，第二次才触发动作）。子类化覆盖后，首次点击直接触发动作。
 private final class ClipinHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var isOpaque: Bool { false }
+    override func updateLayer() {
+        super.updateLayer()
+        layer?.backgroundColor = .clear
+    }
 }
 
 /// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
@@ -251,10 +256,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        let hostingView = NSHostingView(rootView: MainPanel(viewModel: vm))
-        hostingView.wantsLayer = true
-        hostingView.layer?.backgroundColor = .clear
-        panel.contentView = hostingView
+        panel.contentView = ClipinHostingView(rootView: MainPanel(viewModel: vm))
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
@@ -781,7 +783,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             }
             if flags == .option {
-                let optMapping: [UInt16: Int] = [19: 0, 20: 1, 21: 2, 23: 3, 22: 4]
+                let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4]
                 if let index = optMapping[event.keyCode] {
                     vm.setTypeFilterByIndex(index)
                     return nil
