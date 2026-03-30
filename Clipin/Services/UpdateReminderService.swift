@@ -40,6 +40,7 @@ final class UpdateReminderService: ObservableObject {
     private let session: URLSession
     private let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/ccfco/Clipin/releases/latest")!
     private let releasesPageURL = URL(string: "https://github.com/ccfco/Clipin/releases/latest")!
+    private let releasesListURL = URL(string: "https://github.com/ccfco/Clipin/releases")!
     private var periodicCheckTimer: Timer?
     private var didStart = false
 
@@ -94,6 +95,11 @@ final class UpdateReminderService: ObservableObject {
 
     func openReleasePage() {
         NSWorkspace.shared.open(latestRelease?.releasePageURL ?? releasesPageURL)
+    }
+
+    /// 打开 releases 列表页（全部历史版本），与 openReleasePage 区别在于不打开 /latest
+    func openReleasesListPage() {
+        NSWorkspace.shared.open(releasesListURL)
     }
 
     func downloadLatestRelease() {

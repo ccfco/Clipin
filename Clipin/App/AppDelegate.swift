@@ -36,8 +36,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewModel: ClipboardViewModel?
     private let hotKey = HotKeyService()
     private var cancellables = Set<AnyCancellable>()
+    private var permissionGrantedObserver: AnyCancellable?
     private var permissionWindow: NSWindow?
     private var onboardingWindow: NSWindow?
+    private var onboardingFlow: OnboardingFlow?
+    private var onboardingIsForTesting = false
     private lazy var cleanupService = CleanupService(core: appState.core, settings: settings)
     private let autoBackupService = AutoBackupService.shared
     private var previousApp: NSRunningApplication?
@@ -65,6 +68,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private enum KeyboardContext {
+        case onboarding(OnboardingFlow)
         case mainPanel(ClipboardViewModel)
         case actionsPalette(ClipboardViewModel)
         case settingsWindow(SettingsNavigationModel)
@@ -130,6 +134,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(aboutItem)
             menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
             menu.addItem(NSMenuItem.separator())
+            menu.addItem(makeOnboardingMenuItem())
+            menu.addItem(NSMenuItem.separator())
             menu.addItem(NSMenuItem(title: "Quit Clipin", action: #selector(quitApp), keyEquivalent: "q"))
             statusItem?.menu = menu
             statusItem?.button?.performClick(nil)
@@ -156,6 +162,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         checkForUpdates()
     }
 
+    func showOnboardingFromCommand() {
+        showOnboardingForTesting(resetState: false)
+    }
+
+    func resetOnboardingStateFromCommand() {
+        settings.resetOnboardingForTesting()
+    }
+
     @objc private func quitApp() {
         NSApplication.shared.terminate(nil)
     }
@@ -179,6 +193,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func downloadLatestRelease() {
         updateReminder.downloadLatestRelease()
+    }
+
+    private func makeOnboardingMenuItem() -> NSMenuItem {
+        let onboardingItem = NSMenuItem(title: "Onboarding", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "Onboarding")
+
+        let showItem = NSMenuItem(title: "Show Onboarding", action: #selector(showOnboardingForDebugMenu), keyEquivalent: "")
+        showItem.target = self
+        submenu.addItem(showItem)
+
+        let resetItem = NSMenuItem(title: "Reset Onboarding State", action: #selector(resetOnboardingStateForDebugMenu), keyEquivalent: "")
+        resetItem.target = self
+        submenu.addItem(resetItem)
+
+        onboardingItem.submenu = submenu
+        return onboardingItem
+    }
+
+    @objc private func showOnboardingForDebugMenu() {
+        showOnboardingForTesting(resetState: false)
+    }
+
+    @objc private func resetOnboardingStateForDebugMenu() {
+        settings.resetOnboardingForTesting()
     }
 
     // MARK: - Panel
@@ -335,6 +373,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func showPanel() {
+        if presentOnboardingIfRequired() {
+            return
+        }
+
         guard let panel else { return }
 
         // 取消正在进行的 hide 动画（递增 generation 使旧 completion 失效）
@@ -364,6 +406,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         startClickOutsideMonitor()
         startAppSwitchObserver()
+    }
+
+    private func presentOnboardingIfRequired() -> Bool {
+        let permission = PermissionManager.shared
+        permission.checkNow()
+
+        guard settings.shouldShowOnboarding(
+            core: appState.core,
+            permissionGranted: permission.isAccessibilityGranted,
+            hadExistingStorageBeforeBootstrap: appState.hadExistingStorageBeforeBootstrap
+        ) else {
+            return false
+        }
+
+        openOnboardingWindow(permission: permission)
+        return true
     }
 
     private func hidePanel() {
@@ -506,6 +564,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
 
             switch self.keyboardContext {
+            case .onboarding(let flow):
+                return self.handleOnboardingKeyEvent(event, flags: flags, flow: flow)
             case .actionsPalette(let vm):
                 return self.handlePaletteKeyEvent(event, flags: flags, viewModel: vm)
             case .mainPanel(let vm):
@@ -595,6 +655,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var keyboardContext: KeyboardContext {
+        if let onboardingWindow, onboardingWindow.isVisible, onboardingWindow.isKeyWindow, let onboardingFlow {
+            return .onboarding(onboardingFlow)
+        }
         if let panel, panel.isVisible, panel.isKeyWindow, let viewModel {
             return viewModel.isShowingActions ? .actionsPalette(viewModel) : .mainPanel(viewModel)
         }
@@ -602,6 +665,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return .settingsWindow(settingsNavigation)
         }
         return .none
+    }
+
+    private func handleOnboardingKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, flow: OnboardingFlow) -> NSEvent? {
+        // 注意：方向键的 modifierFlags 里始终包含 .function/.numericPad，不能用全局 flags.isEmpty guard
+        switch event.keyCode {
+        case 0x7B, 0x7E:   // ← ↑ 回上一步
+            flow.goBack()
+            return nil
+        case 0x7C, 0x7D:   // → ↓ 进下一步（只在前两步生效）
+            if flow.step == .welcome || flow.step == .workflow {
+                flow.move(1)
+                return nil
+            }
+            return event
+        case 0x24 where flags.isEmpty:   // Return（不含修饰键）
+            flow.activatePrimary()
+            return nil
+        case 0x35:          // Esc 回上一步
+            flow.goBack()
+            return nil
+        default:
+            return event
+        }
     }
 
     private func handleSettingsKeyEvent(_ event: NSEvent, navigation: SettingsNavigationModel) -> NSEvent? {
@@ -810,6 +896,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let window: NSWindow
         let isNew: Bool
 
+        let flow: OnboardingFlow
+        if let existingFlow = onboardingFlow {
+            flow = existingFlow
+        } else {
+            let newFlow = OnboardingFlow(permission: permission) { [weak self] in
+                self?.finishOnboarding()
+            }
+            onboardingFlow = newFlow
+            flow = newFlow
+        }
+
         if let existingWindow = onboardingWindow {
             window = existingWindow
             isNew = false
@@ -832,9 +929,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.level = .floating
             newWindow.delegate = self
             newWindow.contentView = ClipinHostingView(
-                rootView: OnboardingView(permission: permission) { [weak self] openPanel in
-                    self?.finishOnboarding(openPanel: openPanel)
-                }
+                rootView: OnboardingView(permission: permission, flow: flow)
             )
             onboardingWindow = newWindow
             window = newWindow
@@ -846,44 +941,76 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    private func finishOnboarding(openPanel: Bool) {
+    private func finishOnboarding() {
         settings.markOnboardingCompleted()
         onboardingWindow?.close()
-
-        guard openPanel else { return }
-        DispatchQueue.main.async { [weak self] in
-            self?.showPanel()
+        let shouldShowPanel = !onboardingIsForTesting
+        onboardingIsForTesting = false
+        if shouldShowPanel {
+            DispatchQueue.main.async { [weak self] in
+                self?.showPanel()
+            }
         }
     }
 
-    private func showPermissionWindowIfNeeded(_ pm: PermissionManager = .shared) {
-        guard !pm.isAccessibilityGranted else { return }
+    private func showOnboardingForTesting(resetState: Bool) {
+        if resetState {
+            settings.resetOnboardingForTesting()
+        }
 
-        let view = PermissionView(permission: pm)
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 420),
-            styleMask: [.titled, .closable, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        window.contentView = NSHostingView(rootView: view)
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.delegate = self
-        window.center()
-        window.level = .floating
+        if panel?.isVisible == true {
+            hidePanel()
+        }
 
-        // 授权后自动关闭
-        pm.$isAccessibilityGranted
-            .filter { $0 }
-            .first()
-            .receive(on: RunLoop.main)
-            .sink { [weak window] _ in window?.close() }
-            .store(in: &cancellables)
+        onboardingIsForTesting = true
+        permissionWindow?.close()
+        PermissionManager.shared.checkNow()
+        onboardingFlow?.reset()
+        openOnboardingWindow(permission: .shared)
+    }
 
-        // floating level 足够让窗口可见，不需要 activate 整个 app
-        window.orderFrontRegardless()
-        self.permissionWindow = window
+    private func showPermissionWindowIfNeeded(_ pm: PermissionManager = .shared, activateApp: Bool = false) {
+        pm.checkNow()
+
+        guard !pm.isAccessibilityGranted else {
+            permissionWindow?.close()
+            return
+        }
+
+        let window: NSWindow
+        if let existingWindow = permissionWindow {
+            window = existingWindow
+        } else {
+            let newWindow = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 400, height: 420),
+                styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            newWindow.contentView = NSHostingView(rootView: PermissionView(permission: pm))
+            newWindow.titlebarAppearsTransparent = true
+            newWindow.titleVisibility = .hidden
+            newWindow.delegate = self
+            newWindow.center()
+            newWindow.level = .floating
+            permissionWindow = newWindow
+            window = newWindow
+
+            permissionGrantedObserver = pm.$isAccessibilityGranted
+                .filter { $0 }
+                .receive(on: RunLoop.main)
+                .sink { [weak self, weak newWindow] _ in
+                    newWindow?.close()
+                    self?.permissionGrantedObserver = nil
+                }
+        }
+
+        if activateApp {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            window.orderFrontRegardless()
+        }
     }
 
     // MARK: - Paste
@@ -920,6 +1047,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func executePasteFlow() {
+        let permission = PermissionManager.shared
+        permission.checkNow()
+
+        guard permission.isAccessibilityGranted else {
+            monitor?.resume()
+            showPermissionWindowIfNeeded(permission, activateApp: true)
+            return
+        }
+
         let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false
         let targetApp = resolveTargetApp()
 
@@ -973,9 +1109,11 @@ extension AppDelegate: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         if notification.object as? NSWindow === onboardingWindow {
             onboardingWindow = nil
+            onboardingFlow = nil
         }
         if notification.object as? NSWindow === permissionWindow {
             permissionWindow = nil
+            permissionGrantedObserver = nil
         }
     }
 

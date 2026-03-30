@@ -707,9 +707,9 @@ struct SettingsView: View {
 
                     actionRow(
                         "Release history",
-                        description: "Open the latest release page to browse shipped builds and release notes.",
+                        description: "Browse all shipped builds and release notes on GitHub.",
                         buttonTitle: "Open Releases",
-                        action: { updateReminder.openReleasePage() }
+                        action: { updateReminder.openReleasesListPage() }
                     )
 
                     groupDivider
