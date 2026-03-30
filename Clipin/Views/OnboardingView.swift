@@ -1,19 +1,64 @@
 import AppKit
 import SwiftUI
 
+@MainActor
+final class OnboardingFlow: ObservableObject {
+    enum Step: Int, CaseIterable, Identifiable {
+        case welcome
+        case workflow
+        case permission
+
+        var id: Int { rawValue }
+    }
+
+    @Published private(set) var step: Step = .welcome
+
+    private let permission: PermissionManager
+    private let onComplete: () -> Void
+
+    init(permission: PermissionManager, onComplete: @escaping () -> Void) {
+        self.permission = permission
+        self.onComplete = onComplete
+    }
+
+    var canGoBack: Bool {
+        step != .welcome
+    }
+
+    func reset() {
+        step = .welcome
+    }
+
+    func move(_ delta: Int) {
+        guard let next = Step(rawValue: step.rawValue + delta) else { return }
+        step = next
+    }
+
+    func goBack() {
+        move(-1)
+    }
+
+    func activatePrimary() {
+        switch step {
+        case .welcome, .workflow:
+            move(1)
+        case .permission:
+            if permission.isAccessibilityGranted {
+                onComplete()
+            } else {
+                permission.requestAndPoll()
+            }
+        }
+    }
+}
+
 /// 首次启动引导。它不是功能清单，而是把 Clipin 的主路径和授权心智讲清楚。
 struct OnboardingView: View {
     @ObservedObject var permission: PermissionManager
-    let onComplete: (_ openPanel: Bool) -> Void
+    @ObservedObject var flow: OnboardingFlow
 
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
-    @State private var step: Step = .welcome
-
-    private enum Step: Int, CaseIterable, Identifiable {
-        case welcome, workflow, permission
-        var id: Int { rawValue }
-    }
 
     private var glass: ClipinGlassPalette { .make(theme: settings.visualTheme, colorScheme: colorScheme) }
     private var hierarchy: ClipinPanelHierarchy { .make(glass: glass, colorScheme: colorScheme) }
@@ -31,6 +76,7 @@ struct OnboardingView: View {
         .shadow(color: .black.opacity(0.16), radius: 42, y: 20)
         .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .onAppear { permission.checkNow() }
+        .accessibilityElement(children: .contain)
     }
 
     private var header: some View {
@@ -52,13 +98,13 @@ struct OnboardingView: View {
             Spacer()
 
             HStack(spacing: 6) {
-                ForEach(Step.allCases) { candidate in
+                ForEach(OnboardingFlow.Step.allCases) { candidate in
                     Capsule(style: .continuous)
-                        .fill(candidate == step ? glass.emphasisStrongFill : glass.controlFill)
-                        .frame(width: candidate == step ? 24 : 8, height: 8)
+                        .fill(candidate == flow.step ? glass.emphasisStrongFill : glass.controlFill)
+                        .frame(width: candidate == flow.step ? 24 : 8, height: 8)
                 }
             }
-            .animation(ClipinMotion.feedback, value: step)
+            .animation(ClipinMotion.feedback, value: flow.step)
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
@@ -66,55 +112,46 @@ struct OnboardingView: View {
     }
 
     private var stage: some View {
-        ZStack {
-            switch step {
-            case .welcome: welcomeStage
-            case .workflow: workflowStage
-            case .permission: permissionStage
-            }
+        ScrollView(.vertical, showsIndicators: false) {
+            stageContent
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 10)
-        .padding(.bottom, 10)
-        .animation(ClipinMotion.panel, value: step)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .animation(ClipinMotion.panel, value: flow.step)
+    }
+
+    @ViewBuilder
+    private var stageContent: some View {
+        switch flow.step {
+        case .welcome:
+            welcomeStage
+        case .workflow:
+            workflowStage
+        case .permission:
+            permissionStage
+        }
     }
 
     private var welcomeStage: some View {
         VStack(alignment: .leading, spacing: 12) {
             surface(role: .column, cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
-                HStack(spacing: 26) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("A calmer home for everything you copy.")
-                            .font(.system(size: 30, weight: .semibold))
-                        Text("Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .lineSpacing(3)
-
-                        HStack(spacing: 8) {
-                            shortcutBadge("Open Launcher", key: "⌘⇧V")
-                            shortcutBadge("Paste", key: "↵")
-                            shortcutBadge("Actions", key: "⌘K")
-                        }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 22) {
+                        welcomeCopy
+                        heroArtwork
                     }
 
-                    ZStack {
-                        Circle()
-                            .fill(glass.emphasisStrongFill.opacity(colorScheme == .dark ? 0.30 : 0.18))
-                            .frame(width: 180, height: 180)
-                            .blur(radius: 20)
-                        Circle()
-                            .fill(glass.emphasisFill)
-                            .frame(width: 136, height: 136)
-                        Image(systemName: "clipboard.fill")
-                            .font(.system(size: 44, weight: .regular))
-                            .foregroundStyle(glass.emphasisInk)
+                    VStack(alignment: .leading, spacing: 18) {
+                        welcomeCopy
+                        heroArtwork
+                            .frame(maxWidth: .infinity)
                     }
-                    .frame(width: 190, height: 190)
                 }
             }
 
-            HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 featureCard(icon: "sparkles", title: "Keyboard-first", message: "Open, filter, act, and paste without leaving the home row.")
                 featureCard(icon: "text.viewfinder", title: "Search images too", message: "OCR keeps screenshots and image snippets searchable with plain text.")
                 featureCard(icon: "lock.shield", title: "Private by default", message: "Everything stays local, and sensitive clipboard writes are skipped.")
@@ -179,8 +216,8 @@ struct OnboardingView: View {
                                         ? LocalizedStringKey("Granted")
                                         : LocalizedStringKey("Needed for automatic paste")
                                 )
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(.secondary)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
                             }
 
                             Spacer()
@@ -199,10 +236,11 @@ struct OnboardingView: View {
             }
 
             surface(role: .grouped, cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
-                Label("You can keep browsing and copying history without this. Automatic paste starts working as soon as the permission is enabled.", systemImage: "info.circle")
+                Label("Without Accessibility, Clipin can save history but cannot paste back into other apps. Turn it on to finish setup.", systemImage: "info.circle")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .transition(.opacity.combined(with: .scale(scale: 0.98)))
@@ -210,14 +248,16 @@ struct OnboardingView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            if step != .welcome {
-                secondaryButton("Back") { move(-1) }
-            }
+            Text(footerHint)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Spacer()
+            Spacer(minLength: 10)
 
-            if step == .permission && !permission.isAccessibilityGranted {
-                tertiaryButton("Maybe later") { onComplete(true) }
+            if flow.canGoBack {
+                secondaryButton("Back") { flow.goBack() }
+                    .keyboardShortcut(.cancelAction)
             }
 
             primaryButton(primaryTitle, systemImage: primaryIcon, action: primaryAction)
@@ -228,32 +268,88 @@ struct OnboardingView: View {
     }
 
     private var primaryTitle: LocalizedStringKey {
-        switch step {
-        case .welcome, .workflow: return "Continue"
-        case .permission: return permission.isAccessibilityGranted ? "Open Clipin" : "Open System Settings"
+        switch flow.step {
+        case .welcome, .workflow:
+            return "Continue"
+        case .permission:
+            return permission.isAccessibilityGranted ? "Open Clipin" : "Open System Settings"
         }
     }
 
     private var primaryIcon: String {
-        step == .permission && !permission.isAccessibilityGranted ? "gearshape" : "arrow.right"
-    }
-
-    private func primaryAction() {
-        switch step {
-        case .welcome, .workflow:
-            move(1)
-        case .permission:
-            permission.isAccessibilityGranted ? onComplete(true) : permission.openSystemSettings()
+        switch flow.step {
+        case .welcome, .workflow: return "arrow.right"
+        case .permission: return permission.isAccessibilityGranted ? "return" : "gearshape"
         }
     }
 
-    private func move(_ delta: Int) {
-        guard let next = Step(rawValue: step.rawValue + delta) else { return }
-        step = next
+    private var footerHint: LocalizedStringKey {
+        switch flow.step {
+        case .welcome:
+            return "Use ← → to move. Press Return to continue."
+        case .workflow:
+            return "Use ← → to move. Press Return to continue, or Esc to go back."
+        case .permission:
+            return permission.isAccessibilityGranted
+                ? "Press Return to open Clipin, or Esc to go back."
+                : "Press Return to open System Settings, or Esc to go back."
+        }
+    }
+
+    private func primaryAction() {
+        flow.activatePrimary()
     }
 }
 
 private extension OnboardingView {
+    var welcomeCopy: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("A calmer home for everything you copy.")
+                .font(.system(size: 28, weight: .semibold))
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
+            Text("Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus.")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 8) {
+                    shortcutBadge("Open Launcher", key: "⌘⇧V")
+                    shortcutBadge("Paste", key: "↵")
+                    shortcutBadge("Actions", key: "⌘K")
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    shortcutBadge("Open Launcher", key: "⌘⇧V")
+                    HStack(alignment: .top, spacing: 8) {
+                        shortcutBadge("Paste", key: "↵")
+                        shortcutBadge("Actions", key: "⌘K")
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    var heroArtwork: some View {
+        ZStack {
+            Circle()
+                .fill(glass.emphasisStrongFill.opacity(colorScheme == .dark ? 0.30 : 0.18))
+                .frame(width: 168, height: 168)
+                .blur(radius: 20)
+            Circle()
+                .fill(glass.emphasisFill)
+                .frame(width: 132, height: 132)
+            Image(systemName: "clipboard.fill")
+                .font(.system(size: 42, weight: .regular))
+                .foregroundStyle(glass.emphasisInk)
+        }
+        .frame(width: 176, height: 176)
+    }
+
     var shellBackground: some View {
         RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
             .fill(.regularMaterial)
@@ -301,10 +397,12 @@ private extension OnboardingView {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.system(size: 27, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
             Text(subtitle)
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
                 .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -313,6 +411,7 @@ private extension OnboardingView {
             Text(label)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             ClipinKeycap(key: key, foreground: hierarchy.command.ink.opacity(0.78), background: hierarchy.command.keycapFill)
         }
         .padding(.horizontal, 10)
@@ -332,8 +431,9 @@ private extension OnboardingView {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
@@ -349,19 +449,17 @@ private extension OnboardingView {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
     }
 
     var workflowConnector: some View {
-        VStack {
-            Capsule(style: .continuous)
-                .fill(glass.emphasisStroke.opacity(0.7))
-                .frame(width: 18, height: 2)
-                .padding(.top, 28)
-            Spacer()
-        }
+        Capsule(style: .continuous)
+            .fill(glass.emphasisStroke.opacity(0.7))
+            .frame(width: 18, height: 2)
+            .padding(.top, 28)
     }
 
     func hintCard(title: String, message: LocalizedStringKey) -> some View {
@@ -371,6 +469,7 @@ private extension OnboardingView {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -387,6 +486,7 @@ private extension OnboardingView {
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -416,18 +516,12 @@ private extension OnboardingView {
                 )
         }
         .buttonStyle(.plain)
+        .keyboardShortcut(.defaultAction)
     }
 
     func secondaryButton(_ title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
             .font(.system(size: 12.5, weight: .medium))
             .buttonStyle(.bordered)
-    }
-
-    func tertiaryButton(_ title: LocalizedStringKey, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .font(.system(size: 12.5, weight: .medium))
-            .foregroundStyle(.secondary)
-            .buttonStyle(.plain)
     }
 }
