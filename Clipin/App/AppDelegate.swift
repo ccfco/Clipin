@@ -251,9 +251,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.contentView = NSHostingView(
-            rootView: MainPanel(viewModel: vm)
-        )
+        let hostingView = NSHostingView(rootView: MainPanel(viewModel: vm))
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = .clear
+        panel.contentView = hostingView
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
