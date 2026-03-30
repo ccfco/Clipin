@@ -98,7 +98,7 @@ struct MainPanel: View {
         )
         .padding(.horizontal, ClipinChrome.shellGap)
         .padding(.top, ClipinChrome.shellGap)
-        .padding(.bottom, ClipinChrome.shellGap)
+        .padding(.bottom, 6)
         .offset(y: sceneState.headerLift)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }

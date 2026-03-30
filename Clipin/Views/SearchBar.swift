@@ -24,7 +24,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
         let field = InterceptingTextField()
         field.isBordered = false
         field.backgroundColor = .clear
-        field.font = .systemFont(ofSize: 15)
+        field.font = .systemFont(ofSize: 14)
         field.placeholderString = placeholder
         field.focusRingType = .none
         field.delegate = context.coordinator
@@ -139,7 +139,7 @@ struct SearchBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             searchGlyph
 
             InterceptingTextFieldView(
@@ -150,7 +150,7 @@ struct SearchBar: View {
                 onEscape: onEscape,
                 onTab: onCycleTypeFilter
             )
-            .frame(height: 18)
+            .frame(height: 16)
             .layoutPriority(-1)
 
             filterRail
@@ -158,9 +158,9 @@ struct SearchBar: View {
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
+                        .font(.system(size: 10.5))
                         .foregroundStyle(hierarchy.support.hintInk)
-                        .frame(width: 24, height: 24)
+                        .frame(width: 22, height: 22)
                         .background(
                             Circle()
                                 .fill(glass.keycapTint.opacity(colorScheme == .dark ? 0.86 : 0.94))
@@ -169,8 +169,8 @@ struct SearchBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
         .background(
             ClipinSurfaceBackground(
                 role: .control,
@@ -196,20 +196,20 @@ struct SearchBar: View {
                 .fill(glass.keycapTint.opacity(colorScheme == .dark ? 0.92 : 1.0))
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(hierarchy.support.subduedInk)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 12, weight: .medium))
         }
-        .frame(width: 28, height: 28)
+        .frame(width: 24, height: 24)
     }
 
     private var filterRail: some View {
         filterPills
-            .padding(.horizontal, 5)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(filterRailFill)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .strokeBorder(filterRailStroke, lineWidth: 0.5)
                     )
             )
@@ -232,21 +232,21 @@ struct SearchBar: View {
             isPinnedView = true
             typeFilter = nil
         } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: 2) {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: 8.5, weight: .medium))
                     .foregroundStyle(isActive ? hierarchy.scope.ink : hierarchy.support.subduedInk)
                 Text("⌥1")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.system(size: 8.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : hierarchy.support.hintInk)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(isActive ? hierarchy.scope.fill : Color.clear)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .strokeBorder(
                                 isActive ? hierarchy.scope.stroke : idlePillStroke,
                                 lineWidth: 0.5
@@ -266,21 +266,21 @@ struct SearchBar: View {
             isPinnedView = false
             typeFilter = filter
         } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: 2) {
                 Text(label)
-                    .font(.system(size: 12, weight: isActive ? .semibold : .regular))
+                    .font(.system(size: 11.5, weight: isActive ? .semibold : .regular))
                     .foregroundStyle(isActive ? hierarchy.scope.ink : hierarchy.support.subduedInk)
                 Text(shortcut)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .font(.system(size: 8.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : hierarchy.support.hintInk)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(isActive ? hierarchy.scope.fill : Color.clear)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
                             .strokeBorder(
                                 isActive ? hierarchy.scope.stroke : idlePillStroke,
                                 lineWidth: 0.5
