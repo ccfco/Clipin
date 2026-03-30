@@ -780,7 +780,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             }
             if flags == .option {
-                let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4]
+                let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4, 22: 5]
                 if let index = optMapping[event.keyCode] {
                     vm.setTypeFilterByIndex(index)
                     return nil

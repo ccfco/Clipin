@@ -105,12 +105,13 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
 
 // MARK: - SearchBar
 
-/// 搜索框 + 内嵌类型过滤 pill tabs
+/// 搜索框 + 内嵌类型过滤 pill tabs（含固定视图 pill）
 struct SearchBar: View {
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
     @Binding var query: String
     @Binding var typeFilter: ClipType?
+    @Binding var isPinnedView: Bool
     var onNavigate: (Int) -> Void = { _ in }
     var onSubmit: () -> Void = {}
     var onEscape: () -> Void = {}
@@ -171,13 +172,46 @@ struct SearchBar: View {
             pill(label: "Images", filter: .image, shortcut: "⌥3")
             pill(label: "Files",  filter: .file,  shortcut: "⌥4")
             pill(label: "URLs",   filter: .url,   shortcut: "⌥5")
+            pinnedPill
         }
     }
 
+    /// 固定视图专用 pill，与类型 pills 互斥激活
+    private var pinnedPill: some View {
+        let isActive = isPinnedView
+        return Button {
+            isPinnedView = true
+            typeFilter = nil
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(isActive ? hierarchy.scope.ink : Color.secondary.opacity(0.88))
+                Text("⌥6")
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : Color(nsColor: .quaternaryLabelColor))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isActive ? hierarchy.scope.fill : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(isActive ? hierarchy.scope.stroke : Color.clear, lineWidth: 0.5)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .animation(ClipinMotion.feedback, value: isActive)
+    }
+
     private func pill(label: LocalizedStringKey, filter: ClipType?, shortcut: String) -> some View {
-        let isActive = typeFilter == filter
+        // 固定视图激活时，类型 pills 全部不高亮
+        let isActive = !isPinnedView && typeFilter == filter
 
         return Button {
+            isPinnedView = false
             typeFilter = filter
         } label: {
             HStack(spacing: 3) {

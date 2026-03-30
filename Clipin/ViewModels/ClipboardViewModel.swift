@@ -21,6 +21,8 @@ final class ClipboardViewModel: ObservableObject {
     @Published var selectedActionIndex = 0
     @Published private(set) var paletteActions: [PaletteAction] = []
     @Published var isContinuousPasteEnabled: Bool = false
+    /// 固定视图：只显示 pinned 项，按日期分组，⌘1-9 映射 pinned 项
+    @Published var isPinnedView: Bool = false
 
     func navigatePalette(delta: Int) {
         let count = paletteActions.count
@@ -70,8 +72,8 @@ final class ClipboardViewModel: ObservableObject {
     private let core: ClipinCore
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
-    /// ⌘1-9 快捷粘贴序列：只含非 pinned 项，pinned 项不占用快捷键位置
-    private var shortcutOrder: [ClipListItem] = []
+    /// ⌘1-9 快捷粘贴序列：普通视图=非 pinned 项，固定视图=所有可见 pinned 项
+    private(set) var shortcutOrder: [ClipListItem] = []
     private var debounce: AnyCancellable?
     private var ocrSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
@@ -85,10 +87,10 @@ final class ClipboardViewModel: ObservableObject {
 
     init(core: ClipinCore) {
         self.core = core
-        debounce = Publishers.CombineLatest($searchQuery, $typeFilter)
+        debounce = Publishers.CombineLatest3($searchQuery, $typeFilter, $isPinnedView)
             .dropFirst()
             .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
-            .sink { [weak self] _, _ in
+            .sink { [weak self] _, _, _ in
                 guard let self else { return }
                 if self.skipNextDebouncedLoad {
                     self.skipNextDebouncedLoad = false
@@ -113,9 +115,12 @@ final class ClipboardViewModel: ObservableObject {
         let currentSelectionID = selectLatest ? nil : selectedItemID
 
         if searchQuery.isEmpty {
-            items = core.getListItems(limit: 200, offset: 0, typeFilter: typeFilter)
+            items = core.getListItems(limit: 200, offset: 0, typeFilter: isPinnedView ? nil : typeFilter)
         } else {
-            items = core.searchListItems(query: searchQuery, typeFilter: typeFilter)
+            items = core.searchListItems(query: searchQuery, typeFilter: isPinnedView ? nil : typeFilter)
+        }
+        if isPinnedView {
+            items = items.filter { $0.isPinned }
         }
         rebuildSections()
 
@@ -226,29 +231,40 @@ final class ClipboardViewModel: ObservableObject {
 
     func setTypeFilterByIndex(_ index: Int) {
         switch index {
-        case 0: typeFilter = nil
-        case 1: typeFilter = .text
-        case 2: typeFilter = .image
-        case 3: typeFilter = .file
-        case 4: typeFilter = .url
+        case 0: isPinnedView = false; typeFilter = nil
+        case 1: isPinnedView = false; typeFilter = .text
+        case 2: isPinnedView = false; typeFilter = .image
+        case 3: isPinnedView = false; typeFilter = .file
+        case 4: isPinnedView = false; typeFilter = .url
+        case 5: isPinnedView = true;  typeFilter = nil
         default: break
         }
     }
 
+    /// Tab 键循环：全部 → 文本 → 图片 → 文件 → 链接 → 固定 → 全部
     func cycleTypeFilter(reverse: Bool = false) {
-        let filters: [ClipType?] = [nil, .text, .image, .file, .url]
-        guard let currentIndex = filters.firstIndex(where: { $0 == typeFilter }) else {
-            typeFilter = nil
+        let types: [ClipType?] = [nil, .text, .image, .file, .url]
+
+        // 当前在固定视图：Tab→全部，Shift-Tab→链接
+        if isPinnedView {
+            isPinnedView = false
+            typeFilter = reverse ? .url : nil
             return
         }
 
-        let nextIndex: Int
-        if reverse {
-            nextIndex = currentIndex == 0 ? filters.count - 1 : currentIndex - 1
-        } else {
-            nextIndex = (currentIndex + 1) % filters.count
+        guard let idx = types.firstIndex(where: { $0 == typeFilter }) else {
+            isPinnedView = false; typeFilter = nil; return
         }
-        typeFilter = filters[nextIndex]
+
+        if !reverse && idx == types.count - 1 {
+            // 链接 → 固定视图
+            typeFilter = nil; isPinnedView = true
+        } else if reverse && idx == 0 {
+            // 全部 ← 固定视图（反向循环）
+            typeFilter = nil; isPinnedView = true
+        } else {
+            typeFilter = types[reverse ? idx - 1 : idx + 1]
+        }
     }
 
     @discardableResult
@@ -257,6 +273,7 @@ final class ClipboardViewModel: ObservableObject {
         skipNextDebouncedLoad = true
         searchQuery = ""
         typeFilter = nil
+        isPinnedView = false
         loadItems()
         return true
     }
@@ -329,7 +346,7 @@ final class ClipboardViewModel: ObservableObject {
     var isEmpty: Bool { flatOrder.isEmpty }
 
     /// 是否正在搜索或过滤
-    var hasActiveFilter: Bool { !searchQuery.isEmpty || typeFilter != nil }
+    var hasActiveFilter: Bool { !searchQuery.isEmpty || typeFilter != nil || isPinnedView }
 
     var canOpenSelectedItem: Bool {
         guard let item = selectedListItem else { return false }
@@ -385,7 +402,9 @@ final class ClipboardViewModel: ObservableObject {
         var olderMap: [String: Int] = [:]
 
         for item in items {
-            if item.isPinned {
+            // 固定视图：items 已过滤为 pinned-only，全部按日期分组，不单独建"已固定"section
+            // 普通视图：pinned 项聚合到顶部"已固定"section
+            if !isPinnedView && item.isPinned {
                 pinned.append(item)
                 continue
             }
@@ -415,6 +434,7 @@ final class ClipboardViewModel: ObservableObject {
 
         sections = result
         flatOrder = result.flatMap(\.items)
-        shortcutOrder = flatOrder.filter { !$0.isPinned }
+        // 固定视图：所有可见项都是 pinned，全部纳入 ⌘1-9；普通视图：排除 pinned 项
+        shortcutOrder = isPinnedView ? flatOrder : flatOrder.filter { !$0.isPinned }
     }
 }

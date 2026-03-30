@@ -101,6 +101,7 @@ struct MainPanel: View {
         SearchBar(
             query: $viewModel.searchQuery,
             typeFilter: $viewModel.typeFilter,
+            isPinnedView: $viewModel.isPinnedView,
             onNavigate: { delta in
                 if delta > 0 { viewModel.selectNext() }
                 else { viewModel.selectPrev() }
@@ -143,6 +144,7 @@ struct MainPanel: View {
     private var itemList: some View {
         ItemListView(
             sections: viewModel.sections,
+            shortcutOrder: viewModel.shortcutOrder,
             isEmpty: viewModel.isEmpty,
             hasActiveFilter: viewModel.hasActiveFilter,
             searchQuery: viewModel.searchQuery,
@@ -315,6 +317,8 @@ private struct ItemListView: View {
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
     let sections: [ClipSection]
+    /// ViewModel 预计算的 ⌘1-9 序列（普通视图=非 pinned 项，固定视图=pinned 项）
+    let shortcutOrder: [ClipListItem]
     let isEmpty: Bool
     let hasActiveFilter: Bool
     let searchQuery: String
@@ -333,19 +337,12 @@ private struct ItemListView: View {
         .make(glass: glass, colorScheme: colorScheme)
     }
 
-    /// 预计算 id -> 序号索引，O(n) 构建，O(1) 查找
-    /// pinned 项不分配快捷键序号，⌘1-9 只覆盖非 pinned 项
+    /// 预计算 id -> ⌘N 序号，直接从 ViewModel 的 shortcutOrder 构建
+    /// 普通视图：非 pinned 项得到 ⌘1-9；固定视图：pinned 项得到 ⌘1-9
     private var shortcutIndex: [String: Int] {
-        var map: [String: Int] = [:]
-        var i = 0
-        for section in sections {
-            for item in section.items {
-                guard !item.isPinned else { continue }
-                if i < 9 { map[item.id] = i + 1 }
-                i += 1
-            }
-        }
-        return map
+        Dictionary(
+            uniqueKeysWithValues: shortcutOrder.prefix(9).enumerated().map { ($1.id, $0 + 1) }
+        )
     }
 
     var body: some View {
