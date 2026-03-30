@@ -8,10 +8,15 @@ struct PreviewPane: View {
     @Environment(\.colorScheme) private var colorScheme
     let item: ClipItem?
     var searchQuery: String = ""
+    let sceneState: ClipinSceneState
     @EnvironmentObject var vm: ClipboardViewModel
 
     private var glass: ClipinGlassPalette {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
+    }
+
+    private var hierarchy: ClipinPanelHierarchy {
+        .make(glass: glass, colorScheme: colorScheme)
     }
 
     var body: some View {
@@ -32,6 +37,9 @@ struct PreviewPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .scaleEffect(sceneState.previewScale)
+        .offset(y: sceneState.previewLift)
+        .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private func contentStage(for item: ClipItem) -> some View {
@@ -52,6 +60,10 @@ struct PreviewPane: View {
                     glass: glass
                 )
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: ClipinChrome.detailStageCornerRadius, style: .continuous)
+                    .strokeBorder(glass.emphasisStroke.opacity(sceneState.hasSelection ? 0.12 : 0.06), lineWidth: 0.6)
+            }
             .padding(.horizontal, ClipinChrome.detailObjectInset)
     }
 
@@ -108,7 +120,7 @@ struct PreviewPane: View {
                         VStack(alignment: .leading, spacing: 6) {
                             Label("OCR", systemImage: "text.viewfinder")
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(hierarchy.support.subduedInk)
 
                             SelectableTextPreview(
                                 text: ocr,
@@ -142,7 +154,7 @@ struct PreviewPane: View {
                             .font(.system(size: 16, weight: .semibold))
                         Text(fileHeaderSubtitle(paths: paths, primaryURL: primaryURL))
                             .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(hierarchy.support.subduedInk)
                             .textSelection(.enabled)
                     }
                 }
@@ -179,6 +191,9 @@ struct PreviewPane: View {
                 )
             )
             .padding(.horizontal, ClipinChrome.detailObjectInset)
+            .opacity(sceneState.metadataOpacity)
+            .offset(y: sceneState.metadataLift)
+            .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private func infoGrid(for item: ClipItem) -> some View {
@@ -274,8 +289,8 @@ struct PreviewPane: View {
     private func infoRow(_ item: InfoItem) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(item.label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(hierarchy.support.smallLabelInk)
                 .frame(minWidth: 40, idealWidth: 52, maxWidth: 68, alignment: .leading)
                 .lineLimit(1)
 
@@ -284,12 +299,12 @@ struct PreviewPane: View {
                     Image(nsImage: icon)
                         .resizable()
                         .frame(width: 11, height: 11)
-                        .opacity(0.7)
+                        .opacity(colorScheme == .dark ? 0.82 : 0.72)
                 }
 
                 Text(item.value)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.primary.opacity(0.8))
+                    .foregroundStyle(hierarchy.support.subduedInk)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .textSelection(.enabled)
@@ -318,12 +333,12 @@ struct PreviewPane: View {
         VStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 30))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(hierarchy.support.placeholderInk)
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
             Text(subtitle)
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(hierarchy.support.subduedInk)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 260)
         }
@@ -333,7 +348,7 @@ struct PreviewPane: View {
     private func unavailableLabel(_ text: LocalizedStringKey, systemImage: String) -> some View {
         Label(text, systemImage: systemImage)
             .font(.system(size: 13))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(hierarchy.support.subduedInk)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -449,7 +464,7 @@ private struct ColorSwatchPreview: View {
         HStack(spacing: 12) {
             Text(label)
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.primary.opacity(colorScheme == .dark ? 0.78 : 0.68))
                 .frame(width: 36, alignment: .leading)
             Text(value)
                 .font(.system(size: 12, design: .monospaced))

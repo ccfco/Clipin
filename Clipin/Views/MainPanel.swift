@@ -14,6 +14,16 @@ struct MainPanel: View {
         .make(glass: glass, colorScheme: colorScheme)
     }
 
+    private var sceneState: ClipinSceneState {
+        ClipinSceneState(
+            hasSelection: viewModel.selectedListItem != nil,
+            isSearching: !viewModel.searchQuery.isEmpty,
+            isFiltered: viewModel.typeFilter != nil || viewModel.isPinnedView,
+            isShowingActions: viewModel.isShowingActions,
+            isContinuousPasteEnabled: viewModel.isContinuousPasteEnabled
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             headerBar
@@ -21,36 +31,7 @@ struct MainPanel: View {
             bottomBar
         }
         .frame(width: 800, height: 540)
-        .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
-                .fill(.regularMaterial)
-                .overlay(
-                    LinearGradient(
-                        colors: [glass.shellTintTop, glass.shellTintBottom],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    LinearGradient(
-                        colors: [glass.shellWash, Color.clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .overlay(
-                    LinearGradient(
-                        colors: [glass.shellHighlight, Color.clear],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
-                        // dark: 白色内描边；light: 深色内描边（白色在浅色背景上不可见）
-                        .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.12), lineWidth: 0.5)
-                )
-        )
+        .background(ClipinShellBackground(glass: glass, sceneState: sceneState))
         .overlay(alignment: .top) {
             if viewModel.isContinuousPasteEnabled {
                 LinearGradient(
@@ -78,21 +59,21 @@ struct MainPanel: View {
                     ),
                     actions: viewModel.paletteActions,
                     selectedIndex: $viewModel.selectedActionIndex,
+                    sceneState: sceneState,
                     onSelect: { index in
                         viewModel.executePaletteAction(at: index)
                     }
                 )
                 .transition(
                     .asymmetric(
-                        insertion: .scale(scale: 0.98, anchor: .bottomTrailing).combined(with: .opacity),
+                        insertion: .scale(scale: 0.985, anchor: .bottomTrailing).combined(with: .opacity),
                         removal: .opacity
                     )
                 )
             }
         }
-        .onAppear {
-            viewModel.loadItems()
-        }
+        .animation(ClipinMotion.commandReveal, value: sceneState.isShowingActions)
+        .onAppear { viewModel.loadItems() }
     }
 
     private var headerBar: some View {
@@ -100,6 +81,7 @@ struct MainPanel: View {
             query: $viewModel.searchQuery,
             typeFilter: $viewModel.typeFilter,
             isPinnedView: $viewModel.isPinnedView,
+            sceneState: sceneState,
             onNavigate: { delta in
                 if delta > 0 { viewModel.selectNext() }
                 else { viewModel.selectPrev() }
@@ -117,6 +99,8 @@ struct MainPanel: View {
         .padding(.horizontal, ClipinChrome.shellGap)
         .padding(.top, ClipinChrome.shellGap)
         .padding(.bottom, ClipinChrome.shellGap)
+        .offset(y: sceneState.headerLift)
+        .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private var contentArea: some View {
@@ -130,13 +114,16 @@ struct MainPanel: View {
                         glass: glass
                     )
                 )
+                .scaleEffect(sceneState.isShowingActions ? 0.998 : 1.0)
+                .opacity(sceneState.listRestingOpacity)
 
-            PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery)
+            PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery, sceneState: sceneState)
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(.horizontal, ClipinChrome.shellGap)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private var itemList: some View {
@@ -146,6 +133,7 @@ struct MainPanel: View {
             isEmpty: viewModel.isEmpty,
             hasActiveFilter: viewModel.hasActiveFilter,
             searchQuery: viewModel.searchQuery,
+            sceneState: sceneState,
             selection: Binding(
                 get: { viewModel.selectedItemID },
                 set: { viewModel.selectItem(id: $0) }
@@ -188,12 +176,12 @@ struct MainPanel: View {
             } else {
                 Text("Clipboard History")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
 
                 if viewModel.hasActiveFilter {
                     Text("No selection")
                         .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(hierarchy.support.hintInk)
                         .padding(.leading, 8)
                 }
 
@@ -218,7 +206,7 @@ struct MainPanel: View {
             Button { viewModel.openSettings() } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
             }
             .buttonStyle(.borderless)
             .padding(.leading, 8)
@@ -233,9 +221,20 @@ struct MainPanel: View {
                 glass: glass
             )
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
+                .strokeBorder(glass.emphasisStroke.opacity(sceneState.stripAccentOpacity), lineWidth: 0.6)
+        }
+        .shadow(
+            color: glass.emphasisStrongFill.opacity(sceneState.stripAccentOpacity * (colorScheme == .dark ? 0.18 : 0.10)),
+            radius: 10,
+            y: 3
+        )
+        .scaleEffect(sceneState.stripScale)
         .padding(.horizontal, ClipinChrome.shellGap)
         .padding(.top, ClipinChrome.shellGap)
         .padding(.bottom, ClipinChrome.shellGap)
+        .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
@@ -282,10 +281,10 @@ struct MainPanel: View {
         HStack(spacing: 5) {
             Text(LocalizedStringKey(label))
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(emphasized ? glass.emphasisInk : Color.secondary)
+                .foregroundStyle(emphasized ? glass.emphasisInk : hierarchy.support.subduedInk)
             ClipinKeycap(
                 key: key,
-                foreground: emphasized ? glass.emphasisInk.opacity(0.82) : Color(nsColor: .tertiaryLabelColor),
+                foreground: emphasized ? glass.emphasisInk.opacity(0.82) : hierarchy.support.smallLabelInk,
                 background: emphasized ? glass.controlFill : glass.keycapTint
             )
         }
@@ -320,6 +319,7 @@ private struct ItemListView: View {
     let isEmpty: Bool
     let hasActiveFilter: Bool
     let searchQuery: String
+    let sceneState: ClipinSceneState
     let selection: Binding<String?>
     let onActivate: (ClipListItem) -> Void
     let onPin: (ClipListItem) -> Void
@@ -376,7 +376,7 @@ private struct ItemListView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(hierarchy.support.smallLabelInk)
             .tracking(0.35)
             .padding(.horizontal, ClipinChrome.listRowOuterInset)
             .padding(.top, 14)
@@ -395,6 +395,8 @@ private struct ItemListView: View {
             searchQuery: searchQuery,
             isSelected: isSelected,
             isHovered: isHovered,
+            sceneState: sceneState,
+            glass: glass,
             hierarchy: hierarchy
         )
         .padding(.vertical, 2)
@@ -410,6 +412,9 @@ private struct ItemListView: View {
             )
         )
         .padding(.horizontal, ClipinChrome.listRowOuterInset)
+        .scaleEffect(isSelected ? sceneState.selectedRowScale : 1.0)
+        .offset(y: isSelected ? sceneState.selectedRowLift : 0)
+        .opacity(!isSelected ? sceneState.listRestingOpacity : 1.0)
         .animation(ClipinMotion.selection, value: isSelected)
         .animation(ClipinMotion.feedback, value: isHovered)
         .contentShape(Rectangle())
@@ -427,17 +432,17 @@ private struct ItemListView: View {
         VStack(spacing: 8) {
             Image(systemName: hasActiveFilter ? "magnifyingglass" : "clipboard")
                 .font(.system(size: 24))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(hierarchy.support.placeholderInk)
 
             Text(hasActiveFilter ? LocalizedStringKey("No results") : LocalizedStringKey("No history yet"))
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(hierarchy.support.subduedInk)
 
             Text(hasActiveFilter
                  ? LocalizedStringKey("Try a different search term, or press Command-K for actions.")
                  : LocalizedStringKey("Copy something and it will appear here. Command-K still opens actions."))
                 .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(hierarchy.support.hintInk)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 200)
 
@@ -445,7 +450,7 @@ private struct ItemListView: View {
                 badgeCapsule("⌘K")
                 Text(hasActiveFilter ? LocalizedStringKey("Actions") : LocalizedStringKey("Actions & Settings"))
                     .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
             }
             .padding(.top, 4)
         }
@@ -455,7 +460,7 @@ private struct ItemListView: View {
     private func badgeCapsule(_ key: String) -> some View {
         ClipinKeycap(
             key: key,
-            foreground: Color(nsColor: .secondaryLabelColor),
+            foreground: hierarchy.support.smallLabelInk,
             background: glass.keycapTint
         )
     }

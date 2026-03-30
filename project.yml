@@ -54,4 +54,17 @@ targets:
       - name: Build Rust Core
         script: |
           "${SRCROOT}/scripts/build-rust.sh"
-        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/scripts/build-rust.sh
+          - $(SRCROOT)/rust/Cargo.toml
+          - $(SRCROOT)/rust/Cargo.lock
+          - $(SRCROOT)/rust/uniffi-bindgen.rs
+          - $(SRCROOT)/rust/src/lib.rs
+          - $(SRCROOT)/rust/src/models.rs
+          - $(SRCROOT)/rust/src/storage.rs
+        outputFiles:
+          - $(SRCROOT)/rust/target/release/libclipin_core.a
+          - $(SRCROOT)/Clipin/Generated/clipin_core.swift
+          - $(SRCROOT)/Clipin/Generated/clipin_coreFFI.h
+          - $(SRCROOT)/Clipin/Generated/clipin_coreFFI.modulemap
+        basedOnDependencyAnalysis: true

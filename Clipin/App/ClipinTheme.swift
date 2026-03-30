@@ -48,12 +48,113 @@ enum ClipinChrome {
     static let footerCalloutHorizontalLeading: CGFloat = 10
     static let footerCalloutHorizontalTrailing: CGFloat = 10
     static let footerCalloutIconSize: CGFloat = 20
+    static let heroOrbCornerRadius: CGFloat = 20
+    static let sectionIntroSpacing: CGFloat = 10
 }
 
 enum ClipinMotion {
+    static let reduced = Animation.easeOut(duration: 0.16)
     static let feedback = Animation.spring(response: 0.22, dampingFraction: 0.82)
+    static let focusShift = Animation.spring(response: 0.28, dampingFraction: 0.86)
     static let selection = Animation.spring(response: 0.26, dampingFraction: 0.84)
-    static let panel = Animation.spring(response: 0.32, dampingFraction: 0.84)
+    static let commandReveal = Animation.spring(response: 0.34, dampingFraction: 0.88)
+    static let statePulse = Animation.spring(response: 0.42, dampingFraction: 0.82)
+    static let ambient = Animation.easeInOut(duration: 7.6)
+    static let panel = commandReveal
+}
+
+/// 主面板共享状态语法。把“正在搜索 / 打开命令面板 / 连续粘贴”等状态
+/// 收口成统一场景描述，避免各个子视图各自猜自己的强调程度。
+struct ClipinSceneState: Equatable {
+    let hasSelection: Bool
+    let isSearching: Bool
+    let isFiltered: Bool
+    let isShowingActions: Bool
+    let isContinuousPasteEnabled: Bool
+
+    var hasActiveQuery: Bool { isSearching || isFiltered }
+    var ambientStrength: Double {
+        if isShowingActions { return 1.0 }
+        if isContinuousPasteEnabled { return 0.92 }
+        if hasActiveQuery { return 0.74 }
+        return 0.58
+    }
+
+    var headerAccentOpacity: Double {
+        if isShowingActions { return 0.68 }
+        if hasActiveQuery { return 0.54 }
+        return 0.18
+    }
+
+    var headerGlowOpacity: Double {
+        if isShowingActions { return 0.18 }
+        if hasActiveQuery { return 0.14 }
+        return 0.06
+    }
+
+    var headerLift: CGFloat {
+        hasActiveQuery ? -0.5 : 0
+    }
+
+    var listRestingOpacity: Double {
+        isShowingActions ? 0.965 : 1.0
+    }
+
+    var selectedRowScale: CGFloat {
+        if isShowingActions { return 0.996 }
+        if isContinuousPasteEnabled { return 1.008 }
+        return 1.0
+    }
+
+    var selectedRowLift: CGFloat {
+        if isContinuousPasteEnabled { return -0.5 }
+        if isShowingActions { return -0.25 }
+        return 0
+    }
+
+    var selectedRowIconEmphasis: CGFloat {
+        if isContinuousPasteEnabled { return 1.08 }
+        if isShowingActions { return 1.04 }
+        return 1.0
+    }
+
+    var previewScale: CGFloat {
+        isShowingActions ? 0.998 : 1.0
+    }
+
+    var previewLift: CGFloat {
+        isShowingActions ? -1.0 : 0
+    }
+
+    var metadataOpacity: Double {
+        hasSelection ? (isShowingActions ? 0.88 : 1.0) : 0.74
+    }
+
+    var metadataLift: CGFloat {
+        isShowingActions ? -1.5 : 0
+    }
+
+    var stripAccentOpacity: Double {
+        if isContinuousPasteEnabled { return 0.94 }
+        if isShowingActions { return 0.66 }
+        if hasSelection { return 0.34 }
+        return 0.14
+    }
+
+    var stripScale: CGFloat {
+        isShowingActions ? 0.997 : 1.0
+    }
+
+    var paletteScale: CGFloat { isShowingActions ? 1.0 : 0.985 }
+    var paletteLift: CGFloat { isShowingActions ? 0 : 6 }
+
+    static let idle = ClipinSceneState(
+        hasSelection: false,
+        isSearching: false,
+        isFiltered: false,
+        isShowingActions: false,
+        isContinuousPasteEnabled: false
+    )
 }
 
 struct ClipinRoundedSurface: View {
@@ -126,6 +227,157 @@ struct ClipinKeycap: View {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(background)
             )
+    }
+}
+
+struct ClipinShellBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isBreathing = false
+
+    let glass: ClipinGlassPalette
+    let cornerRadius: CGFloat
+    let sceneState: ClipinSceneState
+
+    init(
+        glass: ClipinGlassPalette,
+        cornerRadius: CGFloat = ClipinChrome.shellCornerRadius,
+        sceneState: ClipinSceneState = .idle
+    ) {
+        self.glass = glass
+        self.cornerRadius = cornerRadius
+        self.sceneState = sceneState
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(.regularMaterial)
+            .overlay(
+                LinearGradient(
+                    colors: [glass.shellTintTop, glass.shellTintBottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                LinearGradient(
+                    colors: [glass.shellWash.opacity(0.82 + (sceneState.ambientStrength * 0.22)), Color.clear],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                LinearGradient(
+                    colors: [glass.shellHighlight.opacity((colorScheme == .dark ? 0.84 : 0.92) + (sceneState.ambientStrength * 0.12)), Color.clear],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(alignment: .topLeading) {
+                Circle()
+                    .fill(glass.emphasisStrongFill.opacity((colorScheme == .dark ? 0.12 : 0.07) + (sceneState.ambientStrength * 0.12)))
+                    .frame(width: 260, height: 260)
+                    .blur(radius: 56)
+                    .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.06 : 0.96))
+                    .offset(
+                        x: reduceMotion ? -84 : (isBreathing ? -72 : -92),
+                        y: reduceMotion ? -108 : (isBreathing ? -96 : -116)
+                    )
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(glass.emphasisFill.opacity((colorScheme == .dark ? 0.20 : 0.12) + (sceneState.ambientStrength * 0.14)))
+                    .frame(width: 230, height: 230)
+                    .blur(radius: 48)
+                    .scaleEffect(reduceMotion ? 1 : (isBreathing ? 0.98 : 1.06))
+                    .offset(
+                        x: reduceMotion ? 88 : (isBreathing ? 80 : 96),
+                        y: reduceMotion ? 104 : (isBreathing ? 96 : 110)
+                    )
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.12), lineWidth: 0.5)
+            )
+            .onAppear {
+                guard !reduceMotion else { return }
+                isBreathing = false
+                withAnimation(ClipinMotion.ambient.repeatForever(autoreverses: true)) {
+                    isBreathing = true
+                }
+            }
+    }
+}
+
+struct ClipinSymbolOrb: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isFloating = false
+
+    let systemImage: String
+    let glass: ClipinGlassPalette
+    let hierarchy: ClipinPanelHierarchy
+    var size: CGFloat = 64
+    var iconSize: CGFloat = 22
+    var emphasis: Double = 1.0
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
+                .fill(glass.emphasisStrongFill.opacity(0.08 + (0.04 * emphasis)))
+                .frame(width: size + 14, height: size + 14)
+                .blur(radius: 18)
+                .scaleEffect(reduceMotion ? 1 : (isFloating ? 1.04 : 0.98))
+
+            RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
+                .fill(glass.emphasisFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
+                        .strokeBorder(glass.emphasisStroke.opacity(0.82), lineWidth: 0.75)
+                )
+                .frame(width: size, height: size)
+                .scaleEffect(reduceMotion ? 1 : (isFloating ? 1.01 : 0.99))
+
+            Image(systemName: systemImage)
+                .font(.system(size: iconSize, weight: .medium))
+                .foregroundStyle(hierarchy.selection.ink)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            isFloating = false
+            withAnimation(ClipinMotion.ambient.repeatForever(autoreverses: true)) {
+                isFloating = true
+            }
+        }
+    }
+}
+
+struct ClipinSectionIntro: View {
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
+    let hierarchy: ClipinPanelHierarchy
+    var eyebrow: LocalizedStringKey? = nil
+    var titleFontSize: CGFloat = 24
+    var subtitleFontSize: CGFloat = 13
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ClipinChrome.sectionIntroSpacing) {
+            if let eyebrow {
+                Text(eyebrow)
+                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .foregroundStyle(hierarchy.support.smallLabelInk)
+                    .tracking(0.45)
+            }
+
+            Text(title)
+                .font(.system(size: titleFontSize, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(subtitle)
+                .font(.system(size: subtitleFontSize))
+                .foregroundStyle(hierarchy.support.subduedInk)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -245,6 +497,7 @@ struct ClipinPanelHierarchy {
         let stroke: Color
         let ink: Color
         let secondaryInk: Color
+        let dimInk: Color
         let badgeFill: Color
         let highlight: Color
     }
@@ -258,9 +511,17 @@ struct ClipinPanelHierarchy {
         let keycapFill: Color
     }
 
+    struct Support {
+        let subduedInk: Color
+        let smallLabelInk: Color
+        let hintInk: Color
+        let placeholderInk: Color
+    }
+
     let scope: Scope
     let selection: Selection
     let command: Command
+    let support: Support
 }
 
 extension ClipinPanelHierarchy {
@@ -279,6 +540,7 @@ extension ClipinPanelHierarchy {
                 stroke: glass.emphasisStroke,
                 ink: glass.emphasisInk.opacity(isDark ? 0.98 : 0.92),
                 secondaryInk: glass.emphasisInk.opacity(isDark ? 0.64 : 0.58),
+                dimInk: glass.emphasisInk.opacity(isDark ? 0.72 : 0.64),
                 badgeFill: glass.keycapTint.opacity(isDark ? 1.0 : 0.92),
                 highlight: glass.emphasisFill.opacity(isDark ? 1.0 : 0.85)
             ),
@@ -289,6 +551,12 @@ extension ClipinPanelHierarchy {
                 iconFill: glass.emphasisStrongFill.opacity(isDark ? 0.92 : 0.82),
                 iconInk: glass.emphasisOnStrongFill.opacity(isDark ? 0.96 : 0.90),
                 keycapFill: glass.keycapTint.opacity(isDark ? 1.0 : 0.88)
+            ),
+            support: Support(
+                subduedInk: Color.primary.opacity(isDark ? 0.78 : 0.68),
+                smallLabelInk: Color.primary.opacity(isDark ? 0.72 : 0.62),
+                hintInk: Color.primary.opacity(isDark ? 0.58 : 0.48),
+                placeholderInk: Color.primary.opacity(isDark ? 0.46 : 0.34)
             )
         )
     }
@@ -401,43 +669,43 @@ extension ClipinGlassPalette {
             return Self(
                 shellTintTop: Color.clear,
                 shellTintBottom: Color.clear,
-                shellHighlight: Color.white.opacity(0.20),
-                shellWash: Color.white.opacity(0.06),
+                shellHighlight: Color.white.opacity(0.24),
+                shellWash: Color.white.opacity(0.12),
                 chromeTint: Color.clear,
                 sidebarTint: Color.primary.opacity(0.015),
                 detailTint: Color.white.opacity(0.12),
                 previewCanvasTint: Color.primary.opacity(0.02),
-                keycapTint: Color.primary.opacity(0.04),
+                keycapTint: Color.primary.opacity(0.06),
                 emphasisInk: Color.primary,
                 emphasisFill: Color.primary.opacity(0.13),
                 emphasisStrongFill: accent.opacity(0.68),
                 emphasisOnStrongFill: .white,
                 emphasisStroke: Color.primary.opacity(0.18),
-                hoverFill: Color.primary.opacity(0.03),
-                hoverStroke: Color.primary.opacity(0.05),
-                controlFill: Color.primary.opacity(0.03),
-                controlStroke: Color.primary.opacity(0.05)
+                hoverFill: Color.primary.opacity(0.04),
+                hoverStroke: Color.primary.opacity(0.065),
+                controlFill: Color.primary.opacity(0.04),
+                controlStroke: Color.primary.opacity(0.065)
             )
         case (.native, true):
             return Self(
                 shellTintTop: Color.clear,
                 shellTintBottom: Color.clear,
-                shellHighlight: Color.white.opacity(0.06),
-                shellWash: Color.white.opacity(0.03),
+                shellHighlight: Color.white.opacity(0.08),
+                shellWash: Color.white.opacity(0.05),
                 chromeTint: Color.clear,
                 sidebarTint: Color.white.opacity(0.015),
                 detailTint: Color.white.opacity(0.03),
                 previewCanvasTint: Color.white.opacity(0.03),
-                keycapTint: Color.white.opacity(0.05),
+                keycapTint: Color.white.opacity(0.06),
                 emphasisInk: Color.primary,
                 emphasisFill: Color.white.opacity(0.15),
                 emphasisStrongFill: accent.opacity(0.70),
                 emphasisOnStrongFill: .white,
                 emphasisStroke: Color.white.opacity(0.18),
-                hoverFill: Color.white.opacity(0.03),
-                hoverStroke: Color.white.opacity(0.05),
-                controlFill: Color.white.opacity(0.03),
-                controlStroke: Color.white.opacity(0.05)
+                hoverFill: Color.white.opacity(0.04),
+                hoverStroke: Color.white.opacity(0.06),
+                controlFill: Color.white.opacity(0.04),
+                controlStroke: Color.white.opacity(0.06)
             )
         case (.mist, false):
             return Self(

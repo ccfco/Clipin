@@ -112,6 +112,7 @@ struct SearchBar: View {
     @Binding var query: String
     @Binding var typeFilter: ClipType?
     @Binding var isPinnedView: Bool
+    let sceneState: ClipinSceneState
     var onNavigate: (Int) -> Void = { _ in }
     var onSubmit: () -> Void = {}
     var onEscape: () -> Void = {}
@@ -125,10 +126,18 @@ struct SearchBar: View {
         .make(glass: glass, colorScheme: colorScheme)
     }
 
+    private var idlePillFill: Color {
+        glass.keycapTint.opacity(colorScheme == .dark ? 0.88 : 1.0)
+    }
+
+    private var idlePillStroke: Color {
+        glass.hoverStroke.opacity(colorScheme == .dark ? 0.95 : 0.75)
+    }
+
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(hierarchy.support.subduedInk)
                 .font(.system(size: 14))
 
             InterceptingTextFieldView(
@@ -148,7 +157,7 @@ struct SearchBar: View {
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(hierarchy.support.hintInk)
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
@@ -163,6 +172,16 @@ struct SearchBar: View {
                 glass: glass
             )
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                .strokeBorder(glass.emphasisStroke.opacity(sceneState.headerAccentOpacity), lineWidth: 0.6)
+        }
+        .shadow(
+            color: glass.emphasisStrongFill.opacity(sceneState.headerGlowOpacity),
+            radius: 12,
+            y: 2
+        )
+        .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private var filterPills: some View {
@@ -185,19 +204,22 @@ struct SearchBar: View {
             HStack(spacing: 3) {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(isActive ? hierarchy.scope.ink : Color.secondary.opacity(0.88))
+                    .foregroundStyle(isActive ? hierarchy.scope.ink : hierarchy.support.subduedInk)
                 Text("⌥1")
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : Color(nsColor: .quaternaryLabelColor))
+                    .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : hierarchy.support.hintInk)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? hierarchy.scope.fill : Color.clear)
+                    .fill(isActive ? hierarchy.scope.fill : idlePillFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(isActive ? hierarchy.scope.stroke : Color.clear, lineWidth: 0.5)
+                            .strokeBorder(
+                                isActive ? hierarchy.scope.stroke : idlePillStroke,
+                                lineWidth: 0.5
+                            )
                     )
             )
         }
@@ -216,19 +238,22 @@ struct SearchBar: View {
             HStack(spacing: 3) {
                 Text(label)
                     .font(.system(size: 12, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? hierarchy.scope.ink : Color.secondary.opacity(0.88))
+                    .foregroundStyle(isActive ? hierarchy.scope.ink : hierarchy.support.subduedInk)
                 Text(shortcut)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : Color(nsColor: .quaternaryLabelColor))
+                    .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : hierarchy.support.hintInk)
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isActive ? hierarchy.scope.fill : Color.clear)
+                    .fill(isActive ? hierarchy.scope.fill : idlePillFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(isActive ? hierarchy.scope.stroke : Color.clear, lineWidth: 0.5)
+                            .strokeBorder(
+                                isActive ? hierarchy.scope.stroke : idlePillStroke,
+                                lineWidth: 0.5
+                            )
                     )
             )
         }

@@ -119,11 +119,15 @@ struct ClipItemRow: View {
     var searchQuery: String = ""
     var isSelected: Bool = false
     var isHovered: Bool = false
+    let sceneState: ClipinSceneState
+    let glass: ClipinGlassPalette
     let hierarchy: ClipinPanelHierarchy
 
     var body: some View {
         HStack(spacing: 9) {
             typeIndicator
+                .scaleEffect(typeIndicatorScale)
+                .animation(ClipinMotion.feedback, value: isHovered)
 
             Text(highlightedDisplayText)
                 .font(.system(size: 13.5, weight: isSelected ? .medium : .regular))
@@ -135,7 +139,7 @@ struct ClipItemRow: View {
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9))
-                    .foregroundStyle(isSelected ? hierarchy.selection.secondaryInk : Color(nsColor: .tertiaryLabelColor))
+                    .foregroundStyle(isSelected ? hierarchy.selection.dimInk : hierarchy.support.smallLabelInk)
                     .opacity(isSelected || isHovered ? 1 : 0)
             }
 
@@ -145,8 +149,8 @@ struct ClipItemRow: View {
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(
                         isSelected
-                            ? hierarchy.selection.ink
-                            : Color.secondary.opacity(0.78)
+                            ? hierarchy.selection.dimInk
+                            : hierarchy.support.smallLabelInk
                     )
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
@@ -163,10 +167,10 @@ struct ClipItemRow: View {
             // 时间 — 右对齐，退场角色
             Text(timeLabel)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundStyle(isSelected ? hierarchy.selection.secondaryInk : Color(nsColor: .tertiaryLabelColor))
+                .foregroundStyle(isSelected ? hierarchy.selection.dimInk : hierarchy.support.smallLabelInk)
         }
         .padding(.horizontal, 13)
-        .padding(.vertical, 8)
+        .padding(.vertical, 9)
         .animation(ClipinMotion.selection, value: isSelected)
     }
 
@@ -190,9 +194,32 @@ struct ClipItemRow: View {
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.secondary)
-                .frame(width: 24, height: 24)
+                .foregroundStyle(isSelected ? hierarchy.selection.ink : hierarchy.support.subduedInk)
+                .frame(width: 24, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isSelected ? hierarchy.selection.badgeFill : glass.keycapTint)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(
+                                    isSelected ? hierarchy.selection.stroke.opacity(0.72) : glass.hoverStroke.opacity(0.85),
+                                    lineWidth: 0.5
+                                )
+                        )
+                )
+                .shadow(
+                    color: glass.emphasisStrongFill.opacity(isSelected ? 0.18 * sceneState.stripAccentOpacity : 0),
+                    radius: 8,
+                    y: 2
+                )
         }
+    }
+
+    private var typeIndicatorScale: CGFloat {
+        if isSelected {
+            return sceneState.selectedRowIconEmphasis
+        }
+        return isHovered ? 1.03 : 1.0
     }
 
     private var displayText: String {

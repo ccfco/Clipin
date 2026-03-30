@@ -76,7 +76,7 @@ struct OnboardingView: View {
         }
         .padding(ClipinChrome.shellGap)
         .frame(width: 560, height: 640)
-        .background(shellBackground)
+        .background(ClipinShellBackground(glass: glass))
         .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous))
         .shadow(color: .black.opacity(0.16), radius: 42, y: 20)
         .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
@@ -97,7 +97,7 @@ struct OnboardingView: View {
                     .font(.system(size: 16, weight: .semibold))
                 Text("Keyboard-first clipboard, refined for focus.")
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
             }
 
             Spacer()
@@ -222,7 +222,7 @@ struct OnboardingView: View {
                                         : LocalizedStringKey("Needed for automatic paste")
                                 )
                                 .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(hierarchy.support.subduedInk)
                             }
 
                             Spacer()
@@ -243,7 +243,7 @@ struct OnboardingView: View {
             surface(role: .grouped, cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
                 Label("Without Accessibility, Clipin can save history but cannot paste back into other apps. Turn it on to finish setup.", systemImage: "info.circle")
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -258,11 +258,11 @@ struct OnboardingView: View {
                 Button("Maybe later") { flow.skipPermission() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(hierarchy.support.hintInk)
             } else {
                 Text(footerHint)
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -318,16 +318,13 @@ struct OnboardingView: View {
 private extension OnboardingView {
     var welcomeCopy: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("A calmer home for everything you copy.")
-                .font(.system(size: 28, weight: .semibold))
-                .lineSpacing(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .layoutPriority(1)
-            Text("Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus.")
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
+            ClipinSectionIntro(
+                title: "A calmer home for everything you copy.",
+                subtitle: "Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus.",
+                hierarchy: hierarchy,
+                eyebrow: "Welcome",
+                titleFontSize: 28
+            )
 
             ViewThatFits(in: .horizontal) {
                 HStack(alignment: .top, spacing: 8) {
@@ -349,55 +346,8 @@ private extension OnboardingView {
     }
 
     var heroArtwork: some View {
-        ZStack {
-            Circle()
-                .fill(glass.emphasisStrongFill.opacity(colorScheme == .dark ? 0.30 : 0.18))
-                .frame(width: 168, height: 168)
-                .blur(radius: 20)
-            Circle()
-                .fill(glass.emphasisFill)
-                .frame(width: 132, height: 132)
-            Image(systemName: "clipboard.fill")
-                .font(.system(size: 42, weight: .regular))
-                .foregroundStyle(glass.emphasisInk)
-        }
+        ClipinSymbolOrb(systemImage: "clipboard.fill", glass: glass, hierarchy: hierarchy, size: 132, iconSize: 40)
         .frame(width: 176, height: 176)
-    }
-
-    var shellBackground: some View {
-        RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
-            .fill(.regularMaterial)
-            .overlay(
-                LinearGradient(colors: [glass.shellTintTop, glass.shellTintBottom], startPoint: .topLeading, endPoint: .bottomTrailing)
-            )
-            .overlay(
-                LinearGradient(colors: [glass.shellWash, Color.clear], startPoint: .top, endPoint: .bottom)
-            )
-            .overlay(
-                LinearGradient(
-                    colors: [glass.shellHighlight.opacity(colorScheme == .dark ? 0.16 : 0.36), Color.clear],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(alignment: .topLeading) {
-                Circle()
-                    .fill(glass.emphasisStrongFill.opacity(colorScheme == .dark ? 0.16 : 0.08))
-                    .frame(width: 240, height: 240)
-                    .blur(radius: 50)
-                    .offset(x: -70, y: -90)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(glass.emphasisFill.opacity(colorScheme == .dark ? 0.24 : 0.14))
-                    .frame(width: 220, height: 220)
-                    .blur(radius: 44)
-                    .offset(x: 70, y: 90)
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.08 : 0.22), lineWidth: 0.5)
-            )
     }
 
     func surface<Content: View>(role: ClipinSurfaceRole, cornerRadius: CGFloat, padding: CGFloat, @ViewBuilder content: () -> Content) -> some View {
@@ -408,23 +358,14 @@ private extension OnboardingView {
     }
 
     func sectionHeader(title: LocalizedStringKey, subtitle: LocalizedStringKey) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 27, weight: .semibold))
-                .fixedSize(horizontal: false, vertical: true)
-            Text(subtitle)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+        ClipinSectionIntro(title: title, subtitle: subtitle, hierarchy: hierarchy, titleFontSize: 27)
     }
 
     func shortcutBadge(_ label: LocalizedStringKey, key: String) -> some View {
         HStack(spacing: 8) {
             Text(label)
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(hierarchy.support.subduedInk)
                 .fixedSize(horizontal: false, vertical: true)
             ClipinKeycap(key: key, foreground: hierarchy.command.ink.opacity(0.78), background: hierarchy.command.keycapFill)
         }
@@ -443,7 +384,7 @@ private extension OnboardingView {
                     .font(.system(size: 13, weight: .medium))
                 Text(message)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -461,7 +402,7 @@ private extension OnboardingView {
                     .font(.system(size: 13, weight: .medium))
                 Text(message)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -481,7 +422,7 @@ private extension OnboardingView {
             ClipinKeycap(key: title, foreground: hierarchy.command.ink.opacity(0.78), background: hierarchy.command.keycapFill)
             Text(message)
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(hierarchy.support.subduedInk)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -498,7 +439,7 @@ private extension OnboardingView {
                 .clipShape(Circle())
             Text(text)
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(hierarchy.support.subduedInk)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }

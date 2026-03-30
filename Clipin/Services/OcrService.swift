@@ -25,11 +25,7 @@ enum OcrService {
             // 中文在前，优先中文识别；英文兜底
             request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
 
-            guard let handler = try? VNImageRequestHandler(url: url, options: [:]) else {
-                print("⚠️ OCR: failed to create handler for \(imagePath)")
-                continuation.resume(returning: "")
-                return
-            }
+            let handler = VNImageRequestHandler(url: url, options: [:])
             do {
                 try handler.perform([request])
             } catch {

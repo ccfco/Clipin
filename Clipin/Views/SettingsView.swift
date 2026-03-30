@@ -117,6 +117,7 @@ struct SettingsView: View {
 
     private let repositoryURL = URL(string: "https://github.com/ccfco/Clipin")!
     private let issuesURL = URL(string: "https://github.com/ccfco/Clipin/issues")!
+    private let contentStackSpacing: CGFloat = 18
 
     private var updateAutoCheckBinding: Binding<Bool> {
         Binding(
@@ -167,7 +168,7 @@ struct SettingsView: View {
             }
             .padding(ClipinChrome.shellGap)
         }
-        .frame(width: 720, height: 608)
+        .frame(width: 748, height: 620)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let notice {
                 noticeView(notice)
@@ -209,7 +210,7 @@ struct SettingsView: View {
                 glass: glass
             )
         )
-        .frame(width: 208)
+        .frame(width: 220)
         .frame(maxHeight: .infinity, alignment: .top)
     }
 
@@ -219,12 +220,24 @@ struct SettingsView: View {
 
         return HStack(spacing: 10) {
             Image(systemName: tab.icon)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.secondary)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(isSelected ? hierarchy.selection.ink : hierarchy.support.subduedInk)
+                .frame(width: 28, height: 24)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isSelected ? hierarchy.selection.badgeFill : glass.keycapTint)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(
+                                    isSelected ? hierarchy.selection.stroke.opacity(0.72) : glass.hoverStroke.opacity(0.82),
+                                    lineWidth: 0.5
+                                )
+                        )
+                )
 
             Text(tab.title)
                 .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.primary.opacity(0.88))
+                .foregroundStyle(isSelected ? hierarchy.selection.ink : hierarchy.support.subduedInk)
 
             Spacer(minLength: 0)
         }
@@ -285,7 +298,7 @@ struct SettingsView: View {
     // MARK: - General
 
     private var generalContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: contentStackSpacing) {
             contentGroup {
                 VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -311,7 +324,7 @@ struct SettingsView: View {
 
                         Text("Click the field and press the new shortcut. At least one modifier key is required.")
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(hierarchy.support.subduedInk)
                     }
 
                     groupDivider
@@ -383,7 +396,7 @@ struct SettingsView: View {
     // MARK: - Privacy
 
     private var privacyContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: contentStackSpacing) {
             contentGroup(role: .control, padding: 14) {
                 infoCallout(
                     icon: "checkmark.shield.fill",
@@ -439,7 +452,7 @@ struct SettingsView: View {
     }
 
     private var retentionContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: contentStackSpacing) {
             contentGroup {
                 VStack(alignment: .leading, spacing: 18) {
                     settingFieldRow("Keep unpinned history for", description: "Pinned items are always preserved.") {
@@ -506,7 +519,7 @@ struct SettingsView: View {
     // MARK: - Auto Backup
 
     private var autoBackupContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: contentStackSpacing) {
             contentGroup {
                 toggleSettingRow(
                     "Enable auto backup",
@@ -526,7 +539,7 @@ struct SettingsView: View {
                                     ?? "Choose a destination folder for clipin-backup.json."
                             )
                             .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(hierarchy.support.subduedInk)
                             .lineLimit(2)
                             .truncationMode(.middle)
 
@@ -570,12 +583,12 @@ struct SettingsView: View {
                                         Circle().fill(Color.green).frame(width: 7, height: 7)
                                         Text("Last backup: \(relativeString(from: date, to: now))")
                                             .font(.system(size: 11))
-                                            .foregroundStyle(.secondary)
+                                            .foregroundStyle(hierarchy.support.subduedInk)
                                     } else {
                                         Circle().fill(Color.secondary.opacity(0.4)).frame(width: 7, height: 7)
                                         Text("No backup yet")
                                             .font(.system(size: 11))
-                                            .foregroundStyle(.tertiary)
+                                            .foregroundStyle(hierarchy.support.hintInk)
                                     }
 
                                     Spacer()
@@ -597,7 +610,7 @@ struct SettingsView: View {
     // MARK: - About
 
     private var aboutContent: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: contentStackSpacing) {
             contentGroup {
                 HStack(alignment: .top, spacing: 16) {
                     Image(nsImage: NSApp.applicationIconImage)
@@ -612,11 +625,11 @@ struct SettingsView: View {
 
                         Text(currentVersionLine)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(hierarchy.support.subduedInk)
 
                         Text("A fast, keyboard-first clipboard companion for macOS.")
                             .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(hierarchy.support.subduedInk)
                             .frame(maxWidth: 420, alignment: .leading)
                     }
                 }
@@ -630,7 +643,7 @@ struct SettingsView: View {
 
                         Text("Clipin checks GitHub Releases and lets you download the newest build manually.")
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(hierarchy.support.subduedInk)
                     }
 
                     toggleSettingRow(
@@ -657,7 +670,7 @@ struct SettingsView: View {
 
                             Text(latestRelease.notesPreview.isEmpty ? NSLocalizedString("No release notes provided.", comment: "") : latestRelease.notesPreview)
                                 .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(hierarchy.support.subduedInk)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -671,7 +684,7 @@ struct SettingsView: View {
 
                                 Text("Open the GitHub release page, or jump straight to the latest installer asset.")
                                     .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(hierarchy.support.subduedInk)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -728,60 +741,44 @@ struct SettingsView: View {
     // MARK: - Window backdrop & helpers
 
     private func detailHeader(for tab: SettingsTab) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(tab.title)
-                .font(.system(size: 20, weight: .semibold))
+        contentGroup(role: .contentStage, padding: 18) {
+            HStack(alignment: .center, spacing: 16) {
+                ClipinSymbolOrb(systemImage: tab.icon, glass: glass, hierarchy: hierarchy, size: 58, iconSize: 20)
 
-            Text(tab.summary)
-                .font(.system(size: 13))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: 520, alignment: .leading)
+                ClipinSectionIntro(
+                    title: tab.title,
+                    subtitle: tab.summary,
+                    hierarchy: hierarchy,
+                    eyebrow: "Preferences",
+                    titleFontSize: 21
+                )
+
+                Spacer(minLength: 0)
+            }
         }
     }
 
     private var windowBackdrop: some View {
-        Rectangle()
-            .fill(.regularMaterial)
-            .overlay(
-                LinearGradient(
-                    colors: [glass.shellTintTop, glass.shellTintBottom],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(
-                LinearGradient(
-                    colors: [glass.shellWash, Color.clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .overlay(
-                LinearGradient(
-                    colors: [glass.shellHighlight.opacity(colorScheme == .dark ? 0.18 : 0.42), Color.clear],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+        ClipinShellBackground(glass: glass, cornerRadius: ClipinChrome.shellCornerRadius)
             .ignoresSafeArea()
     }
 
     private var groupDivider: some View {
         Rectangle()
-            .fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.06))
+            .fill(hierarchy.support.hintInk.opacity(colorScheme == .dark ? 0.16 : 0.12))
             .frame(height: 1)
     }
 
     private var settingsSelectionPlaceholder: some View {
-        contentGroup(role: .control, padding: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Choose a section")
-                    .font(.system(size: 13, weight: .medium))
-
-                Text("Select a section from the sidebar to edit Clipin preferences.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
+        contentGroup(role: .contentStage, padding: 18) {
+            ClipinSectionIntro(
+                title: "Choose a section",
+                subtitle: "Select a section from the sidebar to edit Clipin preferences.",
+                hierarchy: hierarchy,
+                eyebrow: "Preferences",
+                titleFontSize: 18,
+                subtitleFontSize: 12
+            )
         }
     }
 
@@ -798,7 +795,7 @@ struct SettingsView: View {
                 if let description {
                     Text(description)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(hierarchy.support.subduedInk)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -820,12 +817,12 @@ struct SettingsView: View {
 
                 Text(description)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
 
                 if let note {
                     Text(note)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(hierarchy.support.subduedInk)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -849,7 +846,7 @@ struct SettingsView: View {
 
                 Text(description)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -872,14 +869,14 @@ struct SettingsView: View {
 
                 Text(message)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hierarchy.support.subduedInk)
             }
         }
     }
 
     private func contentGroup<Content: View>(
         role: ClipinSurfaceRole = .grouped,
-        padding: CGFloat = 16,
+        padding: CGFloat = 18,
         @ViewBuilder content: () -> Content
     ) -> some View {
         content()
@@ -905,7 +902,7 @@ struct SettingsView: View {
                 .frame(width: 8, height: 8)
             Text(notice.text)
                 .font(.system(size: 12))
-                .foregroundStyle(Color.primary.opacity(0.78))
+                .foregroundStyle(hierarchy.support.subduedInk)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

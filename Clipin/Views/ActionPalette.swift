@@ -47,6 +47,7 @@ struct ActionPalette: View {
     @Binding var isPresented: Bool
     let actions: [PaletteAction]
     @Binding var selectedIndex: Int
+    let sceneState: ClipinSceneState
     let onSelect: (Int) -> Void
     @State private var hoveredIndex: Int?
 
@@ -114,6 +115,18 @@ struct ActionPalette: View {
                 glass: glass
             )
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
+                .strokeBorder(glass.emphasisStroke.opacity(sceneState.stripAccentOpacity * 0.82), lineWidth: 0.7)
+        }
+        .shadow(
+            color: glass.emphasisStrongFill.opacity(sceneState.stripAccentOpacity * (colorScheme == .dark ? 0.24 : 0.12)),
+            radius: 16,
+            y: 8
+        )
+        .scaleEffect(sceneState.paletteScale)
+        .offset(y: sceneState.paletteLift)
+        .animation(ClipinMotion.commandReveal, value: sceneState)
         .onAppear { selectedIndex = 0 }
     }
 
@@ -121,13 +134,13 @@ struct ActionPalette: View {
         HStack(spacing: 8) {
             Text("Actions")
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(hierarchy.support.subduedInk)
 
             Spacer()
 
             ClipinKeycap(
                 key: "Esc",
-                foreground: Color(nsColor: .secondaryLabelColor),
+                foreground: hierarchy.support.smallLabelInk,
                 background: glass.keycapTint
             )
         }
@@ -163,7 +176,7 @@ struct ActionPalette: View {
 
             ClipinKeycap(
                 key: action.badge,
-                foreground: isSelected ? selectedSecondaryInk : Color.secondary.opacity(0.88),
+                foreground: isSelected ? selectedSecondaryInk : hierarchy.support.smallLabelInk,
                 background: isSelected ? selectedBadgeFill : glass.keycapTint
             )
         }
@@ -195,15 +208,15 @@ struct ActionPalette: View {
         VStack(spacing: 8) {
             Image(systemName: "command")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(hierarchy.support.placeholderInk)
 
             Text("No actions available")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(hierarchy.support.subduedInk)
 
             Text("Press Escape to close.")
                 .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(hierarchy.support.hintInk)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 220)
         }
