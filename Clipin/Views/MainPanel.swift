@@ -132,6 +132,7 @@ struct MainPanel: View {
             shortcutOrder: viewModel.shortcutOrder,
             isEmpty: viewModel.isEmpty,
             hasActiveFilter: viewModel.hasActiveFilter,
+            hasMore: viewModel.hasMore,
             searchQuery: viewModel.searchQuery,
             sceneState: sceneState,
             selection: Binding(
@@ -143,7 +144,8 @@ struct MainPanel: View {
                 viewModel.pasteSelected()
             },
             onPin: { viewModel.togglePin(id: $0.id) },
-            onDelete: { viewModel.deleteItem(id: $0.id) }
+            onDelete: { viewModel.deleteItem(id: $0.id) },
+            onLoadMore: { viewModel.loadMoreItems() }
         )
     }
 
@@ -168,6 +170,10 @@ struct MainPanel: View {
 
                     if viewModel.canOpenSelectedItem {
                         keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
+                    }
+
+                    if viewModel.canPreviewSelectedItem {
+                        keyBadge(label: "Preview", key: "Space")
                     }
                 }
                 .padding(.leading, 8)
@@ -336,12 +342,14 @@ private struct ItemListView: View {
     let shortcutOrder: [ClipListItem]
     let isEmpty: Bool
     let hasActiveFilter: Bool
+    let hasMore: Bool
     let searchQuery: String
     let sceneState: ClipinSceneState
     let selection: Binding<String?>
     let onActivate: (ClipListItem) -> Void
     let onPin: (ClipListItem) -> Void
     let onDelete: (ClipListItem) -> Void
+    let onLoadMore: () -> Void
 
     @State private var hoveredID: String?
 
@@ -378,6 +386,11 @@ private struct ItemListView: View {
                         ForEach(section.items, id: \.id) { item in
                             row(for: item)
                         }
+                    }
+                    // 滚到底时触发加载下一页；hasMore=false 时不渲染，避免重复触发
+                    if hasMore {
+                        Color.clear.frame(height: 1)
+                            .onAppear { onLoadMore() }
                     }
                 }
                 .padding(.vertical, 6)

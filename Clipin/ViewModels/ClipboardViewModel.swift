@@ -36,12 +36,12 @@ final class ClipboardViewModel: ObservableObject {
 
     func executePaletteAction(at index: Int) {
         guard index >= 0, index < paletteActions.count else { return }
-        let shouldRestoreSearchFocus = isShowingActions
         let action = paletteActions[index]
+        let shouldRestoreSearchFocus = isShowingActions && action.restoresSearchFocus
         action.handler()
 
         if isShowingActions {
-            hideActionsPalette(restoreFocus: true)
+            hideActionsPalette(restoreFocus: action.restoresSearchFocus)
         } else if shouldRestoreSearchFocus {
             NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
         }
@@ -79,6 +79,13 @@ final class ClipboardViewModel: ObservableObject {
     private var loadItemTask: Task<Void, Never>?
     private var skipNextDebouncedLoad = false
 
+    // MARK: - Pagination
+    private static let pageSize = 50
+    /// 当前已从 DB 加载的条目总数（用于 offset 计算）
+    private var totalLoadedFromDB = 0
+    /// 是否还有更多可加载的条目（普通视图非搜索模式下有效）
+    @Published private(set) var hasMore = false
+
     var onPasteRequested: ((ClipItem) -> Void)?
     var onPastePlainRequested: ((ClipItem) -> Void)?
     var onCopyRequested: ((ClipItem) -> Void)?
@@ -113,11 +120,20 @@ final class ClipboardViewModel: ObservableObject {
         }
 
         let currentSelectionID = selectLatest ? nil : selectedItemID
+        totalLoadedFromDB = 0
 
         if searchQuery.isEmpty {
-            items = core.getListItems(limit: 200, offset: 0, typeFilter: isPinnedView ? nil : typeFilter)
+            let page = core.getListItems(
+                limit: Int32(Self.pageSize), offset: 0,
+                typeFilter: isPinnedView ? nil : typeFilter
+            )
+            items = page
+            totalLoadedFromDB = page.count
+            // 分页只对普通视图（非 pinned、非搜索）有意义；pinned 视图条目少无需分页
+            hasMore = !isPinnedView && page.count == Self.pageSize
         } else {
             items = core.searchListItems(query: searchQuery, typeFilter: isPinnedView ? nil : typeFilter)
+            hasMore = false
         }
         if isPinnedView {
             items = items.filter { $0.isPinned }
@@ -132,6 +148,23 @@ final class ClipboardViewModel: ObservableObject {
             nextID = flatOrder.first?.id
         }
         selectItem(id: nextID)
+    }
+
+    /// 滚到底时加载下一页，追加到 items 并重建 sections（不重置选中状态）
+    func loadMoreItems() {
+        guard hasMore, searchQuery.isEmpty, !isPinnedView else { return }
+        let page = core.getListItems(
+            limit: Int32(Self.pageSize), offset: Int32(totalLoadedFromDB),
+            typeFilter: typeFilter
+        )
+        guard !page.isEmpty else {
+            hasMore = false
+            return
+        }
+        items.append(contentsOf: page)
+        totalLoadedFromDB += page.count
+        hasMore = page.count == Self.pageSize
+        rebuildSections()
     }
 
     // MARK: - Selection
@@ -221,6 +254,13 @@ final class ClipboardViewModel: ObservableObject {
         default:
             break
         }
+    }
+
+    @discardableResult
+    func previewSelected() -> Bool {
+        guard let session = currentPreviewSession() else { return false }
+        QuickLookPreviewService.shared.present(session: session)
+        return true
     }
 
     func close() { onCloseRequested?() }
@@ -356,6 +396,10 @@ final class ClipboardViewModel: ObservableObject {
         return item.clipType == .url || item.clipType == .file
     }
 
+    var canPreviewSelectedItem: Bool {
+        currentPreviewEntries() != nil
+    }
+
     var selectedOpenLabel: String {
         guard let item = selectedListItem else { return NSLocalizedString("Open", comment: "") }
         switch item.clipType {
@@ -388,6 +432,30 @@ final class ClipboardViewModel: ObservableObject {
             return selectedItem
         }
         return try? core.getItem(id: selectedItemID)
+    }
+
+    func syncSelectionToPreviewedClip(id: String) {
+        guard selectedItemID != id else { return }
+        guard flatOrder.contains(where: { $0.id == id }) else { return }
+        selectItem(id: id)
+    }
+
+    private func currentPreviewEntries() -> [ClipPreviewEntry]? {
+        guard let item = currentSelectedItem() else { return nil }
+        return ClipPreviewResolver.resolve(item: item)
+    }
+
+    private func currentPreviewSession() -> ClipPreviewSession? {
+        let selectedSnapshot = selectedItem
+        return ClipPreviewResolver.resolveSession(
+            items: flatOrder,
+            selectedItemID: selectedItemID
+        ) { [core] id in
+            if selectedSnapshot?.id == id {
+                return selectedSnapshot
+            }
+            return try? core.getItem(id: id)
+        }
     }
 
     private static let dateFormatter: DateFormatter = {

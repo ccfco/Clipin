@@ -325,6 +325,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: .clipinPreviewVisibilityDidChange)
+            .compactMap { $0.userInfo?["isVisible"] as? Bool }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isVisible in
+                self?.handlePreviewVisibilityChange(isVisible: isVisible)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .clipinPreviewSelectionDidChange)
+            .compactMap { $0.userInfo?["clipID"] as? String }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] clipID in
+                self?.viewModel?.syncSelectionToPreviewedClip(id: clipID)
+            }
+            .store(in: &cancellables)
+
         settings.$appearanceOverride
             .removeDuplicates()
             .receive(on: RunLoop.main)
@@ -370,6 +386,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if panel.isVisible {
             if viewModel?.isContinuousPasteEnabled == true {
                 // 连续粘贴模式下热键不关闭面板，而是夺回键盘焦点
+                QuickLookPreviewService.shared.dismiss()
                 panel.makeKeyAndOrderFront(nil)
                 NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
             } else {
@@ -437,6 +454,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let panel else { return }
         viewModel?.isContinuousPasteEnabled = false
         viewModel?.hideActionsPalette()
+        QuickLookPreviewService.shared.dismiss()
         suppressResignKey = false
         stopClickOutsideMonitor()
         stopAppSwitchObserver()
@@ -503,6 +521,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// 延迟是为了让用户的鼠标点击先完成（目标输入框获得焦点、frontmostApplication 更新）。
     private func handlePanelResignKey() {
         guard !suppressResignKey,
+              !QuickLookPreviewService.shared.isPresenting,
               viewModel?.isContinuousPasteEnabled == true,
               settingsWindow?.isVisible != true,
               permissionWindow?.isVisible != true,
@@ -748,6 +767,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case 0x24 where flags.isEmpty:
             vm.pasteSelected()
             return nil
+        case 0x31 where flags.isEmpty:
+            // IME 组词中（如拼音选字）：空格是确认键，必须穿透到输入法
+            if let tv = NSApp.keyWindow?.firstResponder as? NSTextView, tv.hasMarkedText() {
+                return event
+            }
+            // 其余情况 Space 是 launcher 保留键，有可预览项则预览，否则吞掉
+            if vm.canPreviewSelectedItem {
+                _ = vm.previewSelected()
+            }
+            return nil
         case 0x24 where flags == .shift:
             vm.pastePlainSelected()
             return nil
@@ -797,6 +826,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return event
         }
+    }
+
+    private func handlePreviewVisibilityChange(isVisible: Bool) {
+        guard !isVisible,
+              viewModel?.isContinuousPasteEnabled == true,
+              settingsWindow?.isVisible != true,
+              permissionWindow?.isVisible != true,
+              let panel,
+              panel.isVisible else { return }
+        panel.makeKeyAndOrderFront(nil)
+        NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
     }
 
     private func openSettingsWindow(select tab: SettingsTab? = nil) {
