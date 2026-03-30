@@ -70,6 +70,8 @@ final class ClipboardViewModel: ObservableObject {
     private let core: ClipinCore
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
+    /// ⌘1-9 快捷粘贴序列：只含非 pinned 项，pinned 项不占用快捷键位置
+    private var shortcutOrder: [ClipListItem] = []
     private var debounce: AnyCancellable?
     private var ocrSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
@@ -168,10 +170,10 @@ final class ClipboardViewModel: ObservableObject {
         selectItem(id: flatOrder[max(idx - 1, 0)].id)
     }
 
-    /// 按视觉顺序的第 index 项（0-based）直接粘贴
+    /// 按 ⌘1-9 快捷键序列的第 index 项（0-based）直接粘贴，pinned 项不在此序列中
     func pasteItemAt(index: Int) {
-        guard index >= 0, index < flatOrder.count else { return }
-        let id = flatOrder[index].id
+        guard index >= 0, index < shortcutOrder.count else { return }
+        let id = shortcutOrder[index].id
         guard let item = try? core.getItem(id: id) else { return }
         onPasteRequested?(item)
     }
@@ -306,7 +308,7 @@ final class ClipboardViewModel: ObservableObject {
 
     var selectedQuickPasteNumber: Int? {
         guard let selectedItemID else { return nil }
-        guard let index = flatOrder.firstIndex(where: { $0.id == selectedItemID }), index < 9 else { return nil }
+        guard let index = shortcutOrder.firstIndex(where: { $0.id == selectedItemID }), index < 9 else { return nil }
         return index + 1
     }
 
@@ -413,5 +415,6 @@ final class ClipboardViewModel: ObservableObject {
 
         sections = result
         flatOrder = result.flatMap(\.items)
+        shortcutOrder = flatOrder.filter { !$0.isPinned }
     }
 }

@@ -334,11 +334,13 @@ private struct ItemListView: View {
     }
 
     /// 预计算 id -> 序号索引，O(n) 构建，O(1) 查找
+    /// pinned 项不分配快捷键序号，⌘1-9 只覆盖非 pinned 项
     private var shortcutIndex: [String: Int] {
         var map: [String: Int] = [:]
         var i = 0
         for section in sections {
             for item in section.items {
+                guard !item.isPinned else { continue }
                 if i < 9 { map[item.id] = i + 1 }
                 i += 1
             }
