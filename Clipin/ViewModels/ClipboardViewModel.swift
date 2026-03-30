@@ -240,34 +240,31 @@ final class ClipboardViewModel: ObservableObject {
         }
     }
 
-    /// Tab 键循环：（无）→ 文本 → 图片 → 文件 → 链接 → 固定 → （无）
+    /// Tab 键循环：（无）→ 📌 → 文本 → 图片 → 文件 → 链接 → （无）
     func cycleTypeFilter(reverse: Bool = false) {
         let types: [ClipType?] = [.text, .image, .file, .url]
 
-        // 当前在固定视图：Tab→无过滤，Shift-Tab→链接
+        // 当前在固定视图：Tab→文本，Shift-Tab→无过滤
         if isPinnedView {
             isPinnedView = false
-            typeFilter = reverse ? .url : nil
+            typeFilter = reverse ? nil : .text
             return
         }
 
         // 当前无过滤（默认视图）
         guard let idx = types.firstIndex(where: { $0 == typeFilter }) else {
             if reverse {
-                // 无过滤 ← 固定视图（反向循环）
-                isPinnedView = true
+                typeFilter = .url  // 无过滤 ← 链接（反向）
             } else {
-                typeFilter = .text  // 无过滤 → 文本
+                isPinnedView = true  // 无过滤 → 📌
             }
             return
         }
 
         if !reverse && idx == types.count - 1 {
-            // 链接 → 固定视图
-            typeFilter = nil; isPinnedView = true
+            typeFilter = nil  // 链接 → 无过滤
         } else if reverse && idx == 0 {
-            // 文本 → 无过滤
-            typeFilter = nil
+            isPinnedView = true; typeFilter = nil  // 文本 → 📌（反向）
         } else {
             typeFilter = types[reverse ? idx - 1 : idx + 1]
         }

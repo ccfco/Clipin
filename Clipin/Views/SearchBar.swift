@@ -133,7 +133,7 @@ struct SearchBar: View {
 
             InterceptingTextFieldView(
                 text: $query,
-                placeholder: NSLocalizedString("Search...", comment: ""),
+                placeholder: NSLocalizedString("Search…  · Tab", comment: ""),
                 onNavigate: onNavigate,
                 onSubmit: onSubmit,
                 onEscape: onEscape,

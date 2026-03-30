@@ -269,10 +269,10 @@ extension ClipinPanelHierarchy {
 
         return Self(
             scope: Scope(
-                fill: glass.controlFill.opacity(isDark ? 0.96 : 0.90),
-                stroke: glass.controlStroke.opacity(isDark ? 0.96 : 0.78),
-                ink: Color.primary.opacity(isDark ? 0.92 : 0.78),
-                shortcutInk: Color.secondary.opacity(isDark ? 0.58 : 0.48)
+                fill: glass.emphasisFill.opacity(isDark ? 0.96 : 0.90),
+                stroke: glass.emphasisStroke.opacity(isDark ? 0.96 : 0.78),
+                ink: glass.emphasisInk.opacity(isDark ? 0.92 : 0.82),
+                shortcutInk: glass.emphasisInk.opacity(isDark ? 0.62 : 0.52)
             ),
             selection: Selection(
                 fill: glass.emphasisFill,
