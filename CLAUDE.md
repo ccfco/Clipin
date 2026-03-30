@@ -70,7 +70,7 @@ cd rust && cargo test --lib
 - **动作面板是静态命令表，不再内建搜索框**：Clipin 的动作数量小且结构稳定，继续维持 palette 内搜索只会引入额外模式、输入法路径和主搜索框泄漏风险。当前做法是把 `⌘K` 面板收回成静态 command sheet，只保留上下选择、回车执行和 `Esc` 关闭；普通字符、退格和 `Tab` 会在 palette 打开时被吞掉，防止输入回流到主搜索框，但不再维护独立 `actionQuery`。
 - **动作面板必须是“全局命令入口”，不能因为空列表或未选中条目而失效**：如果 `⌘K` 只有在存在选中项时才可用，那么空态、筛选无结果或刚清空历史时用户会失去唯一的键盘命令出口，这和 Raycast/launcher 的稳定心智冲突。当前做法是把 action palette 拆成“依赖选中项的条目动作”和“始终可用的全局动作”两层；即使没有选中条目，也仍然提供设置、连续粘贴切换、清空筛选等命令。
 - **全局命令入口不仅要可用，还要持续可发现**：如果空历史、无选中项或筛选无结果时把 `⌘K` 提示从底栏/空状态里藏起来，用户会误以为动作面板暂时不可用，已有能力也会退化成"隐形功能"。当前做法是在底栏始终保留 `⌘K` 的 Actions 徽标，并在空状态文案里直接提示可继续打开动作面板执行全局命令。
-- **`NSPanel.hasShadow` 必须关掉，改用 SwiftUI `.shadow`**：AppKit 的 window shadow 按矩形 window frame 计算，不认 SwiftUI 的 `.clipShape()`，即使 `backgroundColor = .clear` + `isOpaque = false` 也会在圆角透明区域渗出尖峰阴影。正确做法是 `hasShadow = false`，由内容层的 `.shadow(radius:y:)` 负责投影——SwiftUI shadow 跟随 clipShape 轮廓，圆角精准。
+- **圆角透明的根治方案**：SwiftUI `.clipShape()` 只裁 SwiftUI 渲染树，`NSVisualEffectView`（`.regularMaterial` 底层）走 AppKit compositor 渲染，不受 SwiftUI mask 约束。必须在 `ClipinHostingView.updateLayer()` 里设 `layer.masksToBounds = true` + `layer.cornerRadius = shellCornerRadius`，让系统 compositor 在 CALayer 层裁掉所有 subview。`hasShadow = true`：corners 真正透明后，AppKit shadow 跟随 alpha 轮廓，不再是矩形。SwiftUI `.shadow()` 在 `masksToBounds = true` 下会被裁掉，不要用。浅色模式下 border 改用 `Color.primary.opacity(0.12)`（深色内描边），白色描边在白色背景上不可见。
 - **设置窗口复用时不 `center()`**：只在首次创建时居中（`isNew` 分支），复用已有窗口时保留上次用户移动的位置，符合 macOS 所有系统偏好窗口的惯例。
 - **权限提示只在粘贴时按需触发，不在启动时主动弹出**：启动时弹权限窗会在用户还没用到粘贴功能时就打断体验；权限缺失的后果（粘贴失败）本身就是最清晰的上下文，按需触发更自然。权限提示入口只有一处：`executePasteFlow` 检测到无权限时。
 - **onboarding 权限步骤必须有"稍后再说"退出路径**：让用户不选择授权就能继续用 Clipin 的历史记录功能，不能用没有出口的半模态锁住用户。"稍后再说"调用 `flow.skipPermission()` → `finishOnboarding()`，行为等同于完成引导、不请求权限。

@@ -9,7 +9,12 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     override var isOpaque: Bool { false }
     override func updateLayer() {
         super.updateLayer()
+        // masksToBounds=true 在 CALayer compositor 层裁掉所有 AppKit subview（含 NSVisualEffectView），
+        // 是根治圆角透明的唯一正确位置——SwiftUI .clipShape() 不进入 AppKit compositor。
         layer?.backgroundColor = .clear
+        layer?.cornerRadius = ClipinChrome.shellCornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = true
     }
 }
 
@@ -260,7 +265,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = false
+        panel.hasShadow = true
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false

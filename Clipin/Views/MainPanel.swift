@@ -47,7 +47,8 @@ struct MainPanel: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
-                        .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.08 : 0.24), lineWidth: 0.5)
+                        // dark: 白色内描边；light: 深色内描边（白色在浅色背景上不可见）
+                        .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.12), lineWidth: 0.5)
                 )
         )
         .overlay(alignment: .top) {
@@ -89,9 +90,6 @@ struct MainPanel: View {
                 )
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous))
-        .shadow(color: .black.opacity(0.16), radius: 48, y: 24)
-        .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .onAppear {
             viewModel.loadItems()
         }
