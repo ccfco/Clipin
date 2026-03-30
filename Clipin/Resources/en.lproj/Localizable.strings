@@ -227,6 +227,7 @@
 "Press Return to open Clipin, or Esc to go back." = "Press Return to open Clipin, or Esc to go back.";
 
 /* PermissionView */
+"Skip for now" = "Skip for now";
 "Accessibility Permission Required" = "Accessibility Permission Required";
 "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item." = "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item.";
 "Open System Settings" = "Open System Settings";

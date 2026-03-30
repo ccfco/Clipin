@@ -23,10 +23,12 @@ final class PermissionManager: ObservableObject {
         startPolling()
     }
 
-    /// 直接打开系统设置 → 辅助功能
+    /// 打开系统设置 → 辅助功能，并确保 System Settings 窗口置于最前
     func openSystemSettings() {
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        NSWorkspace.shared.open(url)
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.open(url, configuration: config) { _, _ in }
         startPolling()
     }
 

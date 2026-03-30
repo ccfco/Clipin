@@ -3,6 +3,7 @@ import SwiftUI
 /// 辅助功能权限引导页（独立窗口，非 onboarding 路径）
 struct PermissionView: View {
     @ObservedObject var permission: PermissionManager
+    var onSkip: (() -> Void)? = nil
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
 
@@ -68,7 +69,7 @@ struct PermissionView: View {
 
                 // 主按钮
                 Button {
-                    permission.requestAndPoll()
+                    permission.openSystemSettings()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: permission.isAccessibilityGranted ? "checkmark.circle.fill" : "gearshape")
@@ -94,14 +95,26 @@ struct PermissionView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 10)
 
-                Text(permission.isAccessibilityGranted
-                     ? "Restarting Clipin..."
-                     : "Clipin will restart automatically after permission is granted.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(permission.isAccessibilityGranted ? AnyShapeStyle(Color.green.opacity(0.8)) : AnyShapeStyle(.tertiary))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 20)
+                // 底部行：授权中显示提示文字；未授权且有跳过回调则显示"暂不授权"链接
+                if permission.isAccessibilityGranted {
+                    Text("Restarting Clipin...")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.green.opacity(0.8))
+                        .padding(.bottom, 20)
+                } else if let onSkip {
+                    Button("Skip for now") { onSkip() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.tertiary)
+                        .padding(.bottom, 20)
+                } else {
+                    Text("Clipin will restart automatically after permission is granted.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(AnyShapeStyle(.tertiary))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 20)
+                }
             }
             .padding(ClipinChrome.shellGap)
         }

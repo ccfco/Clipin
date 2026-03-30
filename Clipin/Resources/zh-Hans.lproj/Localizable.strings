@@ -227,6 +227,7 @@
 "Press Return to open Clipin, or Esc to go back." = "按 Return 打开 Clipin，按 Esc 返回。";
 
 /* PermissionView */
+"Skip for now" = "暂不授权";
 "Accessibility Permission Required" = "需要辅助功能权限";
 "Clipin needs Accessibility Permission to automatically paste content into the current app after you select a history item." = "Clipin 需要辅助功能权限，才能在你选择历史记录后自动将内容粘贴到当前应用。";
 "Open System Settings" = "打开系统设置";

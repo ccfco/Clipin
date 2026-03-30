@@ -886,10 +886,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             hadExistingStorageBeforeBootstrap: appState.hadExistingStorageBeforeBootstrap
         ) {
             openOnboardingWindow(permission: permission)
-            return
         }
-
-        showPermissionWindowIfNeeded(permission)
+        // 权限提示只在用户主动粘贴时按需触发（executePasteFlow），避免每次启动都弹窗打扰
     }
 
     private func openOnboardingWindow(permission: PermissionManager) {
@@ -926,7 +924,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isMovableByWindowBackground = true
             newWindow.isReleasedWhenClosed = false
             newWindow.hasShadow = true
-            newWindow.level = .floating
+            // 不设 .floating，让 System Settings 等系统窗口可以自然覆盖在上方
             newWindow.delegate = self
             newWindow.contentView = ClipinHostingView(
                 rootView: OnboardingView(permission: permission, flow: flow)
@@ -987,12 +985,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            newWindow.contentView = NSHostingView(rootView: PermissionView(permission: pm))
+            newWindow.contentView = NSHostingView(rootView: PermissionView(
+                permission: pm,
+                onSkip: { [weak newWindow] in newWindow?.close() }
+            ))
             newWindow.titlebarAppearsTransparent = true
             newWindow.titleVisibility = .hidden
             newWindow.delegate = self
             newWindow.center()
-            newWindow.level = .floating
+            // 不设 .floating，让 System Settings 可以自然覆盖在权限窗口上方
             permissionWindow = newWindow
             window = newWindow
 

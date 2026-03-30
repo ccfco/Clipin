@@ -46,9 +46,14 @@ final class OnboardingFlow: ObservableObject {
             if permission.isAccessibilityGranted {
                 onComplete()
             } else {
-                permission.requestAndPoll()
+                permission.openSystemSettings()
             }
         }
+    }
+
+    /// 跳过权限步骤，直接以无权限模式启动（仅记录历史，不自动粘贴）
+    func skipPermission() {
+        onComplete()
     }
 }
 
@@ -248,14 +253,23 @@ struct OnboardingView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text(footerHint)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // 权限步骤未授权：用"稍后再说"替换 hint 文字；其余步骤保持原样
+            if flow.step == .permission && !permission.isAccessibilityGranted {
+                Button("Maybe later") { flow.skipPermission() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
+            } else {
+                Text(footerHint)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Spacer(minLength: 10)
 
-            if flow.canGoBack {
+            // Back 按钮：权限步骤未授权时隐藏（Esc 仍可回退，且有"稍后再说"可以退出）
+            if flow.canGoBack && (flow.step != .permission || permission.isAccessibilityGranted) {
                 secondaryButton("Back") { flow.goBack() }
                     .keyboardShortcut(.cancelAction)
             }
