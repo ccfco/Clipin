@@ -1,8 +1,29 @@
 use crate::models::*;
+use pinyin::ToPinyin;
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, fs, io::ErrorKind, sync::Mutex};
 use uuid::Uuid;
+
+/// 把文本中的 CJK 字符转为拼音（无声调）：
+/// - flat: 所有音节连续拼接，例如 "你好" → "nihao"
+/// - initials: 每个音节首字母，例如 "你好" → "nh"
+/// 非 CJK 字符直接跳过，只处理前 500 个字符（性能保障）。
+fn compute_pinyin(content: &str) -> (String, String) {
+    let limited: String = content.chars().take(500).collect();
+    let mut flat = String::new();
+    let mut initials = String::new();
+    for py_opt in (&*limited).to_pinyin() {
+        if let Some(py) = py_opt {
+            let syllable: &str = py.plain();
+            flat.push_str(syllable);
+            if let Some(c) = syllable.chars().next() {
+                initials.push(c);
+            }
+        }
+    }
+    (flat, initials)
+}
 
 pub struct Storage {
     conn: Mutex<Connection>,
@@ -23,14 +44,19 @@ impl Storage {
     }
 
     fn init_schema(&self) -> Result<(), ClipinError> {
-        let conn = self.conn.lock().unwrap();
-        let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        Self::run_migrations(&conn, version)
+        let version: i32 = {
+            let conn = self.conn.lock().unwrap();
+            conn.query_row("PRAGMA user_version", [], |r| r.get(0))?
+        };
+        self.run_migrations(version)
     }
 
     /// 按版本号顺序执行 migration，每个版本只跑一次。
-    /// 新增字段时在这里加 v2、v3…，已发布版本的 migration 不可修改。
-    fn run_migrations(conn: &Connection, from_version: i32) -> Result<(), ClipinError> {
+    /// v1-v4 纯 SQL；v5 需要 Rust 计算拼音故分两阶段。
+    fn run_migrations(&self, from_version: i32) -> Result<(), ClipinError> {
+        // v1-v4: 纯 SQL，单次持锁执行完
+        {
+        let conn = self.conn.lock().unwrap();
         if from_version < 1 {
             conn.execute_batch(
                 "
@@ -194,7 +220,100 @@ impl Storage {
                 ",
             )?;
         }
+        } // end v1-v4 locked block
 
+        // v5: 添加 pinyin 列、重建 FTS5 索引、回填拼音
+        if from_version < 5 {
+            // --- SQL 阶段 1：添加列 + 重建 FTS schema + 更新触发器 ---
+            {
+                let conn = self.conn.lock().unwrap();
+
+                // 幂等检查：防止崩溃重启时重复 ALTER
+                let has_pinyin: bool = conn
+                    .prepare("PRAGMA table_info(clip_items)")?
+                    .query_map([], |row| row.get::<_, String>(1))?
+                    .any(|n| n.as_deref() == Ok("pinyin_flat"));
+
+                if !has_pinyin {
+                    conn.execute_batch(
+                        "ALTER TABLE clip_items ADD COLUMN pinyin_flat     TEXT NOT NULL DEFAULT '';
+                         ALTER TABLE clip_items ADD COLUMN pinyin_initials TEXT NOT NULL DEFAULT '';",
+                    )?;
+                }
+
+                conn.execute_batch(
+                    "DROP TRIGGER IF EXISTS clip_items_ai;
+                     DROP TRIGGER IF EXISTS clip_items_ad;
+                     DROP TRIGGER IF EXISTS clip_items_au;
+                     DROP TABLE   IF EXISTS clip_fts;
+
+                     CREATE VIRTUAL TABLE clip_fts USING fts5(
+                         content, source_name, ocr_text, pinyin_flat, pinyin_initials,
+                         content='clip_items', content_rowid='rowid', tokenize='trigram'
+                     );
+
+                     CREATE TRIGGER clip_items_ai AFTER INSERT ON clip_items BEGIN
+                         INSERT INTO clip_fts(rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
+                         VALUES(new.rowid,new.content,new.source_name,new.ocr_text,new.pinyin_flat,new.pinyin_initials);
+                     END;
+
+                     CREATE TRIGGER clip_items_ad AFTER DELETE ON clip_items BEGIN
+                         INSERT INTO clip_fts(clip_fts,rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
+                         VALUES('delete',old.rowid,old.content,old.source_name,old.ocr_text,old.pinyin_flat,old.pinyin_initials);
+                     END;
+
+                     CREATE TRIGGER clip_items_au AFTER UPDATE ON clip_items BEGIN
+                         INSERT INTO clip_fts(clip_fts,rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
+                         VALUES('delete',old.rowid,old.content,old.source_name,old.ocr_text,old.pinyin_flat,old.pinyin_initials);
+                         INSERT INTO clip_fts(rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
+                         VALUES(new.rowid,new.content,new.source_name,new.ocr_text,new.pinyin_flat,new.pinyin_initials);
+                     END;",
+                )?;
+            }
+
+            // --- Rust 阶段：回填现有条目的拼音（锁在函数内部按需获取）---
+            self.backfill_pinyin_v5()?;
+
+            // --- SQL 阶段 2：重建 FTS 索引 + 提交版本号 ---
+            {
+                let conn = self.conn.lock().unwrap();
+                conn.execute_batch(
+                    "INSERT INTO clip_fts(rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
+                     SELECT rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials FROM clip_items;
+                     PRAGMA user_version = 5;",
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// v5 migration 专用：批量计算并回填现有条目的拼音列
+    fn backfill_pinyin_v5(&self) -> Result<(), ClipinError> {
+        // 一次性读取全部需要回填的条目（rowid + content）
+        let items: Vec<(i64, String)> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare("SELECT rowid, content FROM clip_items")?;
+            stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?
+                .filter_map(|r| r.ok())
+                .collect()
+        };
+        if items.is_empty() {
+            return Ok(());
+        }
+        // 批量更新，有中文才写（pinyin_flat='',initials='' 已是 DEFAULT）
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        for (rowid, content) in items {
+            let (flat, initials) = compute_pinyin(&content);
+            if !flat.is_empty() {
+                tx.execute(
+                    "UPDATE clip_items SET pinyin_flat=?1, pinyin_initials=?2 WHERE rowid=?3",
+                    params![flat, initials, rowid],
+                )?;
+            }
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -311,6 +430,7 @@ impl Storage {
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
         let now = chrono::Utc::now().timestamp_millis();
         let char_count = content.chars().count() as i32;
+        let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
 
         // 去重：查找已有记录，保留 first_copied_at 和累加 copy_count
         let existing: Option<(i64, i32, bool)> = conn
@@ -332,8 +452,9 @@ impl Storage {
 
         let id = Uuid::new_v4().to_string();
         tx.execute(
-            "INSERT INTO clip_items (id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, hash, copy_count, first_copied_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO clip_items
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 id,
                 content,
@@ -347,6 +468,8 @@ impl Storage {
                 hash,
                 copy_count,
                 first_copied_at,
+                pinyin_flat,
+                pinyin_initials,
             ],
         )?;
         tx.commit()?;
@@ -457,25 +580,26 @@ impl Storage {
     pub fn search(&self, query: &str, type_filter: Option<&ClipType>) -> Vec<ClipItem> {
         let conn = self.conn.lock().unwrap();
 
-        // trigram 需要 ≥3 字符；短查询回退 LIKE
+        // trigram 需要 ≥3 字符；短查询回退 LIKE（同时搜拼音列）
         if query.chars().count() >= 3 {
             let fts_query = Self::escape_fts5_query(query);
+            // FTS5 MATCH 搜索所有列（含 pinyin_flat/initials）；BM25 rank 优先，copy_count/created_at 次之
             let sql = if type_filter.is_some() {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
                         ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                 ORDER BY ci.is_pinned DESC, ci.created_at DESC
-                 LIMIT 50"
+                 ORDER BY ci.is_pinned DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                 LIMIT 200"
             } else {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
                         ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1
-                 ORDER BY ci.is_pinned DESC, ci.created_at DESC
-                 LIMIT 50"
+                 ORDER BY ci.is_pinned DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                 LIMIT 200"
             };
             let result = if let Some(t) = type_filter {
                 conn.prepare(sql).and_then(|mut stmt| {
@@ -490,21 +614,23 @@ impl Storage {
             };
             result.unwrap_or_default()
         } else {
+            // 短查询：LIKE 覆盖 content / ocr_text / pinyin_flat（前缀/子串） / pinyin_initials（首字母缩写）
             let pattern = format!("%{}%", query);
             let sql = if type_filter.is_some() {
                 "SELECT id, content, clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
                  FROM clip_items
-                 WHERE (content LIKE ?1 OR ocr_text LIKE ?1) AND clip_type = ?2
-                 ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT 50"
+                 WHERE (content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1)
+                   AND clip_type = ?2
+                 ORDER BY is_pinned DESC, copy_count DESC, created_at DESC
+                 LIMIT 200"
             } else {
                 "SELECT id, content, clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
                  FROM clip_items
-                 WHERE content LIKE ?1 OR ocr_text LIKE ?1
-                 ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT 50"
+                 WHERE content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1
+                 ORDER BY is_pinned DESC, copy_count DESC, created_at DESC
+                 LIMIT 200"
             };
             let result = if let Some(t) = type_filter {
                 conn.prepare(sql).and_then(|mut stmt| {
@@ -538,8 +664,8 @@ impl Storage {
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                     ORDER BY ci.is_pinned DESC, ci.created_at DESC
-                     LIMIT 50",
+                     ORDER BY ci.is_pinned DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                     LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
             } else {
@@ -550,8 +676,8 @@ impl Storage {
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
-                     ORDER BY ci.is_pinned DESC, ci.created_at DESC
-                     LIMIT 50",
+                     ORDER BY ci.is_pinned DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                     LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
             };
@@ -575,9 +701,10 @@ impl Storage {
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count
                      FROM clip_items
-                     WHERE (content LIKE ?1 OR ocr_text LIKE ?1) AND clip_type = ?2
-                     ORDER BY is_pinned DESC, created_at DESC
-                     LIMIT 50",
+                     WHERE (content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1)
+                       AND clip_type = ?2
+                     ORDER BY is_pinned DESC, copy_count DESC, created_at DESC
+                     LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
             } else {
@@ -586,9 +713,9 @@ impl Storage {
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count
                      FROM clip_items
-                     WHERE content LIKE ?1 OR ocr_text LIKE ?1
-                     ORDER BY is_pinned DESC, created_at DESC
-                     LIMIT 50",
+                     WHERE content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1
+                     ORDER BY is_pinned DESC, copy_count DESC, created_at DESC
+                     LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
             };
@@ -695,13 +822,16 @@ impl Storage {
 
         let id = Uuid::new_v4().to_string();
         let char_count = content.chars().count() as i32;
+        let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
 
         tx.execute(
-            "INSERT INTO clip_items (id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, hash, copy_count, first_copied_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 1, ?7)",
+            "INSERT INTO clip_items
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?7,?11,?12)",
             params![
                 id, content, clip_type.as_str(), source_app, source_name,
-                is_pinned as i32, created_at, image_path, char_count, hash
+                is_pinned as i32, created_at, image_path, char_count, hash,
+                pinyin_flat, pinyin_initials,
             ],
         )?;
         tx.commit()?;
@@ -820,7 +950,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 4, "新建数据库应为 v4");
+        assert_eq!(storage.schema_version(), 5, "新建数据库应为 v5");
     }
 
     #[test]
@@ -839,7 +969,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 4, "旧数据库应 migrate 到 v4");
+        assert_eq!(storage.schema_version(), 5, "旧数据库应 migrate 到 v5");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -866,7 +996,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 4);
+        assert_eq!(s2.schema_version(), 5);
     }
 
     #[test]
