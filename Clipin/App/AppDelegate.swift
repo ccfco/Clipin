@@ -393,6 +393,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         viewModel?.searchQuery = ""
         viewModel?.typeFilter = nil
+        viewModel?.isPinnedView = false
         viewModel?.targetAppName = previousApp?.localizedName
         viewModel?.loadItems(selectLatest: true)
 
