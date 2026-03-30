@@ -167,11 +167,10 @@ struct SearchBar: View {
 
     private var filterPills: some View {
         HStack(spacing: 3) {
-            pill(label: "All",    filter: nil,    shortcut: "⌥1")
-            pill(label: "Text",   filter: .text,  shortcut: "⌥2")
-            pill(label: "Images", filter: .image, shortcut: "⌥3")
-            pill(label: "Files",  filter: .file,  shortcut: "⌥4")
-            pill(label: "URLs",   filter: .url,   shortcut: "⌥5")
+            pill(label: "Text",   filter: .text,  shortcut: "⌥1")
+            pill(label: "Images", filter: .image, shortcut: "⌥2")
+            pill(label: "Files",  filter: .file,  shortcut: "⌥3")
+            pill(label: "URLs",   filter: .url,   shortcut: "⌥4")
             pinnedPill
         }
     }
@@ -187,7 +186,7 @@ struct SearchBar: View {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(isActive ? hierarchy.scope.ink : Color.secondary.opacity(0.88))
-                Text("⌥6")
+                Text("⌥5")
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : Color(nsColor: .quaternaryLabelColor))
             }

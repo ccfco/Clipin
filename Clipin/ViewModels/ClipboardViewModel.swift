@@ -231,37 +231,43 @@ final class ClipboardViewModel: ObservableObject {
 
     func setTypeFilterByIndex(_ index: Int) {
         switch index {
-        case 0: isPinnedView = false; typeFilter = nil
-        case 1: isPinnedView = false; typeFilter = .text
-        case 2: isPinnedView = false; typeFilter = .image
-        case 3: isPinnedView = false; typeFilter = .file
-        case 4: isPinnedView = false; typeFilter = .url
-        case 5: isPinnedView = true;  typeFilter = nil
+        case 0: isPinnedView = false; typeFilter = .text
+        case 1: isPinnedView = false; typeFilter = .image
+        case 2: isPinnedView = false; typeFilter = .file
+        case 3: isPinnedView = false; typeFilter = .url
+        case 4: isPinnedView = true;  typeFilter = nil
         default: break
         }
     }
 
-    /// Tab 键循环：全部 → 文本 → 图片 → 文件 → 链接 → 固定 → 全部
+    /// Tab 键循环：（无）→ 文本 → 图片 → 文件 → 链接 → 固定 → （无）
     func cycleTypeFilter(reverse: Bool = false) {
-        let types: [ClipType?] = [nil, .text, .image, .file, .url]
+        let types: [ClipType?] = [.text, .image, .file, .url]
 
-        // 当前在固定视图：Tab→全部，Shift-Tab→链接
+        // 当前在固定视图：Tab→无过滤，Shift-Tab→链接
         if isPinnedView {
             isPinnedView = false
             typeFilter = reverse ? .url : nil
             return
         }
 
+        // 当前无过滤（默认视图）
         guard let idx = types.firstIndex(where: { $0 == typeFilter }) else {
-            isPinnedView = false; typeFilter = nil; return
+            if reverse {
+                // 无过滤 ← 固定视图（反向循环）
+                isPinnedView = true
+            } else {
+                typeFilter = .text  // 无过滤 → 文本
+            }
+            return
         }
 
         if !reverse && idx == types.count - 1 {
             // 链接 → 固定视图
             typeFilter = nil; isPinnedView = true
         } else if reverse && idx == 0 {
-            // 全部 ← 固定视图（反向循环）
-            typeFilter = nil; isPinnedView = true
+            // 文本 → 无过滤
+            typeFilter = nil
         } else {
             typeFilter = types[reverse ? idx - 1 : idx + 1]
         }
@@ -395,19 +401,15 @@ final class ClipboardViewModel: ObservableObject {
 
     private func rebuildSections() {
         let calendar = Calendar.current
-        var pinned: [ClipListItem] = []
         var today: [ClipListItem] = []
         var yesterday: [ClipListItem] = []
         var older: [(key: String, items: [ClipListItem])] = []
         var olderMap: [String: Int] = [:]
 
         for item in items {
-            // 固定视图：items 已过滤为 pinned-only，全部按日期分组，不单独建"已固定"section
-            // 普通视图：pinned 项聚合到顶部"已固定"section
-            if !isPinnedView && item.isPinned {
-                pinned.append(item)
-                continue
-            }
+            // 固定视图：items 已过滤为 pinned-only，按日期分组显示
+            // 普通视图：pinned 项不显示（专属于固定视图 tab）
+            if !isPinnedView && item.isPinned { continue }
             let date = Date(timeIntervalSince1970: TimeInterval(item.createdAt) / 1000.0)
             if calendar.isDateInToday(date) {
                 today.append(item)
@@ -425,16 +427,13 @@ final class ClipboardViewModel: ObservableObject {
         }
 
         var result: [ClipSection] = []
-        if !pinned.isEmpty    { result.append(ClipSection(title: NSLocalizedString("Pinned", comment: ""), items: pinned)) }
         if !today.isEmpty     { result.append(ClipSection(title: NSLocalizedString("Today", comment: ""), items: today)) }
         if !yesterday.isEmpty { result.append(ClipSection(title: NSLocalizedString("Yesterday", comment: ""), items: yesterday)) }
-        for group in older {
-            result.append(ClipSection(title: group.key, items: group.items))
-        }
+        for group in older { result.append(ClipSection(title: group.key, items: group.items)) }
 
         sections = result
         flatOrder = result.flatMap(\.items)
-        // 固定视图：所有可见项都是 pinned，全部纳入 ⌘1-9；普通视图：排除 pinned 项
-        shortcutOrder = isPinnedView ? flatOrder : flatOrder.filter { !$0.isPinned }
+        // 固定视图：所有可见项即为 pinned，全部纳入 ⌘1-9；普通视图：flatOrder 本身不含 pinned 项
+        shortcutOrder = flatOrder
     }
 }
