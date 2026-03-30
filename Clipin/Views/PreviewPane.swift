@@ -43,12 +43,12 @@ struct PreviewPane: View {
 
     private func contentStage(for item: ClipItem) -> some View {
         contentStage {
-            VStack(alignment: .leading, spacing: 16) {
-                content(for: item)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                previewFooter(for: item)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            content(for: item)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    previewFooter(for: item)
+                        .padding(.top, 8)
+                }
         }
     }
 
@@ -324,8 +324,13 @@ struct PreviewPane: View {
 
         let tokenizer = NLTokenizer(unit: .word)
         tokenizer.string = trimmed
-        if let language = NLLanguageRecognizer.dominantLanguage(for: trimmed) {
+        let language = NLLanguageRecognizer.dominantLanguage(for: trimmed)
+        if let language {
             tokenizer.setLanguage(language)
+        }
+
+        if shouldHideWordCount(for: language) {
+            return nil
         }
 
         var count = 0
@@ -335,6 +340,16 @@ struct PreviewPane: View {
         }
 
         return count > 0 ? count : nil
+    }
+
+    private func shouldHideWordCount(for language: NLLanguage?) -> Bool {
+        guard let language else { return false }
+        switch language {
+        case .simplifiedChinese, .traditionalChinese, .japanese, .korean:
+            return true
+        default:
+            return false
+        }
     }
 
     private func imageDimensions(at path: String) -> (width: Int, height: Int)? {
@@ -665,22 +680,22 @@ private struct PreviewValueBadge: View {
         HStack(spacing: 6) {
             if let systemImage = item.systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: prominence == .context ? 10 : 10.5, weight: .semibold))
+                    .font(.system(size: prominence == .context ? 9.5 : 10, weight: .semibold))
             } else if let icon = item.icon {
                 Image(nsImage: icon)
                     .resizable()
-                    .frame(width: prominence == .context ? 11 : 12, height: prominence == .context ? 11 : 12)
+                    .frame(width: prominence == .context ? 10 : 11, height: prominence == .context ? 10 : 11)
             }
 
             Text(item.title)
-                .font(.system(size: prominence == .context ? 10.5 : 11, weight: .medium, design: .rounded))
+                .font(.system(size: prominence == .context ? 10 : 10.5, weight: .medium, design: .rounded))
                 .lineLimit(1)
                 .textSelection(.enabled)
         }
         .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(foreground)
-        .padding(.horizontal, prominence == .context ? 8 : 10)
-        .padding(.vertical, prominence == .context ? 5 : 6)
+        .padding(.horizontal, prominence == .context ? 8 : 9)
+        .padding(.vertical, prominence == .context ? 4 : 5)
         .background(
             Capsule(style: .continuous)
                 .fill(backgroundFill)
@@ -732,7 +747,7 @@ private struct PreviewFooterRail: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 ForEach(entries) { entry in
                     PreviewValueBadge(
                         item: entry.item,
@@ -744,12 +759,12 @@ private struct PreviewFooterRail: View {
                 }
             }
             .padding(.horizontal, 1)
-            .padding(.top, 10)
+            .padding(.top, 8)
             .padding(.bottom, 1)
         }
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(glass.controlStroke.opacity(colorScheme == .dark ? 0.36 : 0.22))
+                .fill(glass.controlStroke.opacity(colorScheme == .dark ? 0.28 : 0.18))
                 .frame(height: 0.6)
         }
     }
