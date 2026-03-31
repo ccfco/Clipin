@@ -612,38 +612,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func backfillOcrForExistingImages() {
         let core = appState.core
         backfillTask = Task.detached(priority: .background) {
-            let pageSize = 200
-            var offset = 0
+            let pageSize: Int32 = 20
             var totalProcessed = 0
 
+            // 每次取最早的 N 条未处理图片（ocr_text IS NULL），处理后再取下一批
+            // 无 offset，新增图片不会导致分页跳过
             while !Task.isCancelled {
-                let page = core.getItems(limit: Int32(pageSize), offset: Int32(offset), typeFilter: .image)
-                let pending = page.filter { $0.ocrText == nil }
-
-                if pending.isEmpty {
-                    // 本页无待处理条目：若页面未满说明已到末尾；否则继续翻页
-                    if page.count < pageSize { break }
-                    offset += pageSize
-                    continue
-                }
+                let pending = core.getUnprocessedImages(limit: pageSize)
+                if pending.isEmpty { break }
 
                 for item in pending {
                     guard !Task.isCancelled else { break }
 
                     guard let path = item.imagePath else {
-                        // imagePath 为 nil 是数据异常（image 类型必须有路径），记录日志
-                        print("⚠️ OCR backfill: item \(item.id) has no imagePath, marking as processed")
                         try? core.updateOcrText(id: item.id, ocrText: "")
                         continue
                     }
                     guard FileManager.default.fileExists(atPath: path) else {
-                        // 文件已被清理，标记为已处理避免重复扫描
                         try? core.updateOcrText(id: item.id, ocrText: "")
                         continue
                     }
 
                     let text = await OcrService.recognizeText(at: path)
-                    // 无论是否识别到文字都写回（NULL=未处理，""=处理过但无文字）
                     do {
                         try core.updateOcrText(id: item.id, ocrText: text)
                         if !text.isEmpty {
@@ -654,7 +644,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         print("⚠️ OCR backfill write error for \(item.id): \(error)")
                     }
                 }
-                offset += pageSize
             }
 
             if totalProcessed > 0 {
@@ -750,7 +739,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func isIMEComposingInPanel() -> Bool {
+        if let textView = panel?.firstResponder as? NSTextView {
+            return textView.hasMarkedText()
+        }
+        if let textView = NSApp.keyWindow?.firstResponder as? NSTextView {
+            return textView.hasMarkedText()
+        }
+        return false
+    }
+
     private func handlePanelKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {
+        if isIMEComposingInPanel() {
+            switch event.keyCode {
+            case 0x30, 0x7E, 0x7D, 0x24, 0x31, 0x35:
+                return event
+            default:
+                break
+            }
+        }
+
         switch event.keyCode {
         case 0x30 where flags.isEmpty:
             vm.cycleTypeFilter()
@@ -768,10 +776,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             vm.pasteSelected()
             return nil
         case 0x31 where flags.isEmpty:
-            // IME 组词中（如拼音选字）：空格是确认键，必须穿透到输入法
-            if let tv = NSApp.keyWindow?.firstResponder as? NSTextView, tv.hasMarkedText() {
-                return event
-            }
             // 其余情况 Space 是 launcher 保留键，有可预览项则预览，否则吞掉
             if vm.canPreviewSelectedItem {
                 _ = vm.previewSelected()
@@ -887,41 +891,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if isNew { window.center() }  // 复用窗口时保留上次位置，符合 macOS 惯例
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        focusSettingsSidebar(in: window)
-    }
-
-
-    private func focusSettingsSidebar(in window: NSWindow, attemptsRemaining: Int = 3) {
-        DispatchQueue.main.async { [weak self, weak window] in
-            guard let self, let window else { return }
-
-            guard window.isKeyWindow else {
-                guard attemptsRemaining > 0 else { return }
-                self.focusSettingsSidebar(in: window, attemptsRemaining: attemptsRemaining - 1)
-                return
-            }
-
-            guard let tableView: NSTableView = self.findSubview(ofType: NSTableView.self, in: window.contentView) else {
-                return
-            }
-
-            window.makeFirstResponder(tableView)
-        }
-    }
-
-    private func findSubview<T: NSView>(ofType type: T.Type, in root: NSView?) -> T? {
-        guard let root else { return nil }
-        if let match = root as? T {
-            return match
-        }
-
-        for child in root.subviews {
-            if let match: T = findSubview(ofType: type, in: child) {
-                return match
-            }
-        }
-
-        return nil
     }
 
     // MARK: - Permission

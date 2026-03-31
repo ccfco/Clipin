@@ -123,12 +123,14 @@ impl Storage {
                 .any(|name| name.as_deref() == Ok("copy_count"));
 
             if !has_copy_count {
+                // DROP 触发器避免 UPDATE 时触发大量无效 FTS 写入（v3 会重建 FTS）
                 conn.execute_batch(
-                    "
-                    ALTER TABLE clip_items ADD COLUMN copy_count INTEGER NOT NULL DEFAULT 1;
-                    ALTER TABLE clip_items ADD COLUMN first_copied_at INTEGER NOT NULL DEFAULT 0;
-                    UPDATE clip_items SET first_copied_at = created_at WHERE first_copied_at = 0;
-                    ",
+                    "DROP TRIGGER IF EXISTS clip_items_ai;
+                     DROP TRIGGER IF EXISTS clip_items_ad;
+                     DROP TRIGGER IF EXISTS clip_items_au;
+                     ALTER TABLE clip_items ADD COLUMN copy_count INTEGER NOT NULL DEFAULT 1;
+                     ALTER TABLE clip_items ADD COLUMN first_copied_at INTEGER NOT NULL DEFAULT 0;
+                     UPDATE clip_items SET first_copied_at = created_at WHERE first_copied_at = 0;",
                 )?;
             }
             conn.execute_batch("PRAGMA user_version = 2;")?;
@@ -241,6 +243,7 @@ impl Storage {
                     )?;
                 }
 
+                // 先建空 FTS 和触发器，再插入数据，避免 INSERT SELECT + 触发器双重写入
                 conn.execute_batch(
                     "DROP TRIGGER IF EXISTS clip_items_ai;
                      DROP TRIGGER IF EXISTS clip_items_ad;
@@ -267,21 +270,20 @@ impl Storage {
                          VALUES('delete',old.rowid,old.content,old.source_name,old.ocr_text,old.pinyin_flat,old.pinyin_initials);
                          INSERT INTO clip_fts(rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
                          VALUES(new.rowid,new.content,new.source_name,new.ocr_text,new.pinyin_flat,new.pinyin_initials);
-                     END;",
+                     END;
+
+                     INSERT INTO clip_fts(rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
+                     SELECT rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials FROM clip_items;",
                 )?;
             }
 
-            // --- Rust 阶段：回填现有条目的拼音（锁在函数内部按需获取）---
+            // --- Rust 阶段：UPDATE 触发 clip_items_au 进行 DELETE+INSERT，实现带拼音的原位更新 ---
             self.backfill_pinyin_v5()?;
 
-            // --- SQL 阶段 2：重建 FTS 索引 + 提交版本号 ---
+            // --- 提交版本号 ---
             {
                 let conn = self.conn.lock().unwrap();
-                conn.execute_batch(
-                    "INSERT INTO clip_fts(rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
-                     SELECT rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials FROM clip_items;
-                     PRAGMA user_version = 5;",
-                )?;
+                conn.execute_batch("PRAGMA user_version = 5;")?;
             }
         }
 
@@ -746,6 +748,25 @@ impl Storage {
         .map_err(|_| ClipinError::NotFound {
             id: id.to_string(),
         })
+    }
+
+    /// OCR backfill 专用：直接查 ocr_text IS NULL，无需 offset，不受新增条目影响
+    pub fn get_unprocessed_images(&self, limit: i32) -> Vec<ClipItem> {
+        let conn = self.conn.lock().unwrap();
+        conn.prepare(
+            "SELECT id, content, clip_type, source_app, source_name,
+                    is_pinned, created_at, image_path, char_count, copy_count,
+                    first_copied_at, ocr_text
+             FROM clip_items
+             WHERE clip_type = 'image' AND ocr_text IS NULL
+             ORDER BY created_at ASC
+             LIMIT ?1",
+        )
+        .and_then(|mut stmt| {
+            stmt.query_map(params![limit], Self::row_to_item)
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        })
+        .unwrap_or_default()
     }
 
     pub fn update_ocr_text(&self, id: &str, ocr_text: &str) -> Result<(), ClipinError> {

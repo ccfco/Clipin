@@ -131,6 +131,11 @@ impl ClipinCore {
         self.storage.update_ocr_text(&id, &ocr_text)
     }
 
+    /// 获取 OCR 尚未处理的图片条目（ocr_text IS NULL），用于 backfill
+    pub fn get_unprocessed_images(&self, limit: i32) -> Vec<ClipItem> {
+        self.storage.get_unprocessed_images(limit)
+    }
+
     /// 获取图片存储目录
     pub fn image_dir(&self) -> String {
         self.storage.image_dir().to_string()
