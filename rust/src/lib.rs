@@ -297,6 +297,22 @@ mod tests {
     }
 
     #[test]
+    fn test_search_matches_pinyin_flat_and_initials() {
+        let core = setup_core();
+
+        core.save_item("你好世界".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        let flat = core.search("nihao".into(), None);
+        assert_eq!(flat.len(), 1);
+        assert_eq!(flat[0].content, "你好世界");
+
+        let initials = core.search("nh".into(), None);
+        assert_eq!(initials.len(), 1);
+        assert_eq!(initials[0].content, "你好世界");
+    }
+
+    #[test]
     fn test_search_like_metachar_escaping() {
         let core = setup_core();
 
@@ -384,6 +400,25 @@ mod tests {
         assert_eq!(items[0].image_path.as_deref(), Some(second_path.as_str()));
         assert!(!PathBuf::from(first_path).exists());
         assert!(PathBuf::from(second_path).exists());
+    }
+
+    #[test]
+    fn test_dedup_preserves_paste_count() {
+        let core = setup_core();
+
+        let first = core
+            .save_item("same".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.increment_paste_count(first.id.clone()).unwrap();
+        core.increment_paste_count(first.id).unwrap();
+
+        core.save_item("same".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        let items = core.get_items(10, 0, None);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].copy_count, 2);
+        assert_eq!(items[0].paste_count, 2);
     }
 
     #[test]

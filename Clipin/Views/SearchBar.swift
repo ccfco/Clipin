@@ -37,13 +37,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: InterceptingTextField, context: Context) {
-        let liveText = context.coordinator.currentText(for: nsView)
-        if liveText != text {
-            nsView.stringValue = text
-            if let editor = nsView.currentEditor() as? NSTextView, editor.string != text {
-                editor.string = text
-            }
-        }
+        context.coordinator.syncBindingText(text, into: nsView)
         nsView.onNavigate = onNavigate
         nsView.onSubmit = onSubmit
         nsView.onEscape = onEscape
@@ -81,11 +75,31 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
 
         /// AppKit 在 IME 组词阶段会把实时文本保存在 field editor 的 marked text 中，
         /// `NSTextField.stringValue` 只有在 commit 后才稳定，所以搜索必须优先读取 editor.string。
+        @MainActor
         func currentText(for field: NSTextField) -> String {
             if let editor = field.currentEditor() as? NSTextView {
                 return editor.string
             }
             return field.stringValue
+        }
+
+        /// IME 组词时 field editor 才是唯一真相源，不能再让 SwiftUI binding 反写覆盖 marked text。
+        /// 只有在非组词状态下，外部状态（清空搜索、恢复历史 query）才允许同步回控件。
+        @MainActor
+        func syncBindingText(_ text: String, into field: NSTextField) {
+            if let editor = field.currentEditor() as? NSTextView {
+                guard !editor.hasMarkedText() else { return }
+                if editor.string != text {
+                    editor.string = text
+                }
+                if field.stringValue != text {
+                    field.stringValue = text
+                }
+                return
+            }
+            if field.stringValue != text {
+                field.stringValue = text
+            }
         }
 
         // MARK: - IME preedit 感知
@@ -114,6 +128,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
         }
 
         /// field editor 文本变更（含 IME preedit）→ 同步到 binding
+        @MainActor
         @objc private func fieldEditorTextDidChange(_ notification: Notification) {
             guard let editor = notification.object as? NSTextView else { return }
             let newText = editor.string

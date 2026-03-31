@@ -30,6 +30,14 @@ pub struct Storage {
     image_dir: String,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct PreservedItemState {
+    first_copied_at: i64,
+    copy_count: i32,
+    paste_count: i32,
+    is_pinned: bool,
+}
+
 impl Storage {
     const LIST_PREVIEW_CHARS: i32 = 240;
 
@@ -390,6 +398,31 @@ impl Storage {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
+    fn load_preserved_item_state_for_hash(
+        conn: &Connection,
+        hash: &str,
+    ) -> Result<Option<PreservedItemState>, ClipinError> {
+        conn.query_row(
+            "SELECT first_copied_at, copy_count, paste_count, is_pinned
+             FROM clip_items
+             WHERE hash = ?1",
+            params![hash],
+            |row| {
+                Ok(PreservedItemState {
+                    first_copied_at: row.get(0)?,
+                    copy_count: row.get(1)?,
+                    paste_count: row.get(2).unwrap_or(0),
+                    is_pinned: row.get(3)?,
+                })
+            },
+        )
+        .map(Some)
+        .or_else(|err| match err {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(other.into()),
+        })
+    }
+
     fn load_image_paths_before(
         conn: &Connection,
         timestamp: i64,
@@ -459,18 +492,20 @@ impl Storage {
         let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
         let mut conn = self.conn.lock().unwrap();
 
-        // 去重：查找已有记录，保留 first_copied_at 和累加 copy_count
-        let existing: Option<(i64, i32, bool)> = conn
-            .query_row(
-                "SELECT first_copied_at, copy_count, is_pinned FROM clip_items WHERE hash = ?1",
-                params![hash],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            )
-            .ok();
-
-        let (first_copied_at, copy_count, is_pinned) = match existing {
-            Some((first, count, pinned)) => (first, count + 1, pinned),
-            None => (now, 1, false),
+        // 同一 hash 表示同一个语义条目：重新复制时只刷新当前快照，不丢累计行为信号。
+        let preserved = match Self::load_preserved_item_state_for_hash(&conn, &hash)? {
+            Some(existing) => PreservedItemState {
+                first_copied_at: existing.first_copied_at,
+                copy_count: existing.copy_count + 1,
+                paste_count: existing.paste_count,
+                is_pinned: existing.is_pinned,
+            },
+            None => PreservedItemState {
+                first_copied_at: now,
+                copy_count: 1,
+                paste_count: 0,
+                is_pinned: false,
+            },
         };
 
         let old_image_paths = Self::load_image_paths_for_hash(&conn, &hash)?;
@@ -480,21 +515,22 @@ impl Storage {
         let id = Uuid::new_v4().to_string();
         tx.execute(
             "INSERT INTO clip_items
-             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,paste_count,pinyin_flat,pinyin_initials)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
             params![
                 id,
                 content,
                 clip_type.as_str(),
                 source_app,
                 source_name,
-                is_pinned,
+                preserved.is_pinned,
                 now,
                 image_path,
                 char_count,
                 hash,
-                copy_count,
-                first_copied_at,
+                preserved.copy_count,
+                preserved.first_copied_at,
+                preserved.paste_count,
                 pinyin_flat,
                 pinyin_initials,
             ],
@@ -508,14 +544,14 @@ impl Storage {
             clip_type: clip_type.clone(),
             source_app: source_app.map(String::from),
             source_name: source_name.map(String::from),
-            is_pinned,
+            is_pinned: preserved.is_pinned,
             created_at: now,
             image_path: image_path.map(String::from),
             char_count,
-            copy_count,
-            first_copied_at,
+            copy_count: preserved.copy_count,
+            first_copied_at: preserved.first_copied_at,
             ocr_text: None,
-            paste_count: 0,
+            paste_count: preserved.paste_count,
         })
     }
 
