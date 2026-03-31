@@ -142,11 +142,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let aboutItem = NSMenuItem(title: NSLocalizedString("About Clipin", comment: ""), action: #selector(openAbout), keyEquivalent: "")
             aboutItem.target = self
             menu.addItem(aboutItem)
-            menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
+            menu.addItem(
+                NSMenuItem(
+                    title: NSLocalizedString("Settings...", comment: ""),
+                    action: #selector(openSettings),
+                    keyEquivalent: ","
+                )
+            )
             menu.addItem(NSMenuItem.separator())
             menu.addItem(makeOnboardingMenuItem())
             menu.addItem(NSMenuItem.separator())
-            menu.addItem(NSMenuItem(title: "Quit Clipin", action: #selector(quitApp), keyEquivalent: "q"))
+            menu.addItem(
+                NSMenuItem(
+                    title: NSLocalizedString("Quit Clipin", comment: ""),
+                    action: #selector(quitApp),
+                    keyEquivalent: "q"
+                )
+            )
             statusItem?.menu = menu
             statusItem?.button?.performClick(nil)
             // 用完后移除 menu，恢复左键 toggle 行为
@@ -206,14 +218,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func makeOnboardingMenuItem() -> NSMenuItem {
-        let onboardingItem = NSMenuItem(title: "Onboarding", action: nil, keyEquivalent: "")
-        let submenu = NSMenu(title: "Onboarding")
+        let onboardingTitle = NSLocalizedString("Onboarding", comment: "")
+        let onboardingItem = NSMenuItem(title: onboardingTitle, action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: onboardingTitle)
 
-        let showItem = NSMenuItem(title: "Show Onboarding", action: #selector(showOnboardingForDebugMenu), keyEquivalent: "")
+        let showItem = NSMenuItem(
+            title: NSLocalizedString("Show Onboarding", comment: ""),
+            action: #selector(showOnboardingForDebugMenu),
+            keyEquivalent: ""
+        )
         showItem.target = self
         submenu.addItem(showItem)
 
-        let resetItem = NSMenuItem(title: "Reset Onboarding State", action: #selector(resetOnboardingStateForDebugMenu), keyEquivalent: "")
+        let resetItem = NSMenuItem(
+            title: NSLocalizedString("Reset Onboarding State", comment: ""),
+            action: #selector(resetOnboardingStateForDebugMenu),
+            keyEquivalent: ""
+        )
         resetItem.target = self
         submenu.addItem(resetItem)
 

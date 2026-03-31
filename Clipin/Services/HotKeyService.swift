@@ -71,26 +71,26 @@ struct HotKeyShortcut: Codable, Equatable {
 
     private static func displayKey(for keyCode: UInt32, fallback: String?) -> String {
         switch Int(keyCode) {
-        case kVK_Return: return "Return"
-        case kVK_Tab: return "Tab"
-        case kVK_Space: return "Space"
-        case kVK_Delete: return "Delete"
-        case kVK_Escape: return "Esc"
-        case kVK_ForwardDelete: return "Forward Delete"
-        case kVK_LeftArrow: return "Left"
-        case kVK_RightArrow: return "Right"
-        case kVK_UpArrow: return "Up"
-        case kVK_DownArrow: return "Down"
-        case kVK_Home: return "Home"
-        case kVK_End: return "End"
-        case kVK_PageUp: return "Page Up"
-        case kVK_PageDown: return "Page Down"
+        case kVK_Return: return NSLocalizedString("Return", comment: "")
+        case kVK_Tab: return NSLocalizedString("Tab", comment: "")
+        case kVK_Space: return NSLocalizedString("Space", comment: "")
+        case kVK_Delete: return NSLocalizedString("Delete", comment: "")
+        case kVK_Escape: return NSLocalizedString("Esc", comment: "")
+        case kVK_ForwardDelete: return NSLocalizedString("Forward Delete", comment: "")
+        case kVK_LeftArrow: return NSLocalizedString("Left", comment: "")
+        case kVK_RightArrow: return NSLocalizedString("Right", comment: "")
+        case kVK_UpArrow: return NSLocalizedString("Up", comment: "")
+        case kVK_DownArrow: return NSLocalizedString("Down", comment: "")
+        case kVK_Home: return NSLocalizedString("Home", comment: "")
+        case kVK_End: return NSLocalizedString("End", comment: "")
+        case kVK_PageUp: return NSLocalizedString("Page Up", comment: "")
+        case kVK_PageDown: return NSLocalizedString("Page Down", comment: "")
         default:
             if let fallback,
                let first = fallback.trimmingCharacters(in: .whitespacesAndNewlines).first {
                 return String(first).uppercased()
             }
-            return "Key \(keyCode)"
+            return String(format: NSLocalizedString("Key %d", comment: ""), keyCode)
         }
     }
 }

@@ -239,19 +239,22 @@ struct PreviewPane: View {
             items.append(
                 PreviewBadgeItem(
                     id: "characters",
-                    title: "\(displayCharacterCount(for: item.content)) chars",
+                    title: String(
+                        format: NSLocalizedString("%d chars", comment: ""),
+                        displayCharacterCount(for: item.content)
+                    ),
                     systemImage: "character"
                 )
             )
 
             if let words = wordCount(for: item.content) {
                 items.append(
-                    PreviewBadgeItem(
-                        id: "words",
-                        title: "\(words) words",
-                        systemImage: "textformat"
+                        PreviewBadgeItem(
+                            id: "words",
+                            title: String(format: NSLocalizedString("%d words", comment: ""), words),
+                            systemImage: "textformat"
+                        )
                     )
-                )
             }
 
         case .image:
@@ -283,7 +286,7 @@ struct PreviewPane: View {
                 items.append(
                     PreviewBadgeItem(
                         id: "items",
-                        title: "\(paths.count) items",
+                        title: String(format: NSLocalizedString("%d items", comment: ""), paths.count),
                         systemImage: "square.stack.3d.up"
                     )
                 )
@@ -433,7 +436,7 @@ struct PreviewPane: View {
         if item.copyCount > 1 {
             return PreviewBadgeItem(
                 id: "usage",
-                title: "\(item.copyCount) copies",
+                title: String(format: NSLocalizedString("%d copies", comment: ""), item.copyCount),
                 systemImage: "square.on.square"
             )
         }

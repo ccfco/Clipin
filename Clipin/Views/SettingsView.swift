@@ -317,7 +317,7 @@ struct SettingsView: View {
 
                             Button("Reset") {
                                 settings.shortcut = .default
-                                showNotice("Shortcut reset to \(settings.shortcut.displayString).")
+                                showNotice(localized("Shortcut reset to %@.", settings.shortcut.displayString))
                             }
                             .buttonStyle(.bordered)
                         }
@@ -608,12 +608,12 @@ struct SettingsView: View {
                                 HStack(spacing: 10) {
                                     if let error = autoBackup.lastBackupError {
                                         Circle().fill(Color.red).frame(width: 7, height: 7)
-                                        Text("Backup failed: \(error)")
+                                        Text(localized("Backup failed: %@", error))
                                             .font(.system(size: 11))
                                             .foregroundStyle(.red)
                                     } else if let date = autoBackup.lastBackupAt {
                                         Circle().fill(Color.green).frame(width: 7, height: 7)
-                                        Text("Last backup: \(relativeString(from: date, to: now))")
+                                        Text(localized("Last backup: %@", relativeString(from: date, to: now)))
                                             .font(.system(size: 11))
                                             .foregroundStyle(hierarchy.support.subduedInk)
                                     } else {
@@ -958,6 +958,10 @@ struct SettingsView: View {
         }
     }
 
+    private func localized(_ key: String, _ arguments: CVarArg...) -> String {
+        String(format: NSLocalizedString(key, comment: ""), arguments: arguments)
+    }
+
     // MARK: - Actions
 
     private func runCleanup() {
@@ -966,9 +970,16 @@ struct SettingsView: View {
                 let result = try CleanupService(core: core, settings: settings).runNow()
                 NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
                 if result.totalRemoved == 0 {
-                    showNotice("Nothing needed cleanup. Your history already fits the current policy.")
+                    showNotice(NSLocalizedString("Nothing needed cleanup. Your history already fits the current policy.", comment: ""))
                 } else {
-                    showNotice("Removed \(result.totalRemoved) items (\(result.removedByAge) by age, \(result.removedByCount) by count).")
+                    showNotice(
+                        localized(
+                            "Removed %d items (%d by age, %d by count).",
+                            result.totalRemoved,
+                            result.removedByAge,
+                            result.removedByCount
+                        )
+                    )
                 }
             } catch {
                 showNotice(error.localizedDescription, isError: true)
@@ -979,7 +990,13 @@ struct SettingsView: View {
     private func exportArchive() {
         do {
             let result = try ArchiveService.exportArchive(core: core)
-            showNotice("Exported \(result.exportedCount) items to \(result.url.lastPathComponent)." + skippedSuffix(result.skippedCount))
+            showNotice(
+                localized(
+                    "Exported %d items to %@.",
+                    result.exportedCount,
+                    result.url.lastPathComponent
+                ) + skippedSuffix(result.skippedCount)
+            )
         } catch ArchiveError.cancelled {
             return
         } catch {
@@ -992,8 +1009,16 @@ struct SettingsView: View {
             let result = try ArchiveService.importArchive(core: core)
             let cleanup = try CleanupService(core: core, settings: settings).runNow()
             NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
-            let cleanupSuffix = cleanup.totalRemoved > 0 ? " Cleanup removed \(cleanup.totalRemoved) older items." : ""
-            showNotice("Imported \(result.importedCount) items from \(result.url.lastPathComponent)." + skippedSuffix(result.skippedCount) + cleanupSuffix)
+            let cleanupSuffix = cleanup.totalRemoved > 0
+                ? " " + localized("Cleanup removed %d older items.", cleanup.totalRemoved)
+                : ""
+            showNotice(
+                localized(
+                    "Imported %d items from %@.",
+                    result.importedCount,
+                    result.url.lastPathComponent
+                ) + skippedSuffix(result.skippedCount) + cleanupSuffix
+            )
         } catch ArchiveError.cancelled {
             return
         } catch {
@@ -1002,7 +1027,9 @@ struct SettingsView: View {
     }
 
     private func skippedSuffix(_ skippedCount: Int) -> String {
-        skippedCount > 0 ? " Skipped \(skippedCount) items with missing image data." : ""
+        skippedCount > 0
+            ? " " + localized("Skipped %d items with missing image data.", skippedCount)
+            : ""
     }
 
     private func chooseBackupFolder() {
@@ -1010,8 +1037,8 @@ struct SettingsView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "Choose Backup Folder"
-        panel.message = "Choose a folder for the clipin-backup.json file."
+        panel.prompt = NSLocalizedString("Choose Backup Folder", comment: "")
+        panel.message = NSLocalizedString("Choose a folder for the clipin-backup.json file.", comment: "")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         settings.autoBackupFolderPath = url.path
     }
@@ -1023,7 +1050,7 @@ struct SettingsView: View {
             try FileManager.default.createDirectory(at: icloudURL, withIntermediateDirectories: true)
             settings.autoBackupFolderPath = icloudURL.path
         } catch {
-            showNotice("Cannot create iCloud Drive folder: \(error.localizedDescription)", isError: true)
+            showNotice(localized("Cannot create iCloud Drive folder: %@", error.localizedDescription), isError: true)
         }
     }
 

@@ -19,19 +19,26 @@ enum FileClipboardContent {
 
     static func displayTitle(for content: String) -> String {
         let paths = paths(from: content)
-        guard let first = paths.first else { return "File" }
+        guard let first = paths.first else { return NSLocalizedString("File", comment: "") }
 
         let firstName = displayName(for: first)
         guard paths.count > 1 else { return firstName }
-        return "\(firstName) + \(paths.count - 1) more"
+        return String(
+            format: NSLocalizedString("%@ + %d more", comment: ""),
+            firstName,
+            paths.count - 1
+        )
     }
 
     static func summaryLabel(for content: String) -> String {
         let count = paths(from: content).count
         switch count {
-        case 0: return "File"
-        case 1: return "1 file"
-        default: return "\(count) files"
+        case 0:
+            return NSLocalizedString("File", comment: "")
+        case 1:
+            return NSLocalizedString("1 file", comment: "")
+        default:
+            return String(format: NSLocalizedString("%d files", comment: ""), count)
         }
     }
 
