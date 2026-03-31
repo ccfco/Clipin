@@ -451,11 +451,13 @@ impl Storage {
         source_name: Option<&str>,
         image_path: Option<&str>,
     ) -> Result<ClipItem, ClipinError> {
-        let mut conn = self.conn.lock().unwrap();
+        // 锁外提前计算：fs::read（图片 hash）和 compute_pinyin 是 I/O / CPU 密集操作，
+        // 不需要 DB 连接，持锁期间执行会阻塞所有其他存储调用（包括主线程的 getListItems）
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
         let now = chrono::Utc::now().timestamp_millis();
         let char_count = content.chars().count() as i32;
         let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
+        let mut conn = self.conn.lock().unwrap();
 
         // 去重：查找已有记录，保留 first_copied_at 和累加 copy_count
         let existing: Option<(i64, i32, bool)> = conn
@@ -859,15 +861,15 @@ impl Storage {
         is_pinned: bool,
         created_at: i64,
     ) -> Result<ClipItem, ClipinError> {
-        let mut conn = self.conn.lock().unwrap();
+        // 锁外提前计算（同 save_item 的理由）
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
-        let old_image_paths = Self::load_image_paths_for_hash(&conn, &hash)?;
-        let tx = conn.transaction()?;
-        tx.execute("DELETE FROM clip_items WHERE hash = ?1", params![hash])?;
-
         let id = Uuid::new_v4().to_string();
         let char_count = content.chars().count() as i32;
         let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
+        let mut conn = self.conn.lock().unwrap();
+        let old_image_paths = Self::load_image_paths_for_hash(&conn, &hash)?;
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM clip_items WHERE hash = ?1", params![hash])?;
 
         tx.execute(
             "INSERT INTO clip_items
