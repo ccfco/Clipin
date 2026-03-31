@@ -605,6 +605,12 @@ impl Storage {
         format!("\"{}\"", query.replace('"', "\"\""))
     }
 
+    /// 转义 LIKE 查询的元字符（% 和 _），配合 SQL 中的 ESCAPE '\' 子句使用
+    fn escape_like_pattern(query: &str) -> String {
+        let escaped = query.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+        format!("%{}%", escaped)
+    }
+
     pub fn search(&self, query: &str, type_filter: Option<&ClipType>) -> Vec<ClipItem> {
         let conn = self.conn.lock().unwrap();
 
@@ -643,12 +649,13 @@ impl Storage {
             result.unwrap_or_default()
         } else {
             // 短查询：LIKE 覆盖 content / ocr_text / pinyin_flat / pinyin_initials
-            let pattern = format!("%{}%", query);
+            // escape_like_pattern 转义 % 和 _ 元字符，SQL 用 ESCAPE '\' 配合
+            let pattern = Self::escape_like_pattern(query);
             let sql = if type_filter.is_some() {
                 "SELECT id, content, clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items
-                 WHERE (content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1)
+                 WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
                    AND clip_type = ?2
                  ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
@@ -656,7 +663,7 @@ impl Storage {
                 "SELECT id, content, clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items
-                 WHERE content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1
+                 WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
                  ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
             };
@@ -722,14 +729,14 @@ impl Storage {
             };
             result.unwrap_or_default()
         } else {
-            let pattern = format!("%{}%", query);
+            let pattern = Self::escape_like_pattern(query);
             let sql = if type_filter.is_some() {
                 format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count
                      FROM clip_items
-                     WHERE (content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1)
+                     WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
@@ -741,7 +748,7 @@ impl Storage {
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count
                      FROM clip_items
-                     WHERE content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1
+                     WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS

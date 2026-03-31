@@ -297,6 +297,26 @@ mod tests {
     }
 
     #[test]
+    fn test_search_like_metachar_escaping() {
+        let core = setup_core();
+
+        // 保存含 LIKE 元字符的内容
+        core.save_item("100% done".into(), ClipType::Text, None, None, None).unwrap();
+        core.save_item("file_name.txt".into(), ClipType::Text, None, None, None).unwrap();
+        core.save_item("hello world".into(), ClipType::Text, None, None, None).unwrap();
+
+        // 搜 "%" 应只匹配 "100% done"，不匹配所有记录
+        let pct = core.search("%".into(), None);
+        assert_eq!(pct.len(), 1, "% 应作为字面量搜索，不匹配所有记录");
+        assert_eq!(pct[0].content, "100% done");
+
+        // 搜 "_" 应只匹配 "file_name.txt"，不匹配单字符通配
+        let underscore = core.search("_".into(), None);
+        assert_eq!(underscore.len(), 1, "_ 应作为字面量搜索，不匹配任意单字符");
+        assert_eq!(underscore[0].content, "file_name.txt");
+    }
+
+    #[test]
     fn test_clear_old() {
         let core = setup_core();
 
