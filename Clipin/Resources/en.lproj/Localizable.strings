@@ -189,6 +189,9 @@
 "About Clipin" = "About Clipin";
 "Check for Updates..." = "Check for Updates...";
 "New Version Available: %@" = "New Version Available: %@";
+"New update available" = "New update available";
+"Clipin %@ is ready to download." = "Clipin %@ is ready to download.";
+"Later" = "Later";
 
 /* OnboardingView */
 "Keyboard-first clipboard, refined for focus." = "Keyboard-first clipboard, refined for focus.";

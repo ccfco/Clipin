@@ -41,11 +41,22 @@ private final class ClipinSettingsWindow: NSWindow {
     }
 }
 
+/// 更新提醒需要轻量浮层：不抢主面板焦点，但要支持首击按钮和 Esc 关闭。
+private final class ClipinUpdateReminderPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) {
+        close()
+    }
+}
+
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var panel: ClipinPanel?
     private var settingsWindow: NSWindow?
+    private var updateReminderWindow: NSWindow?
     private let appState = AppState.shared
     private let settings = SettingsStore.shared
     private let updateReminder = UpdateReminderService.shared
@@ -71,6 +82,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isProgrammaticMove = false
     private var savePositionTask: Task<Void, Never>?
     private var backfillTask: Task<Void, Never>?
+    private var updateReminderSubscription: AnyCancellable?
+    private var updateBadgeSubscription: AnyCancellable?
 
     private enum PanelPositionKeys {
         static let originX = "panel.savedOriginX"
@@ -100,6 +113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startMonitoring()
         setupHotKey()
         setupSettingsObservers()
+        setupUpdateReminderObservers()
         startKeyMonitor()
         runCleanupAndReload()
         showLaunchExperienceIfNeeded()
@@ -113,7 +127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clipin")
+            button.image = statusItemImage(hasPendingUpdate: updateReminder.latestRelease != nil)
             button.action = #selector(statusBarClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.target = self
@@ -400,6 +414,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             .store(in: &cancellables)
+    }
+
+    private func setupUpdateReminderObservers() {
+        updateReminderSubscription = updateReminder.$activeReminder
+            .receive(on: RunLoop.main)
+            .sink { [weak self] release in
+                guard let self else { return }
+                if let release {
+                    self.presentUpdateReminder(for: release)
+                } else {
+                    self.dismissUpdateReminderWindow()
+                }
+            }
+
+        updateBadgeSubscription = updateReminder.$latestRelease
+            .receive(on: RunLoop.main)
+            .sink { [weak self] release in
+                self?.statusItem?.button?.image = self?.statusItemImage(hasPendingUpdate: release != nil)
+            }
     }
 
     // MARK: - Show / Hide
@@ -921,6 +954,102 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
+    private func presentUpdateReminder(for release: ReleaseInfo) {
+        let window: NSWindow
+
+        if let existingWindow = updateReminderWindow {
+            existingWindow.contentView = ClipinHostingView(
+                rootView: UpdateReminderView(
+                    settings: settings,
+                    release: release,
+                    onLater: { [weak self] in self?.updateReminder.dismissActiveReminder() },
+                    onViewRelease: { [weak self] in self?.updateReminder.openReleasePage() },
+                    onDownload: { [weak self] in self?.updateReminder.downloadLatestRelease() }
+                )
+            )
+            window = existingWindow
+        } else {
+            let newWindow = ClipinUpdateReminderPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            newWindow.backgroundColor = .clear
+            newWindow.isOpaque = false
+            newWindow.hasShadow = true
+            newWindow.level = .statusBar
+            newWindow.isFloatingPanel = true
+            newWindow.hidesOnDeactivate = false
+            newWindow.collectionBehavior = [.canJoinAllSpaces, .transient]
+            newWindow.isReleasedWhenClosed = false
+            newWindow.contentView = ClipinHostingView(
+                rootView: UpdateReminderView(
+                    settings: settings,
+                    release: release,
+                    onLater: { [weak self] in self?.updateReminder.dismissActiveReminder() },
+                    onViewRelease: { [weak self] in self?.updateReminder.openReleasePage() },
+                    onDownload: { [weak self] in self?.updateReminder.downloadLatestRelease() }
+                )
+            )
+            newWindow.delegate = self
+            updateReminderWindow = newWindow
+            window = newWindow
+        }
+
+        positionUpdateReminderWindow(window)
+        window.alphaValue = 0
+        window.orderFrontRegardless()
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().alphaValue = 1
+        }
+    }
+
+    private func dismissUpdateReminderWindow() {
+        guard let updateReminderWindow else { return }
+        let window = updateReminderWindow
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            window.animator().alphaValue = 0
+        }, completionHandler: {
+            Task { @MainActor in
+                window.orderOut(nil)
+                window.alphaValue = 1
+            }
+        })
+    }
+
+    private func positionUpdateReminderWindow(_ window: NSWindow) {
+        let size = window.frame.size
+        if let button = statusItem?.button, let hostWindow = button.window {
+            let buttonFrameInWindow = button.convert(button.bounds, to: nil)
+            let buttonFrameOnScreen = hostWindow.convertToScreen(buttonFrameInWindow)
+            let x = max(buttonFrameOnScreen.maxX - size.width, buttonFrameOnScreen.minX - 12)
+            let y = buttonFrameOnScreen.minY - size.height - 10
+            window.setFrameOrigin(NSPoint(x: x, y: y))
+            return
+        }
+
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let visible = screen.visibleFrame
+        let x = visible.maxX - size.width - 20
+        let y = visible.maxY - size.height - 20
+        window.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func statusItemImage(hasPendingUpdate: Bool) -> NSImage? {
+        let symbolName = hasPendingUpdate ? "clipboard.badge.exclamationmark" : "clipboard"
+        let fallbackName = hasPendingUpdate ? "arrow.down.circle" : "clipboard"
+        let image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Clipin")
+            ?? NSImage(systemSymbolName: fallbackName, accessibilityDescription: "Clipin")
+        image?.isTemplate = true
+        return image
+    }
+
     // MARK: - Permission
 
     private func showLaunchExperienceIfNeeded() {
@@ -1167,6 +1296,9 @@ extension AppDelegate: NSWindowDelegate {
         if notification.object as? NSWindow === permissionWindow {
             permissionWindow = nil
             permissionGrantedObserver = nil
+        }
+        if notification.object as? NSWindow === updateReminderWindow {
+            updateReminder.dismissActiveReminder()
         }
     }
 

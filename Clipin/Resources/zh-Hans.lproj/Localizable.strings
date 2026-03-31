@@ -189,6 +189,9 @@
 "About Clipin" = "关于 Clipin";
 "Check for Updates..." = "检查更新…";
 "New Version Available: %@" = "发现新版本：%@";
+"New update available" = "发现新版本";
+"Clipin %@ is ready to download." = "Clipin %@ 已可下载。";
+"Later" = "稍后提醒";
 
 /* OnboardingView */
 "Keyboard-first clipboard, refined for focus." = "键盘优先的剪贴板管理，克制而专注。";

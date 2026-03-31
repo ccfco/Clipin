@@ -28,6 +28,7 @@ final class UpdateReminderService: ObservableObject {
 
     @Published private(set) var autoCheckEnabled: Bool
     @Published private(set) var latestRelease: ReleaseInfo?
+    @Published private(set) var activeReminder: ReleaseInfo?
     @Published private(set) var lastCheckedAt: Date?
     @Published private(set) var isChecking = false
     @Published private(set) var didLastCheckFail = false
@@ -47,6 +48,11 @@ final class UpdateReminderService: ObservableObject {
     private enum Keys {
         static let autoCheckEnabled = "updates.autoCheckEnabled"
         static let lastCheckedAt = "updates.lastCheckedAt"
+        static let dismissedReminderVersion = "updates.dismissedReminderVersion"
+    }
+
+    private var dismissedReminderVersion: String? {
+        didSet { defaults.set(dismissedReminderVersion, forKey: Keys.dismissedReminderVersion) }
     }
 
     private init() {
@@ -54,6 +60,7 @@ final class UpdateReminderService: ObservableObject {
         currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
         autoCheckEnabled = defaults.object(forKey: Keys.autoCheckEnabled) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
+        dismissedReminderVersion = defaults.string(forKey: Keys.dismissedReminderVersion)
 
         decoder.dateDecodingStrategy = .iso8601
 
@@ -93,7 +100,14 @@ final class UpdateReminderService: ObservableObject {
         }
     }
 
+    func dismissActiveReminder() {
+        guard let version = activeReminder?.version ?? latestRelease?.version else { return }
+        dismissedReminderVersion = version
+        activeReminder = nil
+    }
+
     func openReleasePage() {
+        dismissActiveReminder()
         NSWorkspace.shared.open(latestRelease?.releasePageURL ?? releasesPageURL)
     }
 
@@ -103,6 +117,7 @@ final class UpdateReminderService: ObservableObject {
     }
 
     func downloadLatestRelease() {
+        dismissActiveReminder()
         let targetURL = latestRelease?.downloadURL ?? latestRelease?.releasePageURL ?? releasesPageURL
         NSWorkspace.shared.open(targetURL)
     }
@@ -143,16 +158,21 @@ final class UpdateReminderService: ObservableObject {
             let fetchedAt = Date()
 
             let remoteVersion = Self.normalizedVersion(response.tagName)
+            let release = ReleaseInfo(
+                version: remoteVersion,
+                publishedAt: response.publishedAt,
+                notes: Self.normalizedNotes(response.body),
+                releasePageURL: response.htmlURL,
+                downloadURL: Self.preferredDownloadURL(from: response.assets)
+            )
             if Self.compareVersions(remoteVersion, currentVersion) == .orderedDescending {
-                latestRelease = ReleaseInfo(
-                    version: remoteVersion,
-                    publishedAt: response.publishedAt,
-                    notes: Self.normalizedNotes(response.body),
-                    releasePageURL: response.htmlURL,
-                    downloadURL: Self.preferredDownloadURL(from: response.assets)
-                )
+                latestRelease = release
+                if !userInitiated, dismissedReminderVersion != release.version {
+                    activeReminder = release
+                }
             } else {
                 latestRelease = nil
+                activeReminder = nil
             }
 
             lastCheckedAt = fetchedAt
