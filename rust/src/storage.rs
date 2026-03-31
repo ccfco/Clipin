@@ -278,7 +278,7 @@ impl Storage {
             }
 
             // --- Rust 阶段：UPDATE 触发 clip_items_au 进行 DELETE+INSERT，实现带拼音的原位更新 ---
-            self.backfill_pinyin_v5()?;
+            self.backfill_pinyin()?;
 
             // --- 提交版本号 ---
             {
@@ -302,15 +302,23 @@ impl Storage {
             conn.execute_batch("PRAGMA user_version = 6;")?;
         }
 
+        // v7: 修复 v5 被手动跳过（PRAGMA user_version=5）导致的 pinyin 回填缺失
+        // backfill_pinyin 只处理 pinyin_flat='' 的条目，已有 pinyin 的不动
+        if from_version < 7 {
+            self.backfill_pinyin()?;
+            let conn = self.conn.lock().unwrap();
+            conn.execute_batch("PRAGMA user_version = 7;")?;
+        }
+
         Ok(())
     }
 
-    /// v5 migration 专用：批量计算并回填现有条目的拼音列
-    fn backfill_pinyin_v5(&self) -> Result<(), ClipinError> {
-        // 一次性读取全部需要回填的条目（rowid + content）
+    /// 批量计算并回填拼音列（只处理 pinyin_flat 为空的条目，幂等可重复调用）
+    fn backfill_pinyin(&self) -> Result<(), ClipinError> {
+        // 只选取尚未回填的条目，已有 pinyin 的跳过（避免多余 FTS UPDATE）
         let items: Vec<(i64, String)> = {
             let conn = self.conn.lock().unwrap();
-            let mut stmt = conn.prepare("SELECT rowid, content FROM clip_items")?;
+            let mut stmt = conn.prepare("SELECT rowid, content FROM clip_items WHERE pinyin_flat = ''")?;
             stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?
                 .filter_map(|r| r.ok())
                 .collect()
@@ -1000,7 +1008,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 6, "新建数据库应为 v5");
+        assert_eq!(storage.schema_version(), 7, "新建数据库应为 v7");
     }
 
     #[test]
@@ -1019,7 +1027,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 6, "旧数据库应 migrate 到 v5");
+        assert_eq!(storage.schema_version(), 7, "旧数据库应 migrate 到 v7");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -1046,7 +1054,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 6);
+        assert_eq!(s2.schema_version(), 7);
     }
 
     #[test]

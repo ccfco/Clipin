@@ -44,7 +44,9 @@ cd rust && cargo test --lib
 ## 决策
 
 - **拼音搜索**：DB 层存 `pinyin_flat`（"你好"→"nihao"）和 `pinyin_initials`（"nh"）两列，写入时由 `compute_pinyin()` 计算（`pinyin` crate），FTS5 trigram 索引覆盖，≥3 字走 FTS 自动匹配，≤2 字走 LIKE 回退同时覆盖两列。调用 `(&*s).to_pinyin()`（对 &str，不对 String）。Migration v5 三阶段：SQL schema → Rust 回填 → FTS 重建（不可合并，中途需释放锁）。
-- **搜索排序**：FTS 路径 `ORDER BY clip_fts.rank, copy_count DESC, created_at DESC`，`clip_fts.rank` 是 BM25 负值（越小越相关），JOIN 查询中可直接用。LIKE 路径用 `copy_count DESC, created_at DESC`。搜索 LIMIT 统一为 200。
+- **搜索排序**：FTS 路径 `ORDER BY is_pinned DESC, paste_count DESC, clip_fts.rank, copy_count DESC, created_at DESC`；`clip_fts.rank` 是 BM25 负值（越小越相关）。LIKE 路径 `ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC`。搜索 LIMIT 统一为 200。`paste_count`（用户主动粘贴次数）是首要信号，`copy_count`（同内容被复制次数）作为次级信号；两者语义不同，不合并。
+- **paste_count 追踪**：DB v6 migration 添加 `paste_count INTEGER NOT NULL DEFAULT 0`。`performPaste` / `performPastePlain` 成功写入剪贴板后调用 `incrementPasteCount(id:)`（fire-and-forget，不影响粘贴流程）。Footer badge 优先显示 "Pasted N times"，无粘贴记录时回退为 "N copies"。
+- **IME 实时搜索**：`NSControlTextDidChangeNotification`（NSTextField 层）在 IME 组词（`setMarkedText`）时不触发，只在文字提交后触发。修复：在 `controlTextDidBeginEditing` 里对 field editor（NSTextView）注册 `NSText.didChangeNotification`，preedit 期间 `editor.string` 包含组词文字，直接更新 `parent.text` 触发实时搜索。`controlTextDidEndEditing` 时移除 observer，防重复注册。
 - **图片 OCR**：使用 Apple Vision Framework `VNRecognizeTextRequest`（macOS 原生，零依赖，支持中英文）。图片写盘后在同一 `Task.detached` 内串行 OCR，结果写入 `clip_items.ocr_text` 列。FTS5 索引同步覆盖 ocr_text，搜索图片文字与搜索文本完全统一。列表 preview 通过 SQL 层 `COALESCE(NULLIF(ocr_text,''),content)` 智能回退，无需改 Swift 模型。
 - **Bridging Header**（非 modulemap）：解决 Xcode Explicit Module Build 下 UniFFI C 头文件导入问题
 - **xcodegen**：代码化管理 Xcode 项目，.xcodeproj 不提交
