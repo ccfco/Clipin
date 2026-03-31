@@ -43,6 +43,8 @@ pub struct ClipItem {
     pub first_copied_at: i64,
     /// Vision OCR 识别结果，仅 image 类型有值，异步写入
     pub ocr_text: Option<String>,
+    /// 用户通过 Clipin 粘贴的次数（首要排序信号）
+    pub paste_count: i32,
 }
 
 /// 列表使用的轻量摘要记录，避免长文本拖慢整个面板
@@ -57,6 +59,8 @@ pub struct ClipListItem {
     pub created_at: i64,
     pub image_path: Option<String>,
     pub char_count: i32,
+    pub paste_count: i32,
+    pub copy_count: i32,
 }
 
 /// 错误类型

@@ -45,6 +45,8 @@
 
 🖼️ **图片 OCR** — 基于 Apple Vision Framework 实现本地图片文字识别，支持中英文搜索图片内容
 
+👀 **空格快速预览** — `Space` 调起系统 Quick Look 预览图片、文件与链接，支持在预览中继续用方向键切换下一条
+
 🎨 **Liquid Glass 主题** — 适配 macOS 26 风格设计，提供 Native/Mist/Graphite/Sunrise 四种精选主题
 
 🔍 **即时搜索** — 中英文全文检索（FTS5 trigram），输入即匹配，短查询自动回退 `LIKE`
@@ -104,6 +106,8 @@ xcodegen generate
 | `⌘⇧P` | 固定/取消固定 |
 | `⌘⌫` | 删除条目 |
 | `⌘O` | 打开 URL / 在 Finder 中显示文件 |
+| `Space` | Quick Look 预览图片 / 文件 / 链接 |
+| Quick Look 中 `↑` `↓` `←` `→` | 切换上一条 / 下一条可预览项 |
 | `⌘K` | 打开动作面板 |
 | `Tab` / `⇧Tab` | 切换类型筛选 |
 | `⌘⇧L` | 开启/关闭连续粘贴 |
@@ -115,7 +119,6 @@ xcodegen generate
 **计划中：**
 
 - [ ] 拼音/首字母模糊搜索
-- [ ] 空格键快速预览 (QuickLook)
 - [ ] 浮动便签/参考面板模式
 - [ ] iCloud 云同步
 
@@ -125,6 +128,7 @@ xcodegen generate
 - [x] Native Liquid Glass 主题系统
 - [x] 面板位置记忆 (持久化)
 - [x] 连续粘贴模式 (Continuous Paste)
+- [x] 空格键快速预览 (Quick Look)
 - [x] 自动备份到 iCloud Drive / 本地文件夹
 - [x] FTS5 全文搜索与动作面板
 - [x] 隐私感知采集与多语言支持

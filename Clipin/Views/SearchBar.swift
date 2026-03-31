@@ -3,7 +3,8 @@ import AppKit
 
 // MARK: - Key-intercepting NSTextField
 
-/// NSTextField 子类：拦截 ↑↓/Return/Escape/Tab，传给回调而非默认文本行为
+/// NSTextField 子类：拦截 ↑↓/Return/Escape/Tab，传给回调而非默认文本行为。
+/// IME 组词时这些键必须继续交给输入法，所以真正的拦截要看当前是否存在 marked text。
 private final class InterceptingTextField: NSTextField {
     var onNavigate: ((Int) -> Void)?
     var onSubmit: (() -> Void)?
@@ -36,8 +37,12 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: InterceptingTextField, context: Context) {
-        if nsView.stringValue != text {
+        let liveText = context.coordinator.currentText(for: nsView)
+        if liveText != text {
             nsView.stringValue = text
+            if let editor = nsView.currentEditor() as? NSTextView, editor.string != text {
+                editor.string = text
+            }
         }
         nsView.onNavigate = onNavigate
         nsView.onSubmit = onSubmit
@@ -50,7 +55,8 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: InterceptingTextFieldView
         weak var field: InterceptingTextField?
-        private var isObservingRestoreFocus = false
+        /// 当前正在观察的 field editor，用于 deinit 时精准移除
+        private weak var observedEditor: NSTextView?
 
         init(_ p: InterceptingTextFieldView) {
             parent = p
@@ -61,13 +67,10 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
                 name: .clipinRestoreSearchFocus,
                 object: nil
             )
-            isObservingRestoreFocus = true
         }
 
         deinit {
-            if isObservingRestoreFocus {
-                NotificationCenter.default.removeObserver(self, name: .clipinRestoreSearchFocus, object: nil)
-            }
+            NotificationCenter.default.removeObserver(self)
         }
 
         @MainActor
@@ -76,13 +79,69 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
             field.window?.makeFirstResponder(field)
         }
 
+        /// AppKit 在 IME 组词阶段会把实时文本保存在 field editor 的 marked text 中，
+        /// `NSTextField.stringValue` 只有在 commit 后才稳定，所以搜索必须优先读取 editor.string。
+        func currentText(for field: NSTextField) -> String {
+            if let editor = field.currentEditor() as? NSTextView {
+                return editor.string
+            }
+            return field.stringValue
+        }
+
+        // MARK: - IME preedit 感知
+
+        /// 编辑开始时把 field editor 的文本变更通知也接入，
+        /// 使 IME 组词阶段（setMarkedText）触发实时搜索，不等用户选字。
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            guard let f = obj.object as? NSTextField,
+                  let editor = f.currentEditor() as? NSTextView else { return }
+            observedEditor = editor
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(fieldEditorTextDidChange(_:)),
+                name: NSText.didChangeNotification,
+                object: editor
+            )
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            if let editor = observedEditor {
+                NotificationCenter.default.removeObserver(
+                    self, name: NSText.didChangeNotification, object: editor
+                )
+                observedEditor = nil
+            }
+        }
+
+        /// field editor 文本变更（含 IME preedit）→ 同步到 binding
+        @objc private func fieldEditorTextDidChange(_ notification: Notification) {
+            guard let editor = notification.object as? NSTextView else { return }
+            let newText = editor.string
+            if newText != parent.text {
+                parent.text = newText
+            }
+        }
+
         func controlTextDidChange(_ obj: Notification) {
             guard let f = obj.object as? NSTextField else { return }
-            parent.text = f.stringValue
+            parent.text = currentText(for: f)
         }
 
         func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
             guard let field = control as? InterceptingTextField else { return false }
+            if textView.hasMarkedText() {
+                switch selector {
+                case #selector(NSResponder.moveDown(_:)),
+                     #selector(NSResponder.moveUp(_:)),
+                     #selector(NSResponder.insertNewline(_:)),
+                     #selector(NSResponder.cancelOperation(_:)),
+                     #selector(NSResponder.insertTab(_:)),
+                     #selector(NSResponder.insertBacktab(_:)):
+                    return false
+                default:
+                    break
+                }
+            }
             switch selector {
             case #selector(NSResponder.moveDown(_:)):
                 field.onNavigate?(1); return true

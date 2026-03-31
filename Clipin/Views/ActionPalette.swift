@@ -17,6 +17,7 @@ struct PaletteAction: Identifiable {
     let badge: String
     let section: PaletteActionSection
     let isDestructive: Bool
+    let restoresSearchFocus: Bool
     let handler: () -> Void
 
     init(
@@ -25,6 +26,7 @@ struct PaletteAction: Identifiable {
         badge: String,
         section: PaletteActionSection = .secondary,
         isDestructive: Bool = false,
+        restoresSearchFocus: Bool = true,
         handler: @escaping () -> Void
     ) {
         self.title = title
@@ -32,6 +34,7 @@ struct PaletteAction: Identifiable {
         self.badge = badge
         self.section = section
         self.isDestructive = isDestructive
+        self.restoresSearchFocus = restoresSearchFocus
         self.handler = handler
     }
 }
@@ -244,6 +247,12 @@ struct ActionPaletteBuilder {
                 })
             }
 
+            if viewModel.canPreviewSelectedItem {
+                list.append(PaletteAction("Preview", systemImage: "eye", badge: "Space", section: .primary, restoresSearchFocus: false) {
+                    _ = viewModel.previewSelected()
+                })
+            }
+
             list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", section: .primary) {
                 viewModel.copySelected()
             })
@@ -253,7 +262,7 @@ struct ActionPaletteBuilder {
             })
 
             if viewModel.canOpenSelectedItem {
-                list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, badge: "⌘O") {
+                list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, badge: "⌘O", restoresSearchFocus: false) {
                     viewModel.openSelected()
                 })
             }
@@ -273,7 +282,7 @@ struct ActionPaletteBuilder {
             viewModel.toggleContinuousPaste()
         })
 
-        list.append(PaletteAction("Open Settings", systemImage: "gearshape", badge: "⌘,") {
+        list.append(PaletteAction("Open Settings", systemImage: "gearshape", badge: "⌘,", restoresSearchFocus: false) {
             viewModel.openSettings()
         })
 

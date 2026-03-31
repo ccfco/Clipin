@@ -220,8 +220,12 @@ struct PreviewPane: View {
             PreviewRailEntry(item: $0, prominence: .supporting)
         })
 
-        if let copies = copiesBadge(for: item) {
-            entries.append(PreviewRailEntry(item: copies, prominence: .supporting))
+        if let usage = usageBadge(for: item) {
+            entries.append(PreviewRailEntry(item: usage, prominence: .supporting))
+        }
+
+        if let ocr = ocrBadge(for: item) {
+            entries.append(PreviewRailEntry(item: ocr, prominence: .context))
         }
 
         return entries
@@ -415,12 +419,34 @@ struct PreviewPane: View {
         )
     }
 
-    private func copiesBadge(for item: ClipItem) -> PreviewBadgeItem? {
-        guard item.copyCount > 1 else { return nil }
+    /// 使用频率 badge：粘贴次数优先（更能反映真实使用价值），否则展示复制次数
+    private func usageBadge(for item: ClipItem) -> PreviewBadgeItem? {
+        if item.pasteCount > 0 {
+            return PreviewBadgeItem(
+                id: "usage",
+                title: item.pasteCount == 1
+                    ? NSLocalizedString("Pasted once", comment: "")
+                    : String(format: NSLocalizedString("Pasted %d times", comment: ""), item.pasteCount),
+                systemImage: "arrow.up.doc"
+            )
+        }
+        if item.copyCount > 1 {
+            return PreviewBadgeItem(
+                id: "usage",
+                title: "\(item.copyCount) copies",
+                systemImage: "square.on.square"
+            )
+        }
+        return nil
+    }
+
+    private func ocrBadge(for item: ClipItem) -> PreviewBadgeItem? {
+        guard item.clipType == .image,
+              let ocr = item.ocrText, !ocr.isEmpty else { return nil }
         return PreviewBadgeItem(
-            id: "copies",
-            title: "\(item.copyCount) copies",
-            systemImage: "square.on.square"
+            id: "ocr",
+            title: NSLocalizedString("OCR", comment: ""),
+            systemImage: "text.viewfinder"
         )
     }
 

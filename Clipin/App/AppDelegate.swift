@@ -1044,6 +1044,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.resume()
             return
         }
+        try? appState.core.incrementPasteCount(id: item.id)
         executePasteFlow()
     }
 
@@ -1053,6 +1054,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.resume()
             return
         }
+        try? appState.core.incrementPasteCount(id: item.id)
         executePasteFlow()
     }
 

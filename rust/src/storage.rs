@@ -287,6 +287,21 @@ impl Storage {
             }
         }
 
+        // v6: 添加 paste_count（粘贴次数），作为首要排序信号
+        if from_version < 6 {
+            let conn = self.conn.lock().unwrap();
+            let has_paste_count: bool = conn
+                .prepare("PRAGMA table_info(clip_items)")?
+                .query_map([], |row| row.get::<_, String>(1))?
+                .any(|n| n.as_deref() == Ok("paste_count"));
+            if !has_paste_count {
+                conn.execute_batch(
+                    "ALTER TABLE clip_items ADD COLUMN paste_count INTEGER NOT NULL DEFAULT 0;",
+                )?;
+            }
+            conn.execute_batch("PRAGMA user_version = 6;")?;
+        }
+
         Ok(())
     }
 
@@ -490,6 +505,7 @@ impl Storage {
             copy_count,
             first_copied_at,
             ocr_text: None,
+            paste_count: 0,
         })
     }
 
@@ -505,7 +521,7 @@ impl Storage {
         let result = if let Some(t) = type_filter {
             let filter_val = t.as_str().to_string();
             sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
+                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items WHERE clip_type = ?1
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?2 OFFSET ?3"
@@ -516,7 +532,7 @@ impl Storage {
             })
         } else {
             sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
+                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?1 OFFSET ?2"
@@ -544,7 +560,7 @@ impl Storage {
             sql = format!(
                 "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                         clip_type, source_app, source_name, is_pinned,
-                        created_at, image_path, char_count
+                        created_at, image_path, char_count, paste_count, copy_count
                  FROM clip_items
                  WHERE clip_type = ?1
                  ORDER BY is_pinned DESC, created_at DESC
@@ -559,7 +575,7 @@ impl Storage {
             sql = format!(
                 "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                         clip_type, source_app, source_name, is_pinned,
-                        created_at, image_path, char_count
+                        created_at, image_path, char_count, paste_count, copy_count
                  FROM clip_items
                  ORDER BY is_pinned DESC, created_at DESC
                  LIMIT ?1 OFFSET ?2",
@@ -585,22 +601,22 @@ impl Storage {
         // trigram 需要 ≥3 字符；短查询回退 LIKE（同时搜拼音列）
         if query.chars().count() >= 3 {
             let fts_query = Self::escape_fts5_query(query);
-            // FTS5 MATCH 搜索所有列（含 pinyin_flat/initials）；BM25 rank 优先，copy_count/created_at 次之
+            // paste_count 首要，BM25 rank 次之，copy_count/created_at 保底
             let sql = if type_filter.is_some() {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                 ORDER BY ci.is_pinned DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                  LIMIT 200"
             } else {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1
-                 ORDER BY ci.is_pinned DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                  LIMIT 200"
             };
             let result = if let Some(t) = type_filter {
@@ -616,22 +632,22 @@ impl Storage {
             };
             result.unwrap_or_default()
         } else {
-            // 短查询：LIKE 覆盖 content / ocr_text / pinyin_flat（前缀/子串） / pinyin_initials（首字母缩写）
+            // 短查询：LIKE 覆盖 content / ocr_text / pinyin_flat / pinyin_initials
             let pattern = format!("%{}%", query);
             let sql = if type_filter.is_some() {
                 "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items
                  WHERE (content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1)
                    AND clip_type = ?2
-                 ORDER BY is_pinned DESC, copy_count DESC, created_at DESC
+                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
             } else {
                 "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items
                  WHERE content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1
-                 ORDER BY is_pinned DESC, copy_count DESC, created_at DESC
+                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
             };
             let result = if let Some(t) = type_filter {
@@ -662,11 +678,11 @@ impl Storage {
                 format!(
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count
+                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                     ORDER BY ci.is_pinned DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -674,11 +690,11 @@ impl Storage {
                 format!(
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count
+                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
-                     ORDER BY ci.is_pinned DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -701,11 +717,11 @@ impl Storage {
                 format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count
+                            created_at, image_path, char_count, paste_count, copy_count
                      FROM clip_items
                      WHERE (content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1)
                        AND clip_type = ?2
-                     ORDER BY is_pinned DESC, copy_count DESC, created_at DESC
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -713,10 +729,10 @@ impl Storage {
                 format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count
+                            created_at, image_path, char_count, paste_count, copy_count
                      FROM clip_items
                      WHERE content LIKE ?1 OR ocr_text LIKE ?1 OR pinyin_flat LIKE ?1 OR pinyin_initials LIKE ?1
-                     ORDER BY is_pinned DESC, copy_count DESC, created_at DESC
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -739,7 +755,7 @@ impl Storage {
     pub fn get_item(&self, id: &str) -> Result<ClipItem, ClipinError> {
         let conn = self.conn.lock().unwrap();
         conn.query_row(
-            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text
+            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
              FROM clip_items
              WHERE id = ?1",
             params![id],
@@ -756,7 +772,7 @@ impl Storage {
         conn.prepare(
             "SELECT id, content, clip_type, source_app, source_name,
                     is_pinned, created_at, image_path, char_count, copy_count,
-                    first_copied_at, ocr_text
+                    first_copied_at, ocr_text, paste_count
              FROM clip_items
              WHERE clip_type = 'image' AND ocr_text IS NULL
              ORDER BY created_at ASC
@@ -871,6 +887,7 @@ impl Storage {
             copy_count: 1,
             first_copied_at: created_at,
             ocr_text: None,
+            paste_count: 0,
         })
     }
 
@@ -939,6 +956,7 @@ impl Storage {
             copy_count: row.get(9)?,
             first_copied_at: row.get(10)?,
             ocr_text: row.get(11)?,
+            paste_count: row.get(12).unwrap_or(0),
         })
     }
 
@@ -954,7 +972,18 @@ impl Storage {
             created_at: row.get(6)?,
             image_path: row.get(7)?,
             char_count: row.get(8)?,
+            paste_count: row.get(9).unwrap_or(0),
+            copy_count: row.get(10).unwrap_or(1),
         })
+    }
+
+    pub fn increment_paste_count(&self, id: &str) -> Result<(), ClipinError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE clip_items SET paste_count = paste_count + 1 WHERE id = ?1",
+            params![id],
+        )?;
+        Ok(())
     }
 }
 
@@ -971,7 +1000,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 5, "新建数据库应为 v5");
+        assert_eq!(storage.schema_version(), 6, "新建数据库应为 v5");
     }
 
     #[test]
@@ -990,7 +1019,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 5, "旧数据库应 migrate 到 v5");
+        assert_eq!(storage.schema_version(), 6, "旧数据库应 migrate 到 v5");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -1017,7 +1046,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 5);
+        assert_eq!(s2.schema_version(), 6);
     }
 
     #[test]

@@ -136,6 +136,11 @@ impl ClipinCore {
         self.storage.get_unprocessed_images(limit)
     }
 
+    /// 粘贴时调用：paste_count +1，作为首要搜索排序信号
+    pub fn increment_paste_count(&self, id: String) -> Result<(), ClipinError> {
+        self.storage.increment_paste_count(&id)
+    }
+
     /// 获取图片存储目录
     pub fn image_dir(&self) -> String {
         self.storage.image_dir().to_string()
