@@ -15,6 +15,16 @@
 "Graphite" = "Graphite";
 "Sunrise" = "Sunrise";
 "Launch Clipin at login" = "Launch Clipin at login";
+"Pinned items in the main list" = "Pinned items in the main list";
+"Choose whether pinned items mix into normal browsing, stay in a separate section, or only appear in the pinned view." = "Choose whether pinned items mix into normal browsing, stay in a separate section, or only appear in the pinned view.";
+"Launcher default view" = "Launcher default view";
+"Choose which browse view opens before you start typing. Search always scans the full library." = "Choose which browse view opens before you start typing. Search always scans the full library.";
+"All Items" = "All Items";
+"Pinned Items" = "Pinned Items";
+"Remember Last View" = "Remember Last View";
+"Mixed with recent items" = "Mixed with recent items";
+"Separate pinned section" = "Separate pinned section";
+"Only in pinned view" = "Only in pinned view";
 "General" = "General";
 "Privacy" = "Privacy";
 "Sensitive content is always excluded" = "Sensitive content is always excluded";

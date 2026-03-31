@@ -18,7 +18,7 @@ struct MainPanel: View {
         ClipinSceneState(
             hasSelection: viewModel.selectedListItem != nil,
             isSearching: !viewModel.searchQuery.isEmpty,
-            isFiltered: viewModel.typeFilter != nil || viewModel.isPinnedView,
+            isFiltered: viewModel.isBrowsingFiltered,
             isShowingActions: viewModel.isShowingActions,
             isContinuousPasteEnabled: viewModel.isContinuousPasteEnabled
         )
@@ -79,8 +79,7 @@ struct MainPanel: View {
     private var headerBar: some View {
         SearchBar(
             query: $viewModel.searchQuery,
-            typeFilter: $viewModel.typeFilter,
-            isPinnedView: $viewModel.isPinnedView,
+            browseMode: $viewModel.browseMode,
             sceneState: sceneState,
             onNavigate: { delta in
                 if delta > 0 { viewModel.selectNext() }
@@ -92,8 +91,8 @@ struct MainPanel: View {
                     viewModel.close()
                 }
             },
-            onCycleTypeFilter: { reverse in
-                viewModel.cycleTypeFilter(reverse: reverse)
+            onCycleBrowseMode: { reverse in
+                viewModel.cycleBrowseMode(reverse: reverse)
             }
         )
         .padding(.horizontal, ClipinChrome.shellGap)

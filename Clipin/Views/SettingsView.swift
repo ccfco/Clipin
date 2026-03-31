@@ -341,6 +341,38 @@ struct SettingsView: View {
 
                     groupDivider
 
+                    settingFieldRow(
+                        "Pinned items in the main list",
+                        description: "Choose whether pinned items mix into normal browsing, stay in a separate section, or only appear in the pinned view."
+                    ) {
+                        Picker("", selection: $settings.pinnedItemsPresentation) {
+                            ForEach(PinnedItemsPresentation.allCases, id: \.self) { mode in
+                                Text(mode.displayName).tag(mode)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 220)
+                    }
+
+                    groupDivider
+
+                    settingFieldRow(
+                        "Launcher default view",
+                        description: "Choose which browse view opens before you start typing. Search always scans the full library."
+                    ) {
+                        Picker("", selection: $settings.launcherDefaultView) {
+                            ForEach(LauncherDefaultView.allCases, id: \.self) { view in
+                                Text(view.displayName).tag(view)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 220)
+                    }
+
+                    groupDivider
+
                     toggleSettingRow(
                         "Remember panel position between sessions",
                         description: "Reopen the panel where you last moved it, even after restarting Clipin.",

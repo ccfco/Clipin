@@ -39,6 +39,100 @@ enum AppearanceOverride: String, CaseIterable {
     }
 }
 
+enum LauncherBrowseMode: String, CaseIterable {
+    case all
+    case pinned
+    case text
+    case image
+    case file
+    case url
+
+    var displayName: String {
+        switch self {
+        case .all:
+            return NSLocalizedString("All Items", comment: "")
+        case .pinned:
+            return NSLocalizedString("Pinned Items", comment: "")
+        case .text:
+            return NSLocalizedString("Text", comment: "")
+        case .image:
+            return NSLocalizedString("Images", comment: "")
+        case .file:
+            return NSLocalizedString("Files", comment: "")
+        case .url:
+            return NSLocalizedString("URLs", comment: "")
+        }
+    }
+
+    var typeFilter: ClipType? {
+        switch self {
+        case .all, .pinned:
+            return nil
+        case .text:
+            return .text
+        case .image:
+            return .image
+        case .file:
+            return .file
+        case .url:
+            return .url
+        }
+    }
+
+    var isPinnedOnly: Bool { self == .pinned }
+
+    init(typeFilter: ClipType?) {
+        switch typeFilter {
+        case .text:
+            self = .text
+        case .image:
+            self = .image
+        case .file:
+            self = .file
+        case .url:
+            self = .url
+        case nil:
+            self = .all
+        @unknown default:
+            self = .all
+        }
+    }
+}
+
+enum PinnedItemsPresentation: String, CaseIterable {
+    case mixed
+    case topSection
+    case pinnedOnlyView
+
+    var displayName: String {
+        switch self {
+        case .mixed:
+            return NSLocalizedString("Mixed with recent items", comment: "")
+        case .topSection:
+            return NSLocalizedString("Separate pinned section", comment: "")
+        case .pinnedOnlyView:
+            return NSLocalizedString("Only in pinned view", comment: "")
+        }
+    }
+}
+
+enum LauncherDefaultView: String, CaseIterable {
+    case allItems
+    case pinnedItems
+    case rememberLastView
+
+    var displayName: String {
+        switch self {
+        case .allItems:
+            return NSLocalizedString("All Items", comment: "")
+        case .pinnedItems:
+            return NSLocalizedString("Pinned Items", comment: "")
+        case .rememberLastView:
+            return NSLocalizedString("Remember Last View", comment: "")
+        }
+    }
+}
+
 @MainActor
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
@@ -122,6 +216,18 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rememberPanelPosition, forKey: Keys.rememberPanelPosition) }
     }
 
+    @Published var pinnedItemsPresentation: PinnedItemsPresentation {
+        didSet { defaults.set(pinnedItemsPresentation.rawValue, forKey: Keys.pinnedItemsPresentation) }
+    }
+
+    @Published var launcherDefaultView: LauncherDefaultView {
+        didSet { defaults.set(launcherDefaultView.rawValue, forKey: Keys.launcherDefaultView) }
+    }
+
+    @Published private(set) var lastLauncherBrowseMode: LauncherBrowseMode {
+        didSet { defaults.set(lastLauncherBrowseMode.rawValue, forKey: Keys.lastLauncherBrowseMode) }
+    }
+
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginNote: String?
 
@@ -146,6 +252,9 @@ final class SettingsStore: ObservableObject {
         static let visualTheme = "settings.visualTheme"
         static let appLanguage = "settings.appLanguage"
         static let rememberPanelPosition = "settings.rememberPanelPosition"
+        static let pinnedItemsPresentation = "settings.pinnedItemsPresentation"
+        static let launcherDefaultView = "settings.launcherDefaultView"
+        static let lastLauncherBrowseMode = "settings.lastLauncherBrowseMode"
         static let onboardingVersion = "settings.onboardingVersion"
         static let onboardingCohort = "settings.onboardingCohort"
     }
@@ -159,13 +268,16 @@ final class SettingsStore: ObservableObject {
         Keys.autoBackupEnabled,
         Keys.autoBackupFolderPath,
         Keys.autoBackupInterval,
-        Keys.appearanceOverride,
-        Keys.visualTheme,
-        Keys.appLanguage,
-        Keys.rememberPanelPosition,
-        "panel.savedOriginX",
-        "panel.savedOriginY",
-        "autoBackup.lastBackupAt",
+            Keys.appearanceOverride,
+            Keys.visualTheme,
+            Keys.appLanguage,
+            Keys.rememberPanelPosition,
+            Keys.pinnedItemsPresentation,
+            Keys.launcherDefaultView,
+            Keys.lastLauncherBrowseMode,
+            "panel.savedOriginX",
+            "panel.savedOriginY",
+            "autoBackup.lastBackupAt",
     ]
 
     private init() {
@@ -183,6 +295,12 @@ final class SettingsStore: ObservableObject {
             .flatMap { VisualTheme(rawValue: $0) } ?? .mist
         let storedAppLanguage = defaults.string(forKey: Keys.appLanguage)
             .flatMap { AppLanguage(rawValue: $0) } ?? .system
+        let storedPinnedItemsPresentation = defaults.string(forKey: Keys.pinnedItemsPresentation)
+            .flatMap { PinnedItemsPresentation(rawValue: $0) } ?? .mixed
+        let storedLauncherDefaultView = defaults.string(forKey: Keys.launcherDefaultView)
+            .flatMap { LauncherDefaultView(rawValue: $0) } ?? .allItems
+        let storedLastLauncherBrowseMode = defaults.string(forKey: Keys.lastLauncherBrowseMode)
+            .flatMap { LauncherBrowseMode(rawValue: $0) } ?? .all
         let storedOnboardingVersion = defaults.object(forKey: Keys.onboardingVersion) as? Int ?? 0
         let storedOnboardingCohort = defaults.string(forKey: Keys.onboardingCohort)
             .flatMap { OnboardingCohort(rawValue: $0) }
@@ -198,6 +316,9 @@ final class SettingsStore: ObservableObject {
         self.visualTheme = storedVisualTheme
         self.appLanguage = storedAppLanguage
         self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
+        self.pinnedItemsPresentation = storedPinnedItemsPresentation
+        self.launcherDefaultView = storedLauncherDefaultView
+        self.lastLauncherBrowseMode = storedLastLauncherBrowseMode
         self.onboardingVersion = storedOnboardingVersion
         self.onboardingCohort = storedOnboardingCohort
         // init 赋值不触发 didSet，需手动同步确保 AppleLanguages 和持久化值一致
@@ -222,6 +343,21 @@ final class SettingsStore: ObservableObject {
             launchAtLoginEnabled = false
             launchAtLoginNote = nil
         }
+    }
+
+    func resolvedLaunchBrowseMode() -> LauncherBrowseMode {
+        switch launcherDefaultView {
+        case .allItems:
+            return .all
+        case .pinnedItems:
+            return .pinned
+        case .rememberLastView:
+            return lastLauncherBrowseMode
+        }
+    }
+
+    func recordLastLauncherBrowseMode(_ mode: LauncherBrowseMode) {
+        lastLauncherBrowseMode = mode
     }
 
     func setLaunchAtLogin(_ enabled: Bool) {

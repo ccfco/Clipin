@@ -413,11 +413,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if front?.bundleIdentifier != Bundle.main.bundleIdentifier {
             previousApp = front
         }
-        viewModel?.searchQuery = ""
-        viewModel?.typeFilter = nil
-        viewModel?.isPinnedView = false
-        viewModel?.targetAppName = previousApp?.localizedName
-        viewModel?.loadItems(selectLatest: true)
+        viewModel?.prepareForLauncherPresentation(
+            targetAppName: previousApp?.localizedName,
+            selectLatest: true
+        )
 
         positionPanelForShow()
 
@@ -761,10 +760,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch event.keyCode {
         case 0x30 where flags.isEmpty:
-            vm.cycleTypeFilter()
+            vm.cycleBrowseMode()
             return nil
         case 0x30 where flags == .shift:
-            vm.cycleTypeFilter(reverse: true)
+            vm.cycleBrowseMode(reverse: true)
             return nil
         case 0x7E:
             vm.selectPrev()
@@ -824,7 +823,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if flags == .option {
                 let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4]
                 if let index = optMapping[event.keyCode] {
-                    vm.setTypeFilterByIndex(index)
+                    vm.setBrowseModeByIndex(index)
                     return nil
                 }
             }

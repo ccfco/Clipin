@@ -14,15 +14,13 @@ final class ClipboardViewModel: ObservableObject {
     @Published var selectedItem: ClipItem?
     @Published var selectedItemID: String?
     @Published var searchQuery: String = ""
-    @Published var typeFilter: ClipType?
+    @Published var browseMode: LauncherBrowseMode = .all
     @Published private(set) var sections: [ClipSection] = []
     @Published var targetAppName: String?
     @Published var isShowingActions = false
     @Published var selectedActionIndex = 0
     @Published private(set) var paletteActions: [PaletteAction] = []
     @Published var isContinuousPasteEnabled: Bool = false
-    /// 固定视图：只显示 pinned 项，按日期分组，⌘1-9 映射 pinned 项
-    @Published var isPinnedView: Bool = false
 
     func navigatePalette(delta: Int) {
         let count = paletteActions.count
@@ -70,20 +68,23 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     private let core: ClipinCore
+    private let settings: SettingsStore
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
-    /// ⌘1-9 快捷粘贴序列：始终基于当前可见列表；默认浏览不含 pinned，搜索结果可包含 pinned
+    /// ⌘1-9 快捷粘贴序列：始终基于当前可见列表
     private(set) var shortcutOrder: [ClipListItem] = []
     private var debounce: AnyCancellable?
     private var ocrSubscription: AnyCancellable?
+    private var settingsSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
     private var skipNextDebouncedLoad = false
+    private var sessionBaseBrowseMode: LauncherBrowseMode
 
     // MARK: - Pagination
     private static let pageSize = 50
     /// 当前已从 DB 加载的条目总数（用于 offset 计算）
     private var totalLoadedFromDB = 0
-    /// 是否还有更多可加载的条目（普通视图非搜索模式下有效）
+    /// 是否还有更多可加载的条目（非 pinned 浏览模式、非搜索时有效）
     @Published private(set) var hasMore = false
 
     var onPasteRequested: ((ClipItem) -> Void)?
@@ -92,12 +93,18 @@ final class ClipboardViewModel: ObservableObject {
     var onCloseRequested: (() -> Void)?
     var onOpenSettingsRequested: (() -> Void)?
 
-    init(core: ClipinCore) {
+    init(core: ClipinCore, settings: SettingsStore = .shared) {
         self.core = core
-        debounce = Publishers.CombineLatest3($searchQuery, $typeFilter, $isPinnedView)
+        self.settings = settings
+        self.sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
+        self.browseMode = settings.resolvedLaunchBrowseMode()
+        debounce = Publishers.CombineLatest($searchQuery, $browseMode)
             .dropFirst()
+            .handleEvents(receiveOutput: { [weak self] _, mode in
+                self?.settings.recordLastLauncherBrowseMode(mode)
+            })
             .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
-            .sink { [weak self] _, _, _ in
+            .sink { [weak self] _, _ in
                 guard let self else { return }
                 if self.skipNextDebouncedLoad {
                     self.skipNextDebouncedLoad = false
@@ -108,6 +115,10 @@ final class ClipboardViewModel: ObservableObject {
         // OCR 完成后刷新列表，让图片条目显示识别文字
         ocrSubscription = NotificationCenter.default
             .publisher(for: .clipboardItemOcrUpdated)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.loadItems() }
+        settingsSubscription = settings.$pinnedItemsPresentation
+            .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.loadItems() }
     }
@@ -122,17 +133,17 @@ final class ClipboardViewModel: ObservableObject {
         let currentSelectionID = selectLatest ? nil : selectedItemID
         totalLoadedFromDB = 0
 
+        let typeFilter = effectiveTypeFilter
         if searchQuery.isEmpty {
             let page = core.getListItems(
                 limit: Int32(Self.pageSize), offset: 0,
-                typeFilter: isPinnedView ? nil : typeFilter
+                typeFilter: typeFilter
             )
             items = page
             totalLoadedFromDB = page.count
-            // 分页只对普通视图（非 pinned、非搜索）有意义；pinned 视图条目少无需分页
-            hasMore = !isPinnedView && page.count == Self.pageSize
+            hasMore = !browseMode.isPinnedOnly && page.count == Self.pageSize
         } else {
-            items = core.searchListItems(query: searchQuery, typeFilter: isPinnedView ? nil : typeFilter)
+            items = core.searchListItems(query: searchQuery, typeFilter: typeFilter)
             hasMore = false
         }
         items = visibleItems(from: items)
@@ -150,16 +161,16 @@ final class ClipboardViewModel: ObservableObject {
 
     /// 滚到底时加载下一页，追加到 items 并重建 sections（不重置选中状态）
     func loadMoreItems() {
-        guard hasMore, searchQuery.isEmpty, !isPinnedView else { return }
+        guard hasMore, searchQuery.isEmpty, !browseMode.isPinnedOnly else { return }
         let page = core.getListItems(
             limit: Int32(Self.pageSize), offset: Int32(totalLoadedFromDB),
-            typeFilter: typeFilter
+            typeFilter: effectiveTypeFilter
         )
         guard !page.isEmpty else {
             hasMore = false
             return
         }
-        items.append(contentsOf: page)
+        items = visibleItems(from: items + page)
         totalLoadedFromDB += page.count
         hasMore = page.count == Self.pageSize
         rebuildSections()
@@ -206,7 +217,7 @@ final class ClipboardViewModel: ObservableObject {
         selectItem(id: flatOrder[max(idx - 1, 0)].id)
     }
 
-    /// 按 ⌘1-9 快捷键序列的第 index 项（0-based）直接粘贴，pinned 项不在此序列中
+    /// 按 ⌘1-9 快捷键序列的第 index 项（0-based）直接粘贴
     func pasteItemAt(index: Int) {
         guard index >= 0, index < shortcutOrder.count else { return }
         let id = shortcutOrder[index].id
@@ -267,45 +278,29 @@ final class ClipboardViewModel: ObservableObject {
 
     func toggleContinuousPaste() { isContinuousPasteEnabled.toggle() }
 
-    func setTypeFilterByIndex(_ index: Int) {
+    func setBrowseModeByIndex(_ index: Int) {
         switch index {
-        case 0: isPinnedView = true;  typeFilter = nil
-        case 1: isPinnedView = false; typeFilter = .text
-        case 2: isPinnedView = false; typeFilter = .image
-        case 3: isPinnedView = false; typeFilter = .file
-        case 4: isPinnedView = false; typeFilter = .url
+        case 0: browseMode = .pinned
+        case 1: browseMode = .text
+        case 2: browseMode = .image
+        case 3: browseMode = .file
+        case 4: browseMode = .url
         default: break
         }
     }
 
-    /// Tab 键循环：（无）→ 📌 → 文本 → 图片 → 文件 → 链接 → （无）
-    func cycleTypeFilter(reverse: Bool = false) {
-        let types: [ClipType?] = [.text, .image, .file, .url]
-
-        // 当前在固定视图：Tab→文本，Shift-Tab→无过滤
-        if isPinnedView {
-            isPinnedView = false
-            typeFilter = reverse ? nil : .text
+    /// Tab 键循环：全部 ↔ 📌 ↔ 文本 ↔ 图片 ↔ 文件 ↔ 链接
+    func cycleBrowseMode(reverse: Bool = false) {
+        let modes: [LauncherBrowseMode] = [.all, .pinned, .text, .image, .file, .url]
+        guard let currentIndex = modes.firstIndex(of: browseMode) else {
+            browseMode = .all
             return
         }
 
-        // 当前无过滤（默认视图）
-        guard let idx = types.firstIndex(where: { $0 == typeFilter }) else {
-            if reverse {
-                typeFilter = .url  // 无过滤 ← 链接（反向）
-            } else {
-                isPinnedView = true  // 无过滤 → 📌
-            }
-            return
-        }
-
-        if !reverse && idx == types.count - 1 {
-            typeFilter = nil  // 链接 → 无过滤
-        } else if reverse && idx == 0 {
-            isPinnedView = true; typeFilter = nil  // 文本 → 📌（反向）
-        } else {
-            typeFilter = types[reverse ? idx - 1 : idx + 1]
-        }
+        let nextIndex = reverse
+            ? max(currentIndex - 1, 0)
+            : min(currentIndex + 1, modes.count - 1)
+        browseMode = modes[nextIndex]
     }
 
     @discardableResult
@@ -313,10 +308,18 @@ final class ClipboardViewModel: ObservableObject {
         guard hasActiveFilter else { return false }
         skipNextDebouncedLoad = true
         searchQuery = ""
-        typeFilter = nil
-        isPinnedView = false
+        browseMode = sessionBaseBrowseMode
         loadItems()
         return true
+    }
+
+    func prepareForLauncherPresentation(targetAppName: String?, selectLatest: Bool) {
+        skipNextDebouncedLoad = true
+        sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
+        searchQuery = ""
+        browseMode = sessionBaseBrowseMode
+        self.targetAppName = targetAppName
+        loadItems(selectLatest: selectLatest)
     }
 
     func togglePinSelected() {
@@ -386,8 +389,10 @@ final class ClipboardViewModel: ObservableObject {
     /// 列表是否为空（用于空状态提示）
     var isEmpty: Bool { flatOrder.isEmpty }
 
-    /// 是否正在搜索或过滤
-    var hasActiveFilter: Bool { !searchQuery.isEmpty || typeFilter != nil || isPinnedView }
+    /// 是否正在搜索或偏离当前会话的默认浏览模式
+    var hasActiveFilter: Bool { !searchQuery.isEmpty || browseMode != sessionBaseBrowseMode }
+
+    var isBrowsingFiltered: Bool { browseMode != sessionBaseBrowseMode }
 
     var canOpenSelectedItem: Bool {
         guard let item = selectedListItem else { return false }
@@ -463,6 +468,49 @@ final class ClipboardViewModel: ObservableObject {
     }()
 
     private func rebuildSections() {
+        if shouldShowPinnedSection {
+            let pinnedItems = items.filter(\.isPinned)
+            let regularItems = items.filter { !$0.isPinned }
+            var result: [ClipSection] = []
+            if !pinnedItems.isEmpty {
+                result.append(ClipSection(title: NSLocalizedString("Pinned", comment: ""), items: pinnedItems))
+            }
+            result.append(contentsOf: Self.makeDateSections(from: regularItems))
+            sections = result
+        } else {
+            sections = Self.makeDateSections(from: items)
+        }
+        flatOrder = sections.flatMap(\.items)
+        shortcutOrder = flatOrder
+    }
+
+    /// 搜索永远返回全局结果；浏览态才由 pinned 展示策略决定。
+    private func visibleItems(from fetchedItems: [ClipListItem]) -> [ClipListItem] {
+        if !searchQuery.isEmpty {
+            return fetchedItems
+        }
+        if browseMode.isPinnedOnly {
+            return fetchedItems.filter(\.isPinned)
+        }
+        if settings.pinnedItemsPresentation == .pinnedOnlyView {
+            return fetchedItems.filter { !$0.isPinned }
+        }
+        return fetchedItems
+    }
+
+    private var effectiveTypeFilter: ClipType? {
+        if searchQuery.isEmpty {
+            return browseMode.typeFilter
+        }
+        return browseMode.isPinnedOnly ? nil : browseMode.typeFilter
+    }
+
+    private var shouldShowPinnedSection: Bool {
+        guard searchQuery.isEmpty, !browseMode.isPinnedOnly else { return false }
+        return settings.pinnedItemsPresentation == .topSection
+    }
+
+    private static func makeDateSections(from items: [ClipListItem]) -> [ClipSection] {
         let calendar = Calendar.current
         var today: [ClipListItem] = []
         var yesterday: [ClipListItem] = []
@@ -487,24 +535,15 @@ final class ClipboardViewModel: ObservableObject {
         }
 
         var result: [ClipSection] = []
-        if !today.isEmpty     { result.append(ClipSection(title: NSLocalizedString("Today", comment: ""), items: today)) }
-        if !yesterday.isEmpty { result.append(ClipSection(title: NSLocalizedString("Yesterday", comment: ""), items: yesterday)) }
-        for group in older { result.append(ClipSection(title: group.key, items: group.items)) }
-
-        sections = result
-        flatOrder = result.flatMap(\.items)
-        // ⌘1-9 始终基于当前可见序列：默认浏览=非 pinned，搜索/固定视图则按实际可见项
-        shortcutOrder = flatOrder
-    }
-
-    /// 默认时间线隐藏 pinned，避免 pinned 与最近历史混排；一旦进入搜索，结果必须回到全局视图。
-    private func visibleItems(from fetchedItems: [ClipListItem]) -> [ClipListItem] {
-        if isPinnedView {
-            return fetchedItems.filter(\.isPinned)
+        if !today.isEmpty {
+            result.append(ClipSection(title: NSLocalizedString("Today", comment: ""), items: today))
         }
-        if searchQuery.isEmpty {
-            return fetchedItems.filter { !$0.isPinned }
+        if !yesterday.isEmpty {
+            result.append(ClipSection(title: NSLocalizedString("Yesterday", comment: ""), items: yesterday))
         }
-        return fetchedItems
+        for group in older {
+            result.append(ClipSection(title: group.key, items: group.items))
+        }
+        return result
     }
 }

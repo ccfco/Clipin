@@ -184,13 +184,12 @@ struct SearchBar: View {
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
     @Binding var query: String
-    @Binding var typeFilter: ClipType?
-    @Binding var isPinnedView: Bool
+    @Binding var browseMode: LauncherBrowseMode
     let sceneState: ClipinSceneState
     var onNavigate: (Int) -> Void = { _ in }
     var onSubmit: () -> Void = {}
     var onEscape: () -> Void = {}
-    var onCycleTypeFilter: (Bool) -> Void = { _ in }
+    var onCycleBrowseMode: (Bool) -> Void = { _ in }
 
     private var glass: ClipinGlassPalette {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
@@ -222,7 +221,7 @@ struct SearchBar: View {
                 onNavigate: onNavigate,
                 onSubmit: onSubmit,
                 onEscape: onEscape,
-                onTab: onCycleTypeFilter
+                onTab: onCycleBrowseMode
             )
             .frame(height: 16)
             .layoutPriority(-1)
@@ -301,10 +300,9 @@ struct SearchBar: View {
 
     /// 固定视图专用 pill，与类型 pills 互斥激活
     private var pinnedPill: some View {
-        let isActive = isPinnedView
+        let isActive = browseMode == .pinned
         return Button {
-            isPinnedView = true
-            typeFilter = nil
+            browseMode = .pinned
         } label: {
             HStack(spacing: 2) {
                 Image(systemName: "pin.fill")
@@ -333,12 +331,11 @@ struct SearchBar: View {
     }
 
     private func pill(label: LocalizedStringKey, filter: ClipType?, shortcut: String) -> some View {
-        // 固定视图激活时，类型 pills 全部不高亮
-        let isActive = !isPinnedView && typeFilter == filter
+        let mappedMode = LauncherBrowseMode(typeFilter: filter)
+        let isActive = browseMode == mappedMode
 
         return Button {
-            isPinnedView = false
-            typeFilter = filter
+            browseMode = mappedMode
         } label: {
             HStack(spacing: 2) {
                 Text(label)

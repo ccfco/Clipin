@@ -15,6 +15,16 @@
 "Graphite" = "石墨";
 "Sunrise" = "晨曦";
 "Launch Clipin at login" = "登录时启动 Clipin";
+"Pinned items in the main list" = "普通列表中的固定项";
+"Choose whether pinned items mix into normal browsing, stay in a separate section, or only appear in the pinned view." = "选择固定项是在普通浏览中混排、单独成组，还是仅出现在固定视图里。";
+"Launcher default view" = "启动默认视图";
+"Choose which browse view opens before you start typing. Search always scans the full library." = "选择开始输入前默认打开的浏览视图。搜索始终扫描整个资料库。";
+"All Items" = "全部项目";
+"Pinned Items" = "固定项";
+"Remember Last View" = "记住上次视图";
+"Mixed with recent items" = "与最近项目混排";
+"Separate pinned section" = "单独固定分组";
+"Only in pinned view" = "仅在固定视图显示";
 "General" = "通用";
 "Privacy" = "隐私";
 "Sensitive content is always excluded" = "始终排除敏感内容";
