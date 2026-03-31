@@ -33,6 +33,14 @@ private final class ClipinPanel: NSPanel {
     }
 }
 
+/// 设置窗口需要像系统偏好页一样支持 Esc 关闭；
+/// 让 responder chain 先给内容控件机会，只有无人消费 cancel 时才真正关窗。
+private final class ClipinSettingsWindow: NSWindow {
+    override func cancelOperation(_ sender: Any?) {
+        performClose(sender)
+    }
+}
+
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
@@ -877,7 +885,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window = existingWindow
             isNew = false
         } else {
-            let newWindow = NSWindow(
+            let newWindow = ClipinSettingsWindow(
                 contentRect: NSRect(origin: .zero, size: SettingsWindowMetrics.size),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,

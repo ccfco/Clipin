@@ -815,8 +815,8 @@ struct SettingsView: View {
     }
 
     private func settingFieldRow<Control: View>(
-        _ title: String,
-        description: String? = nil,
+        _ title: LocalizedStringKey,
+        description: LocalizedStringKey? = nil,
         @ViewBuilder control: () -> Control
     ) -> some View {
         HStack(alignment: description == nil ? .firstTextBaseline : .top, spacing: 18) {
@@ -837,8 +837,8 @@ struct SettingsView: View {
     }
 
     private func toggleSettingRow(
-        _ title: String,
-        description: String,
+        _ title: LocalizedStringKey,
+        description: LocalizedStringKey,
         note: String? = nil,
         isOn: Binding<Bool>
     ) -> some View {
@@ -866,9 +866,37 @@ struct SettingsView: View {
     }
 
     private func actionRow(
-        _ title: String,
+        _ title: LocalizedStringKey,
+        description: LocalizedStringKey,
+        buttonTitle: LocalizedStringKey,
+        action: @escaping () -> Void
+    ) -> some View {
+        actionRow(
+            title: title,
+            descriptionView: Text(description),
+            buttonTitle: buttonTitle,
+            action: action
+        )
+    }
+
+    private func actionRow(
+        _ title: LocalizedStringKey,
         description: String,
-        buttonTitle: String,
+        buttonTitle: LocalizedStringKey,
+        action: @escaping () -> Void
+    ) -> some View {
+        actionRow(
+            title: title,
+            descriptionView: Text(description),
+            buttonTitle: buttonTitle,
+            action: action
+        )
+    }
+
+    private func actionRow<Description: View>(
+        title: LocalizedStringKey,
+        descriptionView: Description,
+        buttonTitle: LocalizedStringKey,
         action: @escaping () -> Void
     ) -> some View {
         HStack(alignment: .top, spacing: 18) {
@@ -876,7 +904,7 @@ struct SettingsView: View {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
 
-                Text(description)
+                descriptionView
                     .font(.system(size: 11))
                     .foregroundStyle(hierarchy.support.subduedInk)
             }
@@ -896,10 +924,10 @@ struct SettingsView: View {
                 .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 13, weight: .medium))
 
-                Text(message)
+                Text(LocalizedStringKey(message))
                     .font(.system(size: 11))
                     .foregroundStyle(hierarchy.support.subduedInk)
             }
