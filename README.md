@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/macOS-15.0%2B-blue" alt="macOS 15.0+">
   <img src="https://img.shields.io/badge/Rust-1.75%2B-orange" alt="Rust 1.75+">
   <img src="https://img.shields.io/badge/Swift-6.0-red" alt="Swift 6.0">
-  <img src="https://img.shields.io/badge/version-0.1.5-brightgreen" alt="v0.1.5">
+  <img src="https://img.shields.io/badge/version-0.1.6-brightgreen" alt="v0.1.6">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
 </p>
 
