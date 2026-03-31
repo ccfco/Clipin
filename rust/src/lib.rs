@@ -313,13 +313,43 @@ mod tests {
     }
 
     #[test]
+    fn test_search_matches_spaced_ime_pinyin_and_keeps_hot_item_first() {
+        let core = setup_core();
+
+        let hot = core
+            .save_item("注意：高频条目".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        let cold = core
+            .save_item("注意：低频条目".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        for _ in 0..10 {
+            core.increment_paste_count(hot.id.clone()).unwrap();
+        }
+        core.increment_paste_count(cold.id).unwrap();
+
+        let results = core.search("zhu yi".into(), None);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].content, "注意：高频条目");
+        assert_eq!(results[0].paste_count, 10);
+
+        let list_results = core.search_list_items("zhu yi".into(), None);
+        assert_eq!(list_results.len(), 2);
+        assert_eq!(list_results[0].preview, "注意：高频条目");
+        assert_eq!(list_results[0].paste_count, 10);
+    }
+
+    #[test]
     fn test_search_like_metachar_escaping() {
         let core = setup_core();
 
         // 保存含 LIKE 元字符的内容
-        core.save_item("100% done".into(), ClipType::Text, None, None, None).unwrap();
-        core.save_item("file_name.txt".into(), ClipType::Text, None, None, None).unwrap();
-        core.save_item("hello world".into(), ClipType::Text, None, None, None).unwrap();
+        core.save_item("100% done".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.save_item("file_name.txt".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.save_item("hello world".into(), ClipType::Text, None, None, None)
+            .unwrap();
 
         // 搜 "%" 应只匹配 "100% done"，不匹配所有记录
         let pct = core.search("%".into(), None);

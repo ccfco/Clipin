@@ -38,8 +38,43 @@ struct PreservedItemState {
     is_pinned: bool,
 }
 
+#[derive(Clone, Debug)]
+struct SearchQuery {
+    raw: String,
+    raw_fts: String,
+    raw_like: String,
+    normalized_pinyin: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct SearchHit<T: SearchSortable> {
+    item: T,
+    raw_rank: Option<f64>,
+}
+
+trait SearchSortable: Clone {
+    fn item_id(&self) -> &str;
+    fn item_is_pinned(&self) -> bool;
+    fn item_paste_count(&self) -> i32;
+    fn item_copy_count(&self) -> i32;
+    fn item_created_at(&self) -> i64;
+}
+
 impl Storage {
     const LIST_PREVIEW_CHARS: i32 = 240;
+
+    fn build_search_query(query: &str) -> SearchQuery {
+        let raw = query.trim().to_string();
+        SearchQuery {
+            raw_fts: Self::build_fts5_query_for_columns(
+                &raw,
+                &["content", "source_name", "ocr_text"],
+            ),
+            raw_like: Self::escape_like_pattern(&raw),
+            normalized_pinyin: Self::normalize_pinyin_query(&raw),
+            raw,
+        }
+    }
 
     pub fn new(db_path: &str, image_dir: &str) -> Result<Self, ClipinError> {
         let conn = Connection::open(db_path)?;
@@ -64,10 +99,10 @@ impl Storage {
     fn run_migrations(&self, from_version: i32) -> Result<(), ClipinError> {
         // v1-v4: 纯 SQL，单次持锁执行完
         {
-        let conn = self.conn.lock().unwrap();
-        if from_version < 1 {
-            conn.execute_batch(
-                "
+            let conn = self.conn.lock().unwrap();
+            if from_version < 1 {
+                conn.execute_batch(
+                    "
                 CREATE TABLE IF NOT EXISTS clip_items (
                     id          TEXT PRIMARY KEY,
                     content     TEXT NOT NULL DEFAULT '',
@@ -112,42 +147,42 @@ impl Storage {
 
                 PRAGMA user_version = 1;
                 ",
-            )?;
-        }
+                )?;
+            }
 
-        // 未来加字段示例（v2）：
-        // if from_version < 2 {
-        //     conn.execute_batch("
-        //         ALTER TABLE clip_items ADD COLUMN tags TEXT NOT NULL DEFAULT '';
-        //         PRAGMA user_version = 2;
-        //     ")?;
-        // }
+            // 未来加字段示例（v2）：
+            // if from_version < 2 {
+            //     conn.execute_batch("
+            //         ALTER TABLE clip_items ADD COLUMN tags TEXT NOT NULL DEFAULT '';
+            //         PRAGMA user_version = 2;
+            //     ")?;
+            // }
 
-        if from_version < 2 {
-            // 检查列是否已存在（防止重复 ALTER 崩溃）
-            let has_copy_count: bool = conn
-                .prepare("PRAGMA table_info(clip_items)")?
-                .query_map([], |row| row.get::<_, String>(1))?
-                .any(|name| name.as_deref() == Ok("copy_count"));
+            if from_version < 2 {
+                // 检查列是否已存在（防止重复 ALTER 崩溃）
+                let has_copy_count: bool = conn
+                    .prepare("PRAGMA table_info(clip_items)")?
+                    .query_map([], |row| row.get::<_, String>(1))?
+                    .any(|name| name.as_deref() == Ok("copy_count"));
 
-            if !has_copy_count {
-                // DROP 触发器避免 UPDATE 时触发大量无效 FTS 写入（v3 会重建 FTS）
-                conn.execute_batch(
-                    "DROP TRIGGER IF EXISTS clip_items_ai;
+                if !has_copy_count {
+                    // DROP 触发器避免 UPDATE 时触发大量无效 FTS 写入（v3 会重建 FTS）
+                    conn.execute_batch(
+                        "DROP TRIGGER IF EXISTS clip_items_ai;
                      DROP TRIGGER IF EXISTS clip_items_ad;
                      DROP TRIGGER IF EXISTS clip_items_au;
                      ALTER TABLE clip_items ADD COLUMN copy_count INTEGER NOT NULL DEFAULT 1;
                      ALTER TABLE clip_items ADD COLUMN first_copied_at INTEGER NOT NULL DEFAULT 0;
                      UPDATE clip_items SET first_copied_at = created_at WHERE first_copied_at = 0;",
-                )?;
+                    )?;
+                }
+                conn.execute_batch("PRAGMA user_version = 2;")?;
             }
-            conn.execute_batch("PRAGMA user_version = 2;")?;
-        }
 
-        if from_version < 3 {
-            // 重建 FTS5 虚拟表，使用 trigram tokenizer 支持任意子串搜索
-            conn.execute_batch(
-                "
+            if from_version < 3 {
+                // 重建 FTS5 虚拟表，使用 trigram tokenizer 支持任意子串搜索
+                conn.execute_batch(
+                    "
                 DROP TRIGGER IF EXISTS clip_items_ai;
                 DROP TRIGGER IF EXISTS clip_items_ad;
                 DROP TRIGGER IF EXISTS clip_items_au;
@@ -183,13 +218,13 @@ impl Storage {
 
                 PRAGMA user_version = 3;
                 ",
-            )?;
-        }
+                )?;
+            }
 
-        if from_version < 4 {
-            // 添加 OCR 文字列，并重建 FTS5 以索引 ocr_text，使图片内容可搜索
-            conn.execute_batch(
-                "
+            if from_version < 4 {
+                // 添加 OCR 文字列，并重建 FTS5 以索引 ocr_text，使图片内容可搜索
+                conn.execute_batch(
+                    "
                 ALTER TABLE clip_items ADD COLUMN ocr_text TEXT;
 
                 DROP TRIGGER IF EXISTS clip_items_ai;
@@ -228,8 +263,8 @@ impl Storage {
 
                 PRAGMA user_version = 4;
                 ",
-            )?;
-        }
+                )?;
+            }
         } // end v1-v4 locked block
 
         // v5: 添加 pinyin 列、重建 FTS5 索引、回填拼音
@@ -326,10 +361,13 @@ impl Storage {
         // 只选取尚未回填的条目，已有 pinyin 的跳过（避免多余 FTS UPDATE）
         let items: Vec<(i64, String)> = {
             let conn = self.conn.lock().unwrap();
-            let mut stmt = conn.prepare("SELECT rowid, content FROM clip_items WHERE pinyin_flat = ''")?;
-            stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?
-                .filter_map(|r| r.ok())
-                .collect()
+            let mut stmt =
+                conn.prepare("SELECT rowid, content FROM clip_items WHERE pinyin_flat = ''")?;
+            stmt.query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect()
         };
         if items.is_empty() {
             return Ok(());
@@ -384,16 +422,21 @@ impl Storage {
         }
     }
 
-    fn load_image_paths_for_hash(conn: &Connection, hash: &str) -> Result<Vec<String>, ClipinError> {
-        let mut stmt =
-            conn.prepare("SELECT image_path FROM clip_items WHERE hash = ?1 AND image_path IS NOT NULL")?;
+    fn load_image_paths_for_hash(
+        conn: &Connection,
+        hash: &str,
+    ) -> Result<Vec<String>, ClipinError> {
+        let mut stmt = conn.prepare(
+            "SELECT image_path FROM clip_items WHERE hash = ?1 AND image_path IS NOT NULL",
+        )?;
         let rows = stmt.query_map(params![hash], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
     fn load_image_paths_for_item(conn: &Connection, id: &str) -> Result<Vec<String>, ClipinError> {
-        let mut stmt =
-            conn.prepare("SELECT image_path FROM clip_items WHERE id = ?1 AND image_path IS NOT NULL")?;
+        let mut stmt = conn.prepare(
+            "SELECT image_path FROM clip_items WHERE id = ?1 AND image_path IS NOT NULL",
+        )?;
         let rows = stmt.query_map(params![id], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
@@ -636,86 +679,425 @@ impl Storage {
         result.unwrap_or_default()
     }
 
-    /// 转义 FTS5 MATCH 查询：wrap 到双引号（phrase query），内部的 " 翻倍
-    fn escape_fts5_query(query: &str) -> String {
+    /// 转义 FTS5 phrase query，内部的 " 翻倍。
+    fn escape_fts5_phrase(query: &str) -> String {
         format!("\"{}\"", query.replace('"', "\"\""))
+    }
+
+    fn build_fts5_query_for_columns(query: &str, columns: &[&str]) -> String {
+        let phrase = Self::escape_fts5_phrase(query);
+        columns
+            .iter()
+            .map(|column| format!("{column}:{phrase}"))
+            .collect::<Vec<_>>()
+            .join(" OR ")
     }
 
     /// 转义 LIKE 查询的元字符（% 和 _），配合 SQL 中的 ESCAPE '\' 子句使用
     fn escape_like_pattern(query: &str) -> String {
-        let escaped = query.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+        let escaped = query
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
         format!("%{}%", escaped)
+    }
+
+    fn normalize_pinyin_query(query: &str) -> Option<String> {
+        let mut normalized = String::new();
+
+        for ch in query.chars() {
+            if ch.is_ascii_alphanumeric() {
+                normalized.push(ch.to_ascii_lowercase());
+            } else if ch.is_whitespace() || ch == '\'' || ch == '-' {
+                continue;
+            } else {
+                return None;
+            }
+        }
+
+        if normalized.is_empty() {
+            None
+        } else {
+            Some(normalized)
+        }
+    }
+
+    fn compare_search_hits<T: SearchSortable>(
+        lhs: &SearchHit<T>,
+        rhs: &SearchHit<T>,
+    ) -> std::cmp::Ordering {
+        rhs.item
+            .item_is_pinned()
+            .cmp(&lhs.item.item_is_pinned())
+            .then_with(|| {
+                rhs.item
+                    .item_paste_count()
+                    .cmp(&lhs.item.item_paste_count())
+            })
+            .then_with(|| match (&lhs.raw_rank, &rhs.raw_rank) {
+                (Some(left), Some(right)) => {
+                    left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal)
+                }
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            })
+            .then_with(|| rhs.item.item_copy_count().cmp(&lhs.item.item_copy_count()))
+            .then_with(|| rhs.item.item_created_at().cmp(&lhs.item.item_created_at()))
+    }
+
+    fn merge_search_hits<T: SearchSortable>(
+        raw_hits: Vec<SearchHit<T>>,
+        pinyin_hits: Vec<SearchHit<T>>,
+    ) -> Vec<T> {
+        let mut merged: Vec<SearchHit<T>> = Vec::with_capacity(raw_hits.len() + pinyin_hits.len());
+        let mut index_by_id = std::collections::HashMap::<String, usize>::new();
+
+        for hit in raw_hits.into_iter().chain(pinyin_hits) {
+            let id = hit.item.item_id().to_string();
+            if let Some(index) = index_by_id.get(&id).copied() {
+                if merged[index].raw_rank.is_none() && hit.raw_rank.is_some() {
+                    merged[index].raw_rank = hit.raw_rank;
+                }
+                continue;
+            }
+            index_by_id.insert(id, merged.len());
+            merged.push(hit);
+        }
+
+        merged.sort_by(Self::compare_search_hits);
+        merged.into_iter().take(200).map(|hit| hit.item).collect()
+    }
+
+    fn query_raw_item_hits(
+        conn: &Connection,
+        search: &SearchQuery,
+        type_filter: Option<&ClipType>,
+    ) -> rusqlite::Result<Vec<SearchHit<ClipItem>>> {
+        if search.raw.chars().count() >= 3 {
+            let sql = if type_filter.is_some() {
+                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count,
+                        clip_fts.rank
+                 FROM clip_items ci
+                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                 WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                 LIMIT 200"
+            } else {
+                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count,
+                        clip_fts.rank
+                 FROM clip_items ci
+                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                 WHERE clip_fts MATCH ?1
+                 LIMIT 200"
+            };
+
+            if let Some(t) = type_filter {
+                let mut stmt = conn.prepare(sql)?;
+                stmt.query_map(
+                    params![&search.raw_fts, t.as_str()],
+                    Self::row_to_item_search_hit,
+                )?
+                .collect()
+            } else {
+                let mut stmt = conn.prepare(sql)?;
+                stmt.query_map(params![&search.raw_fts], Self::row_to_item_search_hit)?
+                    .collect()
+            }
+        } else {
+            let sql = if type_filter.is_some() {
+                "SELECT id, content, clip_type, source_app, source_name,
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
+                 FROM clip_items
+                 WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\')
+                   AND clip_type = ?2
+                 LIMIT 200"
+            } else {
+                "SELECT id, content, clip_type, source_app, source_name,
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
+                 FROM clip_items
+                 WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\'
+                 LIMIT 200"
+            };
+
+            if let Some(t) = type_filter {
+                let mut stmt = conn.prepare(sql)?;
+                stmt.query_map(
+                    params![&search.raw_like, t.as_str()],
+                    Self::row_to_item_search_hit_without_rank,
+                )?
+                .collect()
+            } else {
+                let mut stmt = conn.prepare(sql)?;
+                stmt.query_map(
+                    params![&search.raw_like],
+                    Self::row_to_item_search_hit_without_rank,
+                )?
+                .collect()
+            }
+        }
+    }
+
+    fn query_pinyin_item_hits(
+        conn: &Connection,
+        normalized_pinyin: &str,
+        type_filter: Option<&ClipType>,
+    ) -> rusqlite::Result<Vec<SearchHit<ClipItem>>> {
+        if normalized_pinyin.chars().count() >= 3 {
+            let pinyin_fts = Self::build_fts5_query_for_columns(
+                normalized_pinyin,
+                &["pinyin_flat", "pinyin_initials"],
+            );
+            let sql = if type_filter.is_some() {
+                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count,
+                        NULL
+                 FROM clip_items ci
+                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                 WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                 LIMIT 200"
+            } else {
+                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
+                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count,
+                        NULL
+                 FROM clip_items ci
+                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                 WHERE clip_fts MATCH ?1
+                 LIMIT 200"
+            };
+
+            if let Some(t) = type_filter {
+                let mut stmt = conn.prepare(sql)?;
+                stmt.query_map(
+                    params![pinyin_fts, t.as_str()],
+                    Self::row_to_item_search_hit,
+                )?
+                .collect()
+            } else {
+                let mut stmt = conn.prepare(sql)?;
+                stmt.query_map(params![pinyin_fts], Self::row_to_item_search_hit)?
+                    .collect()
+            }
+        } else {
+            let pattern = Self::escape_like_pattern(normalized_pinyin);
+            let sql = if type_filter.is_some() {
+                "SELECT id, content, clip_type, source_app, source_name,
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
+                 FROM clip_items
+                 WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
+                   AND clip_type = ?2
+                 LIMIT 200"
+            } else {
+                "SELECT id, content, clip_type, source_app, source_name,
+                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
+                 FROM clip_items
+                 WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
+                 LIMIT 200"
+            };
+
+            if let Some(t) = type_filter {
+                let mut stmt = conn.prepare(sql)?;
+                stmt.query_map(
+                    params![pattern, t.as_str()],
+                    Self::row_to_item_search_hit_without_rank,
+                )?
+                .collect()
+            } else {
+                let mut stmt = conn.prepare(sql)?;
+                stmt.query_map(params![pattern], Self::row_to_item_search_hit_without_rank)?
+                    .collect()
+            }
+        }
+    }
+
+    fn query_raw_list_hits(
+        conn: &Connection,
+        search: &SearchQuery,
+        type_filter: Option<&ClipType>,
+    ) -> rusqlite::Result<Vec<SearchHit<ClipListItem>>> {
+        if search.raw.chars().count() >= 3 {
+            let sql = if type_filter.is_some() {
+                format!(
+                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
+                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
+                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
+                            clip_fts.rank
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                     LIMIT 200",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            } else {
+                format!(
+                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
+                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
+                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
+                            clip_fts.rank
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1
+                     LIMIT 200",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            };
+
+            if let Some(t) = type_filter {
+                let mut stmt = conn.prepare(&sql)?;
+                stmt.query_map(
+                    params![&search.raw_fts, t.as_str()],
+                    Self::row_to_list_search_hit,
+                )?
+                .collect()
+            } else {
+                let mut stmt = conn.prepare(&sql)?;
+                stmt.query_map(params![&search.raw_fts], Self::row_to_list_search_hit)?
+                    .collect()
+            }
+        } else {
+            let sql = if type_filter.is_some() {
+                format!(
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count, paste_count, copy_count
+                     FROM clip_items
+                     WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\')
+                       AND clip_type = ?2
+                     LIMIT 200",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            } else {
+                format!(
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count, paste_count, copy_count
+                     FROM clip_items
+                     WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\'
+                     LIMIT 200",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            };
+
+            if let Some(t) = type_filter {
+                let mut stmt = conn.prepare(&sql)?;
+                stmt.query_map(
+                    params![&search.raw_like, t.as_str()],
+                    Self::row_to_list_search_hit_without_rank,
+                )?
+                .collect()
+            } else {
+                let mut stmt = conn.prepare(&sql)?;
+                stmt.query_map(
+                    params![&search.raw_like],
+                    Self::row_to_list_search_hit_without_rank,
+                )?
+                .collect()
+            }
+        }
+    }
+
+    fn query_pinyin_list_hits(
+        conn: &Connection,
+        normalized_pinyin: &str,
+        type_filter: Option<&ClipType>,
+    ) -> rusqlite::Result<Vec<SearchHit<ClipListItem>>> {
+        if normalized_pinyin.chars().count() >= 3 {
+            let pinyin_fts = Self::build_fts5_query_for_columns(
+                normalized_pinyin,
+                &["pinyin_flat", "pinyin_initials"],
+            );
+            let sql = if type_filter.is_some() {
+                format!(
+                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
+                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
+                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
+                            NULL
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                     LIMIT 200",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            } else {
+                format!(
+                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
+                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
+                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
+                            NULL
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1
+                     LIMIT 200",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            };
+
+            if let Some(t) = type_filter {
+                let mut stmt = conn.prepare(&sql)?;
+                stmt.query_map(
+                    params![pinyin_fts, t.as_str()],
+                    Self::row_to_list_search_hit,
+                )?
+                .collect()
+            } else {
+                let mut stmt = conn.prepare(&sql)?;
+                stmt.query_map(params![pinyin_fts], Self::row_to_list_search_hit)?
+                    .collect()
+            }
+        } else {
+            let pattern = Self::escape_like_pattern(normalized_pinyin);
+            let sql = if type_filter.is_some() {
+                format!(
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count, paste_count, copy_count
+                     FROM clip_items
+                     WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
+                       AND clip_type = ?2
+                     LIMIT 200",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            } else {
+                format!(
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count, paste_count, copy_count
+                     FROM clip_items
+                     WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
+                     LIMIT 200",
+                    p = Self::LIST_PREVIEW_CHARS
+                )
+            };
+
+            if let Some(t) = type_filter {
+                let mut stmt = conn.prepare(&sql)?;
+                stmt.query_map(
+                    params![pattern, t.as_str()],
+                    Self::row_to_list_search_hit_without_rank,
+                )?
+                .collect()
+            } else {
+                let mut stmt = conn.prepare(&sql)?;
+                stmt.query_map(params![pattern], Self::row_to_list_search_hit_without_rank)?
+                    .collect()
+            }
+        }
     }
 
     pub fn search(&self, query: &str, type_filter: Option<&ClipType>) -> Vec<ClipItem> {
         let conn = self.conn.lock().unwrap();
+        let search = Self::build_search_query(query);
+        let raw_hits = Self::query_raw_item_hits(&conn, &search, type_filter).unwrap_or_default();
+        let pinyin_hits = search
+            .normalized_pinyin
+            .as_deref()
+            .map(|normalized| {
+                Self::query_pinyin_item_hits(&conn, normalized, type_filter).unwrap_or_default()
+            })
+            .unwrap_or_default();
 
-        // trigram 需要 ≥3 字符；短查询回退 LIKE（同时搜拼音列）
-        if query.chars().count() >= 3 {
-            let fts_query = Self::escape_fts5_query(query);
-            // paste_count 首要，BM25 rank 次之，copy_count/created_at 保底
-            let sql = if type_filter.is_some() {
-                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count
-                 FROM clip_items ci
-                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
-                 WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                 LIMIT 200"
-            } else {
-                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count
-                 FROM clip_items ci
-                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
-                 WHERE clip_fts MATCH ?1
-                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                 LIMIT 200"
-            };
-            let result = if let Some(t) = type_filter {
-                conn.prepare(sql).and_then(|mut stmt| {
-                    stmt.query_map(params![fts_query, t.as_str()], Self::row_to_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-            } else {
-                conn.prepare(sql).and_then(|mut stmt| {
-                    stmt.query_map(params![fts_query], Self::row_to_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-            };
-            result.unwrap_or_default()
-        } else {
-            // 短查询：LIKE 覆盖 content / ocr_text / pinyin_flat / pinyin_initials
-            // escape_like_pattern 转义 % 和 _ 元字符，SQL 用 ESCAPE '\' 配合
-            let pattern = Self::escape_like_pattern(query);
-            let sql = if type_filter.is_some() {
-                "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
-                 FROM clip_items
-                 WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
-                   AND clip_type = ?2
-                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                 LIMIT 200"
-            } else {
-                "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
-                 FROM clip_items
-                 WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
-                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                 LIMIT 200"
-            };
-            let result = if let Some(t) = type_filter {
-                conn.prepare(sql).and_then(|mut stmt| {
-                    stmt.query_map(params![pattern, t.as_str()], Self::row_to_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-            } else {
-                conn.prepare(sql).and_then(|mut stmt| {
-                    stmt.query_map(params![pattern], Self::row_to_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-            };
-            result.unwrap_or_default()
-        }
+        Self::merge_search_hits(raw_hits, pinyin_hits)
     }
 
     pub fn search_list_items(
@@ -724,85 +1106,17 @@ impl Storage {
         type_filter: Option<&ClipType>,
     ) -> Vec<ClipListItem> {
         let conn = self.conn.lock().unwrap();
+        let search = Self::build_search_query(query);
+        let raw_hits = Self::query_raw_list_hits(&conn, &search, type_filter).unwrap_or_default();
+        let pinyin_hits = search
+            .normalized_pinyin
+            .as_deref()
+            .map(|normalized| {
+                Self::query_pinyin_list_hits(&conn, normalized, type_filter).unwrap_or_default()
+            })
+            .unwrap_or_default();
 
-        if query.chars().count() >= 3 {
-            let fts_query = Self::escape_fts5_query(query);
-            let sql = if type_filter.is_some() {
-                format!(
-                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
-                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count
-                     FROM clip_items ci
-                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
-                     WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
-                )
-            } else {
-                format!(
-                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
-                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count
-                     FROM clip_items ci
-                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
-                     WHERE clip_fts MATCH ?1
-                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
-                )
-            };
-            let result = if let Some(t) = type_filter {
-                conn.prepare(&sql).and_then(|mut stmt| {
-                    stmt.query_map(params![fts_query, t.as_str()], Self::row_to_list_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-            } else {
-                conn.prepare(&sql).and_then(|mut stmt| {
-                    stmt.query_map(params![fts_query], Self::row_to_list_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-            };
-            result.unwrap_or_default()
-        } else {
-            let pattern = Self::escape_like_pattern(query);
-            let sql = if type_filter.is_some() {
-                format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
-                     FROM clip_items
-                     WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
-                       AND clip_type = ?2
-                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
-                )
-            } else {
-                format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
-                     FROM clip_items
-                     WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
-                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
-                )
-            };
-            let result = if let Some(t) = type_filter {
-                conn.prepare(&sql).and_then(|mut stmt| {
-                    stmt.query_map(params![pattern, t.as_str()], Self::row_to_list_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-            } else {
-                conn.prepare(&sql).and_then(|mut stmt| {
-                    stmt.query_map(params![pattern], Self::row_to_list_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
-            };
-            result.unwrap_or_default()
-        }
+        Self::merge_search_hits(raw_hits, pinyin_hits)
     }
 
     pub fn get_item(&self, id: &str) -> Result<ClipItem, ClipinError> {
@@ -1013,6 +1327,22 @@ impl Storage {
         })
     }
 
+    fn row_to_item_search_hit(row: &rusqlite::Row) -> rusqlite::Result<SearchHit<ClipItem>> {
+        Ok(SearchHit {
+            item: Self::row_to_item(row)?,
+            raw_rank: row.get(13)?,
+        })
+    }
+
+    fn row_to_item_search_hit_without_rank(
+        row: &rusqlite::Row,
+    ) -> rusqlite::Result<SearchHit<ClipItem>> {
+        Ok(SearchHit {
+            item: Self::row_to_item(row)?,
+            raw_rank: None,
+        })
+    }
+
     fn row_to_list_item(row: &rusqlite::Row) -> rusqlite::Result<ClipListItem> {
         let clip_type_str: String = row.get(2)?;
         Ok(ClipListItem {
@@ -1030,6 +1360,22 @@ impl Storage {
         })
     }
 
+    fn row_to_list_search_hit(row: &rusqlite::Row) -> rusqlite::Result<SearchHit<ClipListItem>> {
+        Ok(SearchHit {
+            item: Self::row_to_list_item(row)?,
+            raw_rank: row.get(11)?,
+        })
+    }
+
+    fn row_to_list_search_hit_without_rank(
+        row: &rusqlite::Row,
+    ) -> rusqlite::Result<SearchHit<ClipListItem>> {
+        Ok(SearchHit {
+            item: Self::row_to_list_item(row)?,
+            raw_rank: None,
+        })
+    }
+
     pub fn increment_paste_count(&self, id: &str) -> Result<(), ClipinError> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -1037,6 +1383,42 @@ impl Storage {
             params![id],
         )?;
         Ok(())
+    }
+}
+
+impl SearchSortable for ClipItem {
+    fn item_id(&self) -> &str {
+        &self.id
+    }
+    fn item_is_pinned(&self) -> bool {
+        self.is_pinned
+    }
+    fn item_paste_count(&self) -> i32 {
+        self.paste_count
+    }
+    fn item_copy_count(&self) -> i32 {
+        self.copy_count
+    }
+    fn item_created_at(&self) -> i64 {
+        self.created_at
+    }
+}
+
+impl SearchSortable for ClipListItem {
+    fn item_id(&self) -> &str {
+        &self.id
+    }
+    fn item_is_pinned(&self) -> bool {
+        self.is_pinned
+    }
+    fn item_paste_count(&self) -> i32 {
+        self.paste_count
+    }
+    fn item_copy_count(&self) -> i32 {
+        self.copy_count
+    }
+    fn item_created_at(&self) -> i64 {
+        self.created_at
     }
 }
 
