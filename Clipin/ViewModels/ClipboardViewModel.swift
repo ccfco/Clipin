@@ -72,7 +72,7 @@ final class ClipboardViewModel: ObservableObject {
     private let core: ClipinCore
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
-    /// ⌘1-9 快捷粘贴序列：普通视图=非 pinned 项，固定视图=所有可见 pinned 项
+    /// ⌘1-9 快捷粘贴序列：始终基于当前可见列表；默认浏览不含 pinned，搜索结果可包含 pinned
     private(set) var shortcutOrder: [ClipListItem] = []
     private var debounce: AnyCancellable?
     private var ocrSubscription: AnyCancellable?
@@ -135,9 +135,7 @@ final class ClipboardViewModel: ObservableObject {
             items = core.searchListItems(query: searchQuery, typeFilter: isPinnedView ? nil : typeFilter)
             hasMore = false
         }
-        if isPinnedView {
-            items = items.filter { $0.isPinned }
-        }
+        items = visibleItems(from: items)
         rebuildSections()
 
         let nextID: String?
@@ -472,9 +470,6 @@ final class ClipboardViewModel: ObservableObject {
         var olderMap: [String: Int] = [:]
 
         for item in items {
-            // 固定视图：items 已过滤为 pinned-only，按日期分组显示
-            // 普通视图：pinned 项不显示（专属于固定视图 tab）
-            if !isPinnedView && item.isPinned { continue }
             let date = Date(timeIntervalSince1970: TimeInterval(item.createdAt) / 1000.0)
             if calendar.isDateInToday(date) {
                 today.append(item)
@@ -498,7 +493,18 @@ final class ClipboardViewModel: ObservableObject {
 
         sections = result
         flatOrder = result.flatMap(\.items)
-        // 固定视图：所有可见项即为 pinned，全部纳入 ⌘1-9；普通视图：flatOrder 本身不含 pinned 项
+        // ⌘1-9 始终基于当前可见序列：默认浏览=非 pinned，搜索/固定视图则按实际可见项
         shortcutOrder = flatOrder
+    }
+
+    /// 默认时间线隐藏 pinned，避免 pinned 与最近历史混排；一旦进入搜索，结果必须回到全局视图。
+    private func visibleItems(from fetchedItems: [ClipListItem]) -> [ClipListItem] {
+        if isPinnedView {
+            return fetchedItems.filter(\.isPinned)
+        }
+        if searchQuery.isEmpty {
+            return fetchedItems.filter { !$0.isPinned }
+        }
+        return fetchedItems
     }
 }
