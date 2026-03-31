@@ -135,13 +135,10 @@ final class ClipboardViewModel: ObservableObject {
 
         let typeFilter = effectiveTypeFilter
         if searchQuery.isEmpty {
-            let page = core.getListItems(
-                limit: Int32(Self.pageSize), offset: 0,
-                typeFilter: typeFilter
-            )
-            items = page
-            totalLoadedFromDB = page.count
-            hasMore = !browseMode.isPinnedOnly && page.count == Self.pageSize
+            let page = fetchBrowsePage(offset: 0, typeFilter: typeFilter)
+            items = page.items
+            totalLoadedFromDB = page.rawCount
+            hasMore = page.hasMore
         } else {
             items = core.searchListItems(query: searchQuery, typeFilter: typeFilter)
             hasMore = false
@@ -162,17 +159,14 @@ final class ClipboardViewModel: ObservableObject {
     /// 滚到底时加载下一页，追加到 items 并重建 sections（不重置选中状态）
     func loadMoreItems() {
         guard hasMore, searchQuery.isEmpty, !browseMode.isPinnedOnly else { return }
-        let page = core.getListItems(
-            limit: Int32(Self.pageSize), offset: Int32(totalLoadedFromDB),
-            typeFilter: effectiveTypeFilter
-        )
-        guard !page.isEmpty else {
+        let page = fetchBrowsePage(offset: totalLoadedFromDB, typeFilter: effectiveTypeFilter)
+        guard !page.items.isEmpty || page.hasMore else {
             hasMore = false
             return
         }
-        items = visibleItems(from: items + page)
-        totalLoadedFromDB += page.count
-        hasMore = page.count == Self.pageSize
+        items.append(contentsOf: page.items)
+        totalLoadedFromDB += page.rawCount
+        hasMore = page.hasMore
         rebuildSections()
     }
 
@@ -298,8 +292,8 @@ final class ClipboardViewModel: ObservableObject {
         }
 
         let nextIndex = reverse
-            ? max(currentIndex - 1, 0)
-            : min(currentIndex + 1, modes.count - 1)
+            ? (currentIndex - 1 + modes.count) % modes.count
+            : (currentIndex + 1) % modes.count
         browseMode = modes[nextIndex]
     }
 
@@ -508,6 +502,40 @@ final class ClipboardViewModel: ObservableObject {
     private var shouldShowPinnedSection: Bool {
         guard searchQuery.isEmpty, !browseMode.isPinnedOnly else { return false }
         return settings.pinnedItemsPresentation == .topSection
+    }
+
+    /// 当普通浏览选择“仅在 pinned 视图显示”时，分页要以“可见项页”而不是“原始 SQL 页”为准，
+    /// 否则第一页可能被隐藏的 pinned 条目吃满，列表会错误显示为空。
+    private func fetchBrowsePage(offset: Int, typeFilter: ClipType?) -> (items: [ClipListItem], rawCount: Int, hasMore: Bool) {
+        var pageItems: [ClipListItem] = []
+        var rawOffset = offset
+        var rawCount = 0
+        var hasMore = false
+
+        repeat {
+            let chunk = core.getListItems(
+                limit: Int32(Self.pageSize),
+                offset: Int32(rawOffset),
+                typeFilter: typeFilter
+            )
+            guard !chunk.isEmpty else {
+                hasMore = false
+                break
+            }
+
+            rawOffset += chunk.count
+            rawCount += chunk.count
+            pageItems.append(contentsOf: visibleItems(from: chunk))
+            hasMore = chunk.count == Self.pageSize
+        } while requiresVisiblePageBackfill && pageItems.count < Self.pageSize && hasMore
+
+        return (Array(pageItems.prefix(Self.pageSize)), rawCount, hasMore)
+    }
+
+    private var requiresVisiblePageBackfill: Bool {
+        searchQuery.isEmpty
+            && !browseMode.isPinnedOnly
+            && settings.pinnedItemsPresentation == .pinnedOnlyView
     }
 
     private static func makeDateSections(from items: [ClipListItem]) -> [ClipSection] {
