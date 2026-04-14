@@ -596,86 +596,72 @@ extension ClipinGlassPalette {
         let isDark = colorScheme == .dark
 
         switch role {
+        // ── 主 UI 三区：统一 accent tint 语言，shadow 用 diffuse（大 radius 小 opacity）创造呼吸感 ──
+
         case .sidebar:
+            // 主角：accent 最重，shadow 最大，列表区浮在 shell 上
             return ClipinSurfaceStyle(
                 material: isDark ? .thinMaterial : .thickMaterial,
-                // 浅色模式用极低 accent tint：和 shell 底部渐变同色系，有色彩身份感而非死灰
                 tint: isDark ? sidebarTint.opacity(1.0) : Color.accentColor.opacity(0.05),
                 stroke: controlStroke.opacity(isDark ? 0.96 : 1.10),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.015),
-                shadowColor: .black.opacity(isDark ? 0.14 : 0.14),
-                shadowRadius: isDark ? 5 : 12,
+                shadowColor: .black.opacity(isDark ? 0.14 : 0.12),
+                shadowRadius: isDark ? 5 : 16,
+                shadowYOffset: isDark ? 2 : 4
+            )
+
+        case .control:
+            // 搜索框：accent 同色系但更轻，shadow diffuse，和 sidebar 呼应
+            return ClipinSurfaceStyle(
+                material: isDark ? .regularMaterial : .thickMaterial,
+                tint: isDark ? controlFill.opacity(0.96) : Color.accentColor.opacity(0.04),
+                stroke: controlStroke.opacity(isDark ? 0.96 : 1.08),
+                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.010),
+                shadowColor: .black.opacity(isDark ? 0.0 : 0.06),
+                shadowRadius: isDark ? 0 : 12,
+                shadowYOffset: isDark ? 0 : 3
+            )
+
+        case .strip:
+            // 命令条：accent 同 control，shadow 对称，底部收尾
+            return ClipinSurfaceStyle(
+                material: isDark ? .ultraThinMaterial : .thickMaterial,
+                tint: isDark ? controlFill.opacity(0.92) : Color.accentColor.opacity(0.04),
+                stroke: controlStroke.opacity(isDark ? 0.92 : 1.08),
+                highlight: shellHighlight.opacity(isDark ? 0.08 : 0.010),
+                shadowColor: .black.opacity(isDark ? 0.12 : 0.07),
+                shadowRadius: isDark ? 4 : 12,
                 shadowYOffset: isDark ? 2 : 3
             )
 
+        // ── 内容区：neutral，让内容自己说话 ──
+
         case .column:
+            // 预览右栏：安静 neutral，shadow 很轻
             return ClipinSurfaceStyle(
                 material: isDark ? .regularMaterial : .thickMaterial,
                 tint: detailTint.opacity(isDark ? 1.0 : 0.96),
                 stroke: controlStroke.opacity(isDark ? 1.0 : 1.06),
                 highlight: shellHighlight.opacity(isDark ? 0.10 : 0.014),
-                shadowColor: .black.opacity(isDark ? 0.16 : 0.036),
-                shadowRadius: isDark ? 6 : 5,
+                shadowColor: .black.opacity(isDark ? 0.16 : 0.04),
+                shadowRadius: isDark ? 6 : 10,
                 shadowYOffset: isDark ? 3 : 2
             )
 
-        case .floating:
-            return ClipinSurfaceStyle(
-                material: isDark ? .regularMaterial : .thickMaterial,
-                tint: detailTint.opacity(isDark ? 1.0 : 1.04),
-                stroke: controlStroke.opacity(isDark ? 1.0 : 1.10),
-                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.04),
-                shadowColor: .black.opacity(isDark ? 0.18 : 0.10),
-                shadowRadius: isDark ? 18 : 12,
-                shadowYOffset: isDark ? 10 : 6
-            )
-
-        case .control:
-            return ClipinSurfaceStyle(
-                material: isDark ? .regularMaterial : .thickMaterial,
-                tint: controlFill.opacity(isDark ? 0.96 : 1.0),
-                stroke: controlStroke.opacity(isDark ? 0.96 : 1.08),
-                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.010),
-                shadowColor: .black.opacity(isDark ? 0.0 : 0.08),
-                shadowRadius: isDark ? 0 : 8,
-                shadowYOffset: isDark ? 0 : 2
-            )
-
-        case .strip:
-            return ClipinSurfaceStyle(
-                material: isDark ? .ultraThinMaterial : .thickMaterial,
-                // 浅色模式回归 neutral：命令条不需要颜色，shadow 已经足够分层
-                tint: isDark ? controlFill.opacity(0.92) : controlFill.opacity(0.96),
-                stroke: controlStroke.opacity(isDark ? 0.92 : 1.08),
-                highlight: shellHighlight.opacity(isDark ? 0.08 : 0.010),
-                shadowColor: .black.opacity(isDark ? 0.12 : 0.10),
-                shadowRadius: isDark ? 4 : 8,
-                shadowYOffset: isDark ? 2 : 2
-            )
-
-        case .grouped:
-            return ClipinSurfaceStyle(
-                material: isDark ? .thinMaterial : .thickMaterial,
-                tint: keycapTint.opacity(isDark ? 0.86 : 0.96),
-                stroke: controlStroke.opacity(isDark ? 0.90 : 0.88),
-                highlight: shellHighlight.opacity(isDark ? 0.04 : 0.008),
-                shadowColor: .black.opacity(isDark ? 0.10 : 0.024),
-                shadowRadius: isDark ? 4 : 3,
-                shadowYOffset: 1
-            )
-
         case .contentStage:
+            // 内容卡片：最亮（white tint），大 shadow 让它"浮"起来
             return ClipinSurfaceStyle(
                 material: isDark ? .thinMaterial : .regularMaterial,
                 tint: previewCanvasTint.opacity(isDark ? 0.68 : 1.0),
                 stroke: controlStroke.opacity(isDark ? 0.54 : 1.10),
                 highlight: shellHighlight.opacity(isDark ? 0.03 : 0.02),
-                shadowColor: .black.opacity(isDark ? 0.18 : 0.072),
-                shadowRadius: isDark ? 5 : 10,
-                shadowYOffset: isDark ? 2 : 4
+                shadowColor: .black.opacity(isDark ? 0.18 : 0.07),
+                shadowRadius: isDark ? 5 : 14,
+                shadowYOffset: isDark ? 2 : 5
             )
 
         case .metadata:
+            // 元数据块：flat，不抢内容
             return ClipinSurfaceStyle(
                 material: isDark ? .thinMaterial : .regularMaterial,
                 tint: controlFill.opacity(isDark ? 0.86 : 0.88),
@@ -683,6 +669,30 @@ extension ClipinGlassPalette {
                 highlight: shellHighlight.opacity(isDark ? 0.03 : 0.01),
                 shadowColor: .black.opacity(isDark ? 0.08 : 0.0),
                 shadowRadius: isDark ? 4 : 0,
+                shadowYOffset: 1
+            )
+
+        case .floating:
+            // 动作面板：accent 最强（覆盖在最顶层），shadow 最重
+            return ClipinSurfaceStyle(
+                material: isDark ? .regularMaterial : .thickMaterial,
+                tint: isDark ? detailTint.opacity(1.0) : Color.accentColor.opacity(0.06),
+                stroke: controlStroke.opacity(isDark ? 1.0 : 1.10),
+                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.04),
+                shadowColor: .black.opacity(isDark ? 0.18 : 0.12),
+                shadowRadius: isDark ? 18 : 20,
+                shadowYOffset: isDark ? 10 : 8
+            )
+
+        case .grouped:
+            // keycap 小徽标：白色轻薄，tiny shadow
+            return ClipinSurfaceStyle(
+                material: isDark ? .thinMaterial : .thickMaterial,
+                tint: keycapTint.opacity(isDark ? 0.86 : 0.96),
+                stroke: controlStroke.opacity(isDark ? 0.90 : 0.88),
+                highlight: shellHighlight.opacity(isDark ? 0.04 : 0.008),
+                shadowColor: .black.opacity(isDark ? 0.10 : 0.03),
+                shadowRadius: isDark ? 4 : 5,
                 shadowYOffset: 1
             )
         }
@@ -698,8 +708,9 @@ extension ClipinGlassPalette {
         switch (theme, isDark) {
         case (.native, false):
             return Self(
-                shellTintTop: Color(nsColor: .windowBackgroundColor).opacity(0.52),
-                shellTintBottom: Color(nsColor: .windowBackgroundColor).opacity(0.38),
+                // 降低 shellTint 覆盖率，让 thickMaterial 固有色透出，整体更轻盈
+                shellTintTop: Color(nsColor: .windowBackgroundColor).opacity(0.44),
+                shellTintBottom: Color(nsColor: .windowBackgroundColor).opacity(0.26),
                 shellHighlight: Color.white.opacity(0.028),
                 shellWash: Color.white.opacity(0.014),
                 chromeTint: Color.clear,
