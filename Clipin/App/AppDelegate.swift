@@ -340,7 +340,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         vm.onClose = { [weak self] in self?.hideFloatingNotePanel() }
         self.floatingNoteViewModel = vm
 
-        let panel = NSPanel(
+        // 复用 ClipinPanel：.borderless 下默认 canBecomeKey=false，
+        // ClipinPanel 已 override 为 true，确保 NSTextView 能接收键盘输入。
+        let panel = ClipinPanel(
             contentRect: NSRect(origin: .zero, size: FloatingNotePanelMetrics.size),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
