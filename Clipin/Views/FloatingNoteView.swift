@@ -40,6 +40,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.isAutomaticTextCompletionEnabled = false
         textView.isContinuousSpellCheckingEnabled = false
 
+        textView.insertionPointColor = NSColor(red: 0.80, green: 0.15, blue: 0.38, alpha: 1)
         textView.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.textContainer?.lineFragmentPadding = 0
