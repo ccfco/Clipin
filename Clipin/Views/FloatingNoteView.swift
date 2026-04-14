@@ -276,18 +276,48 @@ struct FloatingNoteFilePicker: View {
     }
 }
 
+// MARK: - ToolbarIconButton
+
+/// 工具栏图标按钮：hover 时在图标右侧淡入快捷键文字，移开消失。
+private struct ToolbarIconButton: View {
+    let systemName: String
+    let shortcut: String          // 空字符串表示不显示快捷键
+    var isActive: Bool = false
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: systemName)
+                    .font(.system(size: 12))
+                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                if !shortcut.isEmpty {
+                    Text(shortcut)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .opacity(isHovered ? 0.65 : 0)
+                        .animation(.easeInOut(duration: 0.1), value: isHovered)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
 // MARK: - FloatingNoteView
 
 /// 浮动笔记主界面：工具栏 + Markdown 编辑区 + ⌘P 文件选择器覆盖层。
+/// 工具栏默认收起（文件名变淡、按钮隐藏），hover 后展开显示完整控件。
 struct FloatingNoteView: View {
     @ObservedObject var viewModel: FloatingNoteViewModel
+    @State private var isToolbarHovered = false
 
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
                 toolbar
-                Divider()
-                    .opacity(0.3)
                 MarkdownTextView(
                     text: $viewModel.content,
                     onSave: viewModel.save,
@@ -307,81 +337,57 @@ struct FloatingNoteView: View {
         .onAppear { viewModel.loadFile() }
     }
 
-    // MARK: Toolbar
+    // MARK: Toolbar（无分割线，浑然一体）
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            fileNameLabel
+            // 文件名：hover 时正常显示，平时变淡
+            Text(viewModel.displayFileName)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .opacity(isToolbarHovered ? 1 : 0.38)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
+
             Spacer()
-            saveStatusLabel
-            openInFinderButton
-            filePickerButton
-            closeButton
+
+            // 保存状态（hover 时才可见）
+            Group {
+                if viewModel.isSaving {
+                    Text("Saving…")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                } else if viewModel.lastSaveError != nil {
+                    Text("Save failed")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.red.opacity(0.8))
+                }
+            }
+
+            // 功能按钮组：整体随 toolbar hover 淡入/淡出
+            Group {
+                ToolbarIconButton(systemName: "folder", shortcut: "") {
+                    viewModel.revealInFinder()
+                }
+                .opacity(viewModel.fileURL == nil ? 0 : 1)
+
+                ToolbarIconButton(
+                    systemName: "doc.text.magnifyingglass",
+                    shortcut: "⌘P",
+                    isActive: viewModel.isFilePickerVisible
+                ) {
+                    viewModel.toggleFilePicker()
+                }
+                .opacity(viewModel.hasRootFolder ? 1 : 0)
+            }
+            .opacity(isToolbarHovered ? 1 : 0)
+            .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.03))
-    }
-
-    private var fileNameLabel: some View {
-        Text(viewModel.displayFileName)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-    }
-
-    private var saveStatusLabel: some View {
-        Group {
-            if viewModel.isSaving {
-                Text("Saving…")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-            } else if viewModel.lastSaveError != nil {
-                Text("Save failed")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.red.opacity(0.8))
-            }
-        }
-    }
-
-    private var openInFinderButton: some View {
-        Button {
-            viewModel.revealInFinder()
-        } label: {
-            Image(systemName: "folder")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-        .help("Reveal in Finder")
-        .opacity(viewModel.fileURL == nil ? 0 : 1)
-    }
-
-    private var filePickerButton: some View {
-        Button {
-            viewModel.toggleFilePicker()
-        } label: {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 12))
-                .foregroundStyle(viewModel.isFilePickerVisible ? Color.accentColor : .secondary)
-        }
-        .buttonStyle(.plain)
-        .help("切换文件 (⌘P)")
-        .opacity(viewModel.hasRootFolder ? 1 : 0)
-    }
-
-    private var closeButton: some View {
-        Button {
-            viewModel.close()
-        } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-        }
-        .buttonStyle(.plain)
-        .help("Close (⌘W)")
-        .keyboardShortcut("w", modifiers: .command)
+        .contentShape(Rectangle())   // 让整个矩形区域响应 hover
+        .onHover { isToolbarHovered = $0 }
     }
 }
 

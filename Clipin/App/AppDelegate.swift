@@ -54,13 +54,19 @@ private final class ClipinFloatingNotePanel: NSPanel {
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        // 拦截 ⌘P：在 NSTextView keyDown 之前捕获，不走系统 Print 路径
-        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
-           event.charactersIgnoringModifiers == "p" {
+        guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else {
+            return super.performKeyEquivalent(with: event)
+        }
+        switch event.charactersIgnoringModifiers {
+        case "p":   // ⌘P：文件选择器
             onShowFilePicker?()
             return true
+        case "w":   // ⌘W：关闭面板（close button 已移除，由此兜底）
+            onEscape?()
+            return true
+        default:
+            return super.performKeyEquivalent(with: event)
         }
-        return super.performKeyEquivalent(with: event)
     }
 }
 
