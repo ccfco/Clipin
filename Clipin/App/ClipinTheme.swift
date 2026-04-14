@@ -251,7 +251,7 @@ struct ClipinShellBackground: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Material.regularMaterial)
+            .fill(colorScheme == .dark ? Material.regularMaterial : Material.thickMaterial)
             .overlay(
                 LinearGradient(
                     colors: [glass.shellTintTop, glass.shellTintBottom],
@@ -312,7 +312,7 @@ struct ClipinShellBackground: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.12), lineWidth: 0.5)
+                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.22), lineWidth: 0.5)
             )
             .onAppear {
                 guard !reduceMotion else { return }
@@ -682,8 +682,8 @@ extension ClipinGlassPalette {
         switch (theme, isDark) {
         case (.native, false):
             return Self(
-                shellTintTop: Color(nsColor: .windowBackgroundColor).opacity(0.76),
-                shellTintBottom: Color(nsColor: .windowBackgroundColor).opacity(0.60),
+                shellTintTop: Color(nsColor: .windowBackgroundColor).opacity(0.52),
+                shellTintBottom: Color(nsColor: .windowBackgroundColor).opacity(0.38),
                 shellHighlight: Color.white.opacity(0.028),
                 shellWash: Color.white.opacity(0.014),
                 chromeTint: Color.clear,
