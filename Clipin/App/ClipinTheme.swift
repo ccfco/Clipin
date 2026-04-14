@@ -251,7 +251,7 @@ struct ClipinShellBackground: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(colorScheme == .dark ? .regularMaterial : .thinMaterial)
+            .fill(Material.regularMaterial)
             .overlay(
                 LinearGradient(
                     colors: [glass.shellTintTop, glass.shellTintBottom],
@@ -312,7 +312,7 @@ struct ClipinShellBackground: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.042), lineWidth: 0.5)
+                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.12), lineWidth: 0.5)
             )
             .onAppear {
                 guard !reduceMotion else { return }
@@ -584,32 +584,32 @@ extension ClipinGlassPalette {
         switch role {
         case .sidebar:
             return ClipinSurfaceStyle(
-                material: isDark ? .thinMaterial : .regularMaterial,
+                material: isDark ? .thinMaterial : .thickMaterial,
                 tint: sidebarTint.opacity(isDark ? 1.0 : 1.0),
-                stroke: controlStroke.opacity(isDark ? 0.96 : 1.08),
+                stroke: controlStroke.opacity(isDark ? 0.96 : 1.10),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.015),
-                shadowColor: .black.opacity(isDark ? 0.14 : 0.026),
-                shadowRadius: isDark ? 5 : 4,
+                shadowColor: .black.opacity(isDark ? 0.14 : 0.032),
+                shadowRadius: isDark ? 5 : 5,
                 shadowYOffset: isDark ? 2 : 1
             )
 
         case .column:
             return ClipinSurfaceStyle(
-                material: .regularMaterial,
+                material: isDark ? .regularMaterial : .thickMaterial,
                 tint: detailTint.opacity(isDark ? 1.0 : 0.96),
-                stroke: controlStroke.opacity(isDark ? 1.0 : 1.02),
-                highlight: shellHighlight.opacity(isDark ? 0.10 : 0.018),
-                shadowColor: .black.opacity(isDark ? 0.16 : 0.030),
-                shadowRadius: isDark ? 6 : 4,
+                stroke: controlStroke.opacity(isDark ? 1.0 : 1.06),
+                highlight: shellHighlight.opacity(isDark ? 0.10 : 0.014),
+                shadowColor: .black.opacity(isDark ? 0.16 : 0.036),
+                shadowRadius: isDark ? 6 : 5,
                 shadowYOffset: isDark ? 3 : 2
             )
 
         case .floating:
             return ClipinSurfaceStyle(
-                material: .regularMaterial,
-                tint: detailTint,
-                stroke: controlStroke,
-                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.28),
+                material: isDark ? .regularMaterial : .thickMaterial,
+                tint: detailTint.opacity(isDark ? 1.0 : 1.04),
+                stroke: controlStroke.opacity(isDark ? 1.0 : 1.10),
+                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.04),
                 shadowColor: .black.opacity(isDark ? 0.18 : 0.10),
                 shadowRadius: isDark ? 18 : 12,
                 shadowYOffset: isDark ? 10 : 6
@@ -617,34 +617,34 @@ extension ClipinGlassPalette {
 
         case .control:
             return ClipinSurfaceStyle(
-                material: .regularMaterial,
+                material: isDark ? .regularMaterial : .thickMaterial,
                 tint: controlFill.opacity(isDark ? 0.96 : 1.0),
-                stroke: controlStroke.opacity(isDark ? 0.96 : 1.04),
-                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.012),
-                shadowColor: .black.opacity(isDark ? 0.0 : 0.028),
-                shadowRadius: isDark ? 0 : 4,
+                stroke: controlStroke.opacity(isDark ? 0.96 : 1.08),
+                highlight: shellHighlight.opacity(isDark ? 0.12 : 0.010),
+                shadowColor: .black.opacity(isDark ? 0.0 : 0.032),
+                shadowRadius: isDark ? 0 : 5,
                 shadowYOffset: isDark ? 0 : 1
             )
 
         case .strip:
             return ClipinSurfaceStyle(
-                material: isDark ? .ultraThinMaterial : .regularMaterial,
+                material: isDark ? .ultraThinMaterial : .thickMaterial,
                 tint: controlFill.opacity(isDark ? 0.92 : 0.96),
-                stroke: controlStroke.opacity(isDark ? 0.92 : 1.04),
-                highlight: shellHighlight.opacity(isDark ? 0.08 : 0.012),
-                shadowColor: .black.opacity(isDark ? 0.12 : 0.030),
-                shadowRadius: isDark ? 4 : 4,
+                stroke: controlStroke.opacity(isDark ? 0.92 : 1.08),
+                highlight: shellHighlight.opacity(isDark ? 0.08 : 0.010),
+                shadowColor: .black.opacity(isDark ? 0.12 : 0.036),
+                shadowRadius: isDark ? 4 : 5,
                 shadowYOffset: isDark ? 2 : 1
             )
 
         case .grouped:
             return ClipinSurfaceStyle(
-                material: isDark ? .thinMaterial : .regularMaterial,
+                material: isDark ? .thinMaterial : .thickMaterial,
                 tint: keycapTint.opacity(isDark ? 0.86 : 0.96),
-                stroke: controlStroke.opacity(isDark ? 0.90 : 0.82),
-                highlight: shellHighlight.opacity(isDark ? 0.04 : 0.010),
-                shadowColor: .black.opacity(isDark ? 0.10 : 0.018),
-                shadowRadius: isDark ? 4 : 2,
+                stroke: controlStroke.opacity(isDark ? 0.90 : 0.88),
+                highlight: shellHighlight.opacity(isDark ? 0.04 : 0.008),
+                shadowColor: .black.opacity(isDark ? 0.10 : 0.024),
+                shadowRadius: isDark ? 4 : 3,
                 shadowYOffset: 1
             )
 
@@ -682,24 +682,24 @@ extension ClipinGlassPalette {
         switch (theme, isDark) {
         case (.native, false):
             return Self(
-                shellTintTop: Color.clear,
-                shellTintBottom: Color.clear,
-                shellHighlight: Color.white.opacity(0.022),
-                shellWash: Color.white.opacity(0.006),
+                shellTintTop: Color(nsColor: .windowBackgroundColor).opacity(0.76),
+                shellTintBottom: Color(nsColor: .windowBackgroundColor).opacity(0.60),
+                shellHighlight: Color.white.opacity(0.028),
+                shellWash: Color.white.opacity(0.014),
                 chromeTint: Color.clear,
-                sidebarTint: Color.white.opacity(0.26),
-                detailTint: Color.white.opacity(0.18),
-                previewCanvasTint: Color.white.opacity(0.22),
-                keycapTint: Color.white.opacity(0.34),
+                sidebarTint: Color(nsColor: .windowBackgroundColor).opacity(0.38),
+                detailTint: Color(nsColor: .windowBackgroundColor).opacity(0.30),
+                previewCanvasTint: Color.white.opacity(0.30),
+                keycapTint: Color.white.opacity(0.46),
                 emphasisInk: Color.primary,
-                emphasisFill: Color.primary.opacity(0.12),
+                emphasisFill: Color.primary.opacity(0.14),
                 emphasisStrongFill: accent.opacity(0.68),
                 emphasisOnStrongFill: .white,
-                emphasisStroke: Color.primary.opacity(0.15),
-                hoverFill: Color.primary.opacity(0.028),
-                hoverStroke: Color.primary.opacity(0.090),
-                controlFill: Color.white.opacity(0.24),
-                controlStroke: Color.primary.opacity(0.118)
+                emphasisStroke: Color.primary.opacity(0.18),
+                hoverFill: Color.primary.opacity(0.034),
+                hoverStroke: Color.primary.opacity(0.102),
+                controlFill: Color(nsColor: .windowBackgroundColor).opacity(0.34),
+                controlStroke: Color.primary.opacity(0.128)
             )
         case (.native, true):
             return Self(

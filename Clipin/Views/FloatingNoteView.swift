@@ -67,6 +67,7 @@ struct MarkdownTextView: NSViewRepresentable {
         // 只在内容真正不同时才赋值，避免光标跳位
         if textView.string != text {
             textView.string = text
+            // 内容变化后同步上报自然高度，让窗口在显示时即 fit 到正确尺寸
             context.coordinator.reportNaturalHeight(for: textView)
         }
         context.coordinator.reportScrollState(for: scrollView)
@@ -395,10 +396,6 @@ struct FloatingNoteView: View {
                 }
             }
             .background(noteSurface)
-            .overlay {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
-            }
 
             if viewModel.isFilePickerVisible {
                 FloatingNoteFilePicker(viewModel: viewModel)
@@ -411,75 +408,64 @@ struct FloatingNoteView: View {
 
     private var toolbar: some View {
         VStack(spacing: 0) {
-            ZStack {
+            HStack(spacing: 8) {
+                // 文件名：hover 时正常显示，平时变淡
                 Text(viewModel.displayFileName)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
-                    .opacity(isToolbarHovered ? 0.72 : 0.30)
+                    .opacity(isToolbarHovered ? 0.92 : 0.34)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .padding(.horizontal, 120)
                     .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
 
-                HStack(spacing: 8) {
-                    Spacer()
+                Spacer()
 
-                    Group {
-                        if viewModel.isSaving {
-                            Text("Saving…")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.tertiary)
-                        } else if viewModel.lastSaveError != nil {
-                            Text("Save failed")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.red.opacity(0.8))
-                        }
+                // 保存状态（hover 时才可见）
+                Group {
+                    if viewModel.isSaving {
+                        Text("Saving…")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    } else if viewModel.lastSaveError != nil {
+                        Text("Save failed")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red.opacity(0.8))
                     }
-
-                    Group {
-                        ToolbarIconButton(systemName: "folder", shortcut: "") {
-                            viewModel.revealInFinder()
-                        }
-                        .opacity(viewModel.fileURL == nil ? 0 : 1)
-
-                        ToolbarIconButton(
-                            systemName: "doc.text.magnifyingglass",
-                            shortcut: "⌘P",
-                            isActive: viewModel.isFilePickerVisible
-                        ) {
-                            viewModel.toggleFilePicker()
-                        }
-                        .opacity(viewModel.hasRootFolder ? 1 : 0)
-
-                        ToolbarIconButton(
-                            systemName: viewModel.isPreviewMode ? "pencil" : "doc.richtext",
-                            shortcut: "⌘⇧P",
-                            isActive: viewModel.isPreviewMode
-                        ) {
-                            viewModel.togglePreview()
-                        }
-                    }
-                    .opacity(isToolbarHovered ? 0.92 : 0.42)
-                    .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
                 }
+
+                // 功能按钮组：整体随 toolbar hover 淡入/淡出
+                Group {
+                    ToolbarIconButton(systemName: "folder", shortcut: "") {
+                        viewModel.revealInFinder()
+                    }
+                    .opacity(viewModel.fileURL == nil ? 0 : 1)
+
+                    ToolbarIconButton(
+                        systemName: "doc.text.magnifyingglass",
+                        shortcut: "⌘P",
+                        isActive: viewModel.isFilePickerVisible
+                    ) {
+                        viewModel.toggleFilePicker()
+                    }
+                    .opacity(viewModel.hasRootFolder ? 1 : 0)
+
+                    ToolbarIconButton(
+                        systemName: viewModel.isPreviewMode ? "pencil" : "doc.richtext",
+                        shortcut: "⌘⇧P",
+                        isActive: viewModel.isPreviewMode
+                    ) {
+                        viewModel.togglePreview()
+                    }
+                }
+                .opacity(isToolbarHovered ? 1 : 0)
+                .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
             }
-            .frame(height: 38)
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.16),
-                        Color.white.opacity(0.04),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 7)
 
             Rectangle()
-                .fill(Color.primary.opacity(0.07))
+                .fill(Color.primary.opacity(0.08))
                 .frame(height: 0.5)
                 .opacity(isContentAtTop ? 0 : 1)
                 .animation(.easeInOut(duration: 0.16), value: isContentAtTop)
@@ -489,20 +475,8 @@ struct FloatingNoteView: View {
     }
 
     private var noteSurface: some View {
-        ZStack {
-            Rectangle()
-                .fill(Color(nsColor: .windowBackgroundColor))
-
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.22),
-                    Color.white.opacity(0.04),
-                    Color.clear
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
+        Rectangle()
+            .fill(Color(nsColor: .windowBackgroundColor))
     }
 }
 
