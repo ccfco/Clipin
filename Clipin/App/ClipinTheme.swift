@@ -599,11 +599,10 @@ extension ClipinGlassPalette {
         case .sidebar:
             return ClipinSurfaceStyle(
                 material: isDark ? .thinMaterial : .thickMaterial,
-                // 浅色模式用 5% 黑色 tint：比纯 windowBg 更灰，和 shell 形成可见色差
-                tint: isDark ? sidebarTint.opacity(1.0) : Color.primary.opacity(0.05),
+                // 浅色模式用极低 accent tint：和 shell 底部渐变同色系，有色彩身份感而非死灰
+                tint: isDark ? sidebarTint.opacity(1.0) : Color.accentColor.opacity(0.05),
                 stroke: controlStroke.opacity(isDark ? 0.96 : 1.10),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.015),
-                // 浅色模式大幅增加 shadow：主要靠高度差而非颜色差来分层
                 shadowColor: .black.opacity(isDark ? 0.14 : 0.14),
                 shadowRadius: isDark ? 5 : 12,
                 shadowYOffset: isDark ? 2 : 3
@@ -645,8 +644,8 @@ extension ClipinGlassPalette {
         case .strip:
             return ClipinSurfaceStyle(
                 material: isDark ? .ultraThinMaterial : .thickMaterial,
-                // 浅色模式用 4% 黑：命令条比 sidebar 稍浅，作为收尾而非主角
-                tint: isDark ? controlFill.opacity(0.92) : Color.primary.opacity(0.04),
+                // 浅色模式回归 neutral：命令条不需要颜色，shadow 已经足够分层
+                tint: isDark ? controlFill.opacity(0.92) : controlFill.opacity(0.96),
                 stroke: controlStroke.opacity(isDark ? 0.92 : 1.08),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.010),
                 shadowColor: .black.opacity(isDark ? 0.12 : 0.10),
