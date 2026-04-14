@@ -299,6 +299,20 @@ struct ClipinShellBackground: View {
                         )
                 }
             }
+            // Accent 底部渐变：赋予面板色彩身份感，同时在浅色背景下提供额外对比
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.clear,
+                                Color.accentColor.opacity(colorScheme == .dark ? 0.12 : 0.07)
+                            ],
+                            startPoint: UnitPoint(x: 0.5, y: 0.55),
+                            endPoint: .bottom
+                        )
+                    )
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.0 : 0.08), lineWidth: 0.5)
