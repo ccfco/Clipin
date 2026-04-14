@@ -118,8 +118,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         FloatingNotePanelMetrics.defaultSize.height - FloatingNotePanelMetrics.toolbarHeight
 
     private enum FloatingNotePanelMetrics {
-        static let defaultSize = NSSize(width: 400, height: 480)
-        static let minHeight: CGFloat = 160
+        static let defaultSize = NSSize(width: 760, height: 980)
+        static let minSize = NSSize(width: 560, height: 360)
+        static let minHeight: CGFloat = minSize.height
         static let toolbarHeight: CGFloat = 40
         static let originXKey = "floatingNote.savedOriginX"
         static let originYKey = "floatingNote.savedOriginY"
@@ -402,7 +403,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let panel = ClipinFloatingNotePanel(
             contentRect: NSRect(origin: .zero, size: FloatingNotePanelMetrics.defaultSize),
-            styleMask: [.borderless, .nonactivatingPanel, .resizable],
+            styleMask: [.titled, .closable, .fullSizeContentView, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -411,6 +412,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
+        panel.title = ""
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
+        panel.titlebarSeparatorStyle = .none
+        panel.toolbarStyle = .unifiedCompact
+        panel.contentMinSize = FloatingNotePanelMetrics.minSize
         panel.isFloatingPanel = true   // 先设（内部会把 level 重置为 .floating=3）
         panel.level = .statusBar       // 再覆写（25 > Raycast Note 的 modalPanel=8）
         panel.hidesOnDeactivate = false
@@ -479,6 +486,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.makeKeyAndOrderFront(nil)
         // 显示后刷新阴影：让 compositor 基于当前 alpha 轮廓重新计算投影
         panel.invalidateShadow()
+        DispatchQueue.main.async { [weak self] in
+            self?.fitFloatingNotePanel(animated: false)
+        }
         NSApp.activate(ignoringOtherApps: true)
     }
 
