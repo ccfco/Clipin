@@ -344,25 +344,7 @@ struct FloatingNoteView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .background {
-                ZStack {
-                    // 超薄磨砂：透出桌面，悬浮感更强
-                    Color.clear.background(.ultraThinMaterial)
-                    // 顶部高光：模拟光源打在玻璃上
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.09), Color.clear],
-                        startPoint: .top,
-                        endPoint: .init(x: 0.5, y: 0.4)
-                    )
-                    .allowsHitTesting(false)
-                }
-            }
-            // 内边框：玻璃边缘感
-            .overlay {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.13), lineWidth: 0.5)
-                    .allowsHitTesting(false)
-            }
+            .background(.thickMaterial)
 
             if viewModel.isFilePickerVisible {
                 FloatingNoteFilePicker(viewModel: viewModel)
