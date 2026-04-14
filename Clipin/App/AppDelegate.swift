@@ -389,7 +389,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.level = .floating
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
