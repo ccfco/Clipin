@@ -63,7 +63,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let settingsNavigation = SettingsNavigationModel()
     private var monitor: ClipboardMonitor?
     private var viewModel: ClipboardViewModel?
-    private let hotKey = HotKeyService()
+    private let hotKey = HotKeyService(id: 1)
+    private let floatingNoteHotKey = HotKeyService(id: 2)
+    private var floatingNotePanel: NSPanel?
+    private var floatingNoteViewModel: FloatingNoteViewModel?
+
+    private enum FloatingNotePanelMetrics {
+        static let size = NSSize(width: 600, height: 480)
+        static let originXKey = "floatingNote.savedOriginX"
+        static let originYKey = "floatingNote.savedOriginY"
+    }
     private var cancellables = Set<AnyCancellable>()
     private var permissionGrantedObserver: AnyCancellable?
     private var permissionWindow: NSWindow?
@@ -110,8 +119,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         setupPanel()
         loadSavedPanelPosition()
+        setupFloatingNotePanel()
         startMonitoring()
         setupHotKey()
+        setupFloatingNoteHotKey()
         setupSettingsObservers()
         setupUpdateReminderObservers()
         startKeyMonitor()
@@ -322,6 +333,66 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.panel = panel
     }
 
+    // MARK: - Floating Note Panel
+
+    private func setupFloatingNotePanel() {
+        let vm = FloatingNoteViewModel()
+        vm.onClose = { [weak self] in self?.hideFloatingNotePanel() }
+        self.floatingNoteViewModel = vm
+
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: FloatingNotePanelMetrics.size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.contentView = ClipinHostingView(rootView: FloatingNoteView(viewModel: vm))
+        panel.isMovableByWindowBackground = true
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.animationBehavior = .utilityWindow
+
+        // 恢复上次位置，否则居中显示
+        let defaults = UserDefaults.standard
+        if let x = defaults.object(forKey: FloatingNotePanelMetrics.originXKey) as? CGFloat,
+           let y = defaults.object(forKey: FloatingNotePanelMetrics.originYKey) as? CGFloat {
+            panel.setFrameOrigin(NSPoint(x: x, y: y))
+        } else {
+            panel.center()
+        }
+
+        self.floatingNotePanel = panel
+    }
+
+    private func toggleFloatingNotePanel() {
+        guard let panel = floatingNotePanel else { return }
+        if panel.isVisible {
+            hideFloatingNotePanel()
+        } else {
+            showFloatingNotePanel()
+        }
+    }
+
+    private func showFloatingNotePanel() {
+        guard let panel = floatingNotePanel else { return }
+        floatingNoteViewModel?.loadFile()
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func hideFloatingNotePanel() {
+        guard let panel = floatingNotePanel else { return }
+        // 保存位置
+        let origin = panel.frame.origin
+        UserDefaults.standard.set(origin.x, forKey: FloatingNotePanelMetrics.originXKey)
+        UserDefaults.standard.set(origin.y, forKey: FloatingNotePanelMetrics.originYKey)
+        panel.orderOut(nil)
+    }
+
     // MARK: - Monitoring
 
     private func startMonitoring() {
@@ -341,12 +412,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func setupFloatingNoteHotKey() {
+        floatingNoteHotKey.onToggle = { [weak self] in
+            self?.toggleFloatingNotePanel()
+        }
+    }
+
     private func setupSettingsObservers() {
         settings.$shortcut
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] shortcut in
                 self?.hotKey.start(with: shortcut)
+            }
+            .store(in: &cancellables)
+
+        settings.$floatingNoteShortcut
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] shortcut in
+                self?.floatingNoteHotKey.start(with: shortcut)
             }
             .store(in: &cancellables)
 
@@ -585,16 +670,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
               !QuickLookPreviewService.shared.isPresenting,
               viewModel?.isContinuousPasteEnabled == true,
               settingsWindow?.isVisible != true,
-              permissionWindow?.isVisible != true,
-              let panel else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+              permissionWindow?.isVisible != true else { return }
+        scheduleContinuousPasteFocusRestore(after: 0.15)
+    }
+
+    /// 连续粘贴模式的回焦要和鼠标点击后的回焦策略保持一致：
+    /// 先给目标 app 足够时间完成 first responder / paste，再把 panel 抢回。
+    private func scheduleContinuousPasteFocusRestore(after delay: TimeInterval) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self,
                   !self.suppressResignKey,
+                  !QuickLookPreviewService.shared.isPresenting,
                   self.viewModel?.isContinuousPasteEnabled == true,
                   self.settingsWindow?.isVisible != true,
                   self.permissionWindow?.isVisible != true,
+                  let panel = self.panel,
                   panel.isVisible else { return }
             panel.makeKeyAndOrderFront(nil)
+            self.viewModel?.targetAppName = self.resolveTargetApp()?.localizedName
             NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
         }
     }
@@ -1256,14 +1349,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.monitor?.resume()
 
             if continuousPasteEnabled {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                    guard let self else { return }
-                    self.suppressResignKey = false
-                    guard let panel = self.panel else { return }
-                    panel.makeKeyAndOrderFront(nil)
-                    self.viewModel?.targetAppName = self.resolveTargetApp()?.localizedName
-                    NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
-                }
+                self?.suppressResignKey = false
+                self?.scheduleContinuousPasteFocusRestore(after: 0.15)
             }
         }
     }

@@ -228,6 +228,28 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(lastLauncherBrowseMode.rawValue, forKey: Keys.lastLauncherBrowseMode) }
     }
 
+    @Published var floatingNoteShortcut: HotKeyShortcut {
+        didSet {
+            guard let data = try? encoder.encode(floatingNoteShortcut) else { return }
+            defaults.set(data, forKey: Keys.floatingNoteShortcut)
+        }
+    }
+
+    /// 浮动笔记的根目录绝对路径，nil 表示未配置
+    @Published var floatingNoteRootFolder: String? {
+        didSet { defaults.set(floatingNoteRootFolder, forKey: Keys.floatingNoteRootFolder) }
+    }
+
+    /// 文件命名规则，支持 YYYY MM DD HH WW 占位符，或固定文件名（如 inbox.md）
+    @Published var floatingNotePattern: String {
+        didSet { defaults.set(floatingNotePattern, forKey: Keys.floatingNotePattern) }
+    }
+
+    /// 新文件的默认模板内容，空串表示不预填
+    @Published var floatingNoteTemplate: String {
+        didSet { defaults.set(floatingNoteTemplate, forKey: Keys.floatingNoteTemplate) }
+    }
+
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginNote: String?
 
@@ -257,6 +279,10 @@ final class SettingsStore: ObservableObject {
         static let lastLauncherBrowseMode = "settings.lastLauncherBrowseMode"
         static let onboardingVersion = "settings.onboardingVersion"
         static let onboardingCohort = "settings.onboardingCohort"
+        static let floatingNoteShortcut = "settings.floatingNoteShortcut"
+        static let floatingNoteRootFolder = "settings.floatingNoteRootFolder"
+        static let floatingNotePattern = "settings.floatingNotePattern"
+        static let floatingNoteTemplate = "settings.floatingNoteTemplate"
     }
 
     /// 老用户迁移信号：任意一个 key 已存在，就说明这个安装已经被实际使用过，不应突然弹欢迎页。
@@ -287,6 +313,9 @@ final class SettingsStore: ObservableObject {
         let storedShortcut = defaults.data(forKey: Keys.shortcut)
             .flatMap { try? decoder.decode(HotKeyShortcut.self, from: $0) }
             ?? .default
+        let storedFloatingNoteShortcut = defaults.data(forKey: Keys.floatingNoteShortcut)
+            .flatMap { try? decoder.decode(HotKeyShortcut.self, from: $0) }
+            ?? .defaultFloatingNote
         let storedInterval = defaults.string(forKey: Keys.autoBackupInterval)
             .flatMap { AutoBackupInterval(rawValue: $0) } ?? .weekly
         let storedAppearance = defaults.string(forKey: Keys.appearanceOverride)
@@ -308,6 +337,10 @@ final class SettingsStore: ObservableObject {
         self.retentionDays = storedRetention
         self.maxHistoryItems = storedMaxItems
         self.shortcut = storedShortcut
+        self.floatingNoteShortcut = storedFloatingNoteShortcut
+        self.floatingNoteRootFolder = defaults.string(forKey: Keys.floatingNoteRootFolder)
+        self.floatingNotePattern = defaults.string(forKey: Keys.floatingNotePattern) ?? "YYYY-MM-DD.md"
+        self.floatingNoteTemplate = defaults.string(forKey: Keys.floatingNoteTemplate) ?? ""
         self.skipTransientContent = defaults.object(forKey: Keys.skipTransientContent) as? Bool ?? false
         self.autoBackupEnabled = defaults.bool(forKey: Keys.autoBackupEnabled)
         self.autoBackupFolderPath = defaults.string(forKey: Keys.autoBackupFolderPath)

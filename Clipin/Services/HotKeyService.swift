@@ -12,6 +12,12 @@ struct HotKeyShortcut: Codable, Equatable {
         key: "V"
     )
 
+    static let defaultFloatingNote = HotKeyShortcut(
+        keyCode: UInt32(kVK_ANSI_N),
+        modifierFlagsRaw: NSEvent.ModifierFlags.command.union(.shift).rawValue,
+        key: "N"
+    )
+
     var modifierFlags: NSEvent.ModifierFlags {
         NSEvent.ModifierFlags(rawValue: modifierFlagsRaw).intersection(.deviceIndependentFlagsMask)
     }
@@ -96,12 +102,23 @@ struct HotKeyShortcut: Codable, Equatable {
 }
 
 /// 全局快捷键服务 — 使用 Carbon RegisterEventHotKey API
-/// 不需要辅助功能权限，是 macOS 注册全局快捷键的标准方式
+/// 不需要辅助功能权限，是 macOS 注册全局快捷键的标准方式。
+/// 每个实例注册一个独立的 hotKeyID，回调里通过 GetEventParameter 检查实际触发的 id，
+/// 避免多实例时所有实例都响应任意热键。
 final class HotKeyService: @unchecked Sendable {
+    /// Carbon 签名 "CLPI"，所有 Clipin 热键共用同一签名，用 id 区分。
+    private static let signature = OSType(0x434C5049)
+
+    private let hotKeyID: UInt32
     private var hotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
 
     var onToggle: (() -> Void)?
+
+    /// - Parameter id: 每个实例必须使用唯一 id（1=主面板，2=浮动笔记）
+    init(id: UInt32 = 1) {
+        self.hotKeyID = id
+    }
 
     func start(with shortcut: HotKeyShortcut) {
         installHandlerIfNeeded()
@@ -115,8 +132,24 @@ final class HotKeyService: @unchecked Sendable {
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
-            guard let userData else { return OSStatus(eventNotHandledErr) }
+            guard let userData, let event else { return OSStatus(eventNotHandledErr) }
             let service = Unmanaged<HotKeyService>.fromOpaque(userData).takeUnretainedValue()
+
+            // 读出实际触发的 EventHotKeyID，只响应属于自己 id 的事件
+            var firedID = EventHotKeyID()
+            let paramStatus = GetEventParameter(
+                event,
+                EventParamName(kEventParamDirectObject),
+                EventParamType(typeEventHotKeyID),
+                nil,
+                MemoryLayout<EventHotKeyID>.size,
+                nil,
+                &firedID
+            )
+            guard paramStatus == noErr, firedID.id == service.hotKeyID else {
+                return OSStatus(eventNotHandledErr)
+            }
+
             DispatchQueue.main.async {
                 service.onToggle?()
             }
@@ -130,18 +163,18 @@ final class HotKeyService: @unchecked Sendable {
             hotKeyRef = nil
         }
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x434C5049), id: 1)  // "CLPI"
+        let carbonID = EventHotKeyID(signature: HotKeyService.signature, id: hotKeyID)
         let status = RegisterEventHotKey(
             shortcut.keyCode,
             shortcut.carbonModifiers,
-            hotKeyID,
+            carbonID,
             GetApplicationEventTarget(),
             0,
             &hotKeyRef
         )
 
         if status != noErr {
-            print("⚠️ Failed to register hotkey: \(status)")
+            print("⚠️ Failed to register hotkey id=\(hotKeyID): \(status)")
         }
     }
 

@@ -4,27 +4,29 @@ import AppKit
 // MARK: - SettingsTab
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, privacy, retention, transfer, autoBackup, about
+    case general, privacy, retention, floatingNote, transfer, autoBackup, about
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
         switch self {
-        case .general:   return "General"
-        case .privacy:   return "Privacy"
-        case .retention: return "Retention"
-        case .transfer:  return "Transfer"
-        case .autoBackup: return "Auto Backup"
-        case .about: return "About"
+        case .general:      return "General"
+        case .privacy:      return "Privacy"
+        case .retention:    return "Retention"
+        case .floatingNote: return "Floating Note"
+        case .transfer:     return "Transfer"
+        case .autoBackup:   return "Auto Backup"
+        case .about:        return "About"
         }
     }
     var icon: String {
         switch self {
-        case .general:   return "gear"
-        case .privacy:   return "hand.raised"
-        case .retention: return "clock.arrow.circlepath"
-        case .transfer:  return "arrow.left.arrow.right.circle"
-        case .autoBackup: return "icloud.and.arrow.up"
-        case .about: return "info.circle"
+        case .general:      return "gear"
+        case .privacy:      return "hand.raised"
+        case .retention:    return "clock.arrow.circlepath"
+        case .floatingNote: return "note.text"
+        case .transfer:     return "arrow.left.arrow.right.circle"
+        case .autoBackup:   return "icloud.and.arrow.up"
+        case .about:        return "info.circle"
         }
     }
 
@@ -36,6 +38,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
             return "Control which clipboard writes are ignored so sensitive or noisy content stays out."
         case .retention:
             return "Set how long history stays around and when unpinned items should be trimmed."
+        case .floatingNote:
+            return "Configure a floating Markdown note window, opened with a global shortcut."
         case .transfer:
             return "Move clipboard history in or out of Clipin without losing your current library."
         case .autoBackup:
@@ -271,12 +275,13 @@ struct SettingsView: View {
                     detailHeader(for: tab)
 
                     switch tab {
-                    case .general:    generalContent
-                    case .privacy:    privacyContent
-                    case .retention:  retentionContent
-                    case .transfer:   transferContent
-                    case .autoBackup: autoBackupContent
-                    case .about:      aboutContent
+                    case .general:      generalContent
+                    case .privacy:      privacyContent
+                    case .retention:    retentionContent
+                    case .floatingNote: floatingNoteContent
+                    case .transfer:     transferContent
+                    case .autoBackup:   autoBackupContent
+                    case .about:        aboutContent
                     }
                 } else {
                     settingsSelectionPlaceholder
@@ -767,6 +772,105 @@ struct SettingsView: View {
                     )
                 }
             }
+        }
+    }
+
+    // MARK: - Floating Note
+
+    private var floatingNoteContent: some View {
+        VStack(spacing: contentStackSpacing) {
+            // 快捷键
+            contentGroup {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Global shortcut")
+                        .font(.system(size: 13, weight: .medium))
+
+                    HStack(spacing: 10) {
+                        ShortcutRecorder(
+                            shortcut: Binding(
+                                get: { settings.floatingNoteShortcut },
+                                set: { settings.floatingNoteShortcut = $0 }
+                            ),
+                            glass: glass
+                        )
+                        .frame(width: 180, height: 34)
+
+                        Button("Reset") {
+                            settings.floatingNoteShortcut = .defaultFloatingNote
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Text("Press this shortcut to open or hide the floating note window.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(hierarchy.support.subduedInk)
+                }
+            }
+
+            // 根目录 + 命名规则
+            contentGroup {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Note folder")
+                            .font(.system(size: 13, weight: .medium))
+
+                        Text(settings.floatingNoteRootFolder.map(abbreviatedPath)
+                            ?? "Choose the folder where note files will be created.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(hierarchy.support.subduedInk)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+
+                        Button(settings.floatingNoteRootFolder == nil ? "Choose Folder…" : "Change…") {
+                            chooseFloatingNoteFolder()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    groupDivider
+
+                    settingFieldRow(
+                        "File name pattern",
+                        description: "Use YYYY MM DD HH WW as date placeholders, or enter a fixed filename like inbox.md."
+                    ) {
+                        TextField("e.g. YYYY-MM-DD.md", text: $settings.floatingNotePattern)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 220)
+                    }
+                }
+            }
+
+            // 模板
+            contentGroup {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Default template")
+                        .font(.system(size: 13, weight: .medium))
+
+                    Text("Content pre-filled when a new note file is created. Leave empty for a blank file.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(hierarchy.support.subduedInk)
+
+                    TextEditor(text: $settings.floatingNoteTemplate)
+                        .font(.system(size: 12, design: .monospaced))
+                        .frame(height: 100)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
+                }
+            }
+        }
+    }
+
+    private func chooseFloatingNoteFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose"
+        panel.message = "Choose the root folder for floating note files."
+        if panel.runModal() == .OK, let url = panel.url {
+            settings.floatingNoteRootFolder = url.path
         }
     }
 
