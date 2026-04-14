@@ -48,25 +48,29 @@ private final class ClipinFloatingNotePanel: NSPanel {
     override var canBecomeMain: Bool { false }
     var onEscape: (() -> Void)?
     var onShowFilePicker: (() -> Void)?
+    var onTogglePreview: (() -> Void)?
 
     override func cancelOperation(_ sender: Any?) {
         onEscape?()
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command else {
-            return super.performKeyEquivalent(with: event)
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let char = event.charactersIgnoringModifiers
+        if flags == .command {
+            switch char {
+            case "p": onShowFilePicker?(); return true   // ⌘P：文件选择器
+            case "w": onEscape?(); return true           // ⌘W：关闭面板
+            default: break
+            }
         }
-        switch event.charactersIgnoringModifiers {
-        case "p":   // ⌘P：文件选择器
-            onShowFilePicker?()
-            return true
-        case "w":   // ⌘W：关闭面板（close button 已移除，由此兜底）
-            onEscape?()
-            return true
-        default:
-            return super.performKeyEquivalent(with: event)
+        if flags == [.command, .shift] {
+            switch char {
+            case "p": onTogglePreview?(); return true    // ⌘⇧P：切换预览
+            default: break
+            }
         }
+        return super.performKeyEquivalent(with: event)
     }
 }
 
@@ -391,6 +395,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.animationBehavior = .utilityWindow
         panel.onEscape = { [weak self] in self?.hideFloatingNotePanel() }
         panel.onShowFilePicker = { [weak self] in self?.floatingNoteViewModel?.toggleFilePicker() }
+        panel.onTogglePreview  = { [weak self] in self?.floatingNoteViewModel?.togglePreview() }
 
         // 恢复上次位置，否则居中显示
         let defaults = UserDefaults.standard

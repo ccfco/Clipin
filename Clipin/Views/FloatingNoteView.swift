@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import WebKit
 
 // MARK: - MarkdownTextView
 
@@ -99,6 +100,25 @@ struct MarkdownTextView: NSViewRepresentable {
             let height = used.height + tv.textContainerInset.height * 2
             onNaturalHeightChanged?(height)
         }
+    }
+}
+
+// MARK: - MarkdownPreviewView
+
+/// WKWebView 包装：渲染 Markdown 预览，背景透明以透出面板毛玻璃。
+struct MarkdownPreviewView: NSViewRepresentable {
+    let markdown: String
+
+    func makeNSView(context: Context) -> WKWebView {
+        let webView = WKWebView()
+        // 透明背景，让 .regularMaterial 透出
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.layer?.backgroundColor = .clear
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        webView.loadHTMLString(MarkdownRenderer.shared.renderHTML(from: markdown), baseURL: nil)
     }
 }
 
@@ -318,15 +338,20 @@ struct FloatingNoteView: View {
         ZStack {
             VStack(spacing: 0) {
                 toolbar
-                MarkdownTextView(
-                    text: $viewModel.content,
-                    onSave: viewModel.save,
-                    onNaturalHeightChanged: viewModel.onNaturalHeightChanged,
-                    onRegisterFocusHandler: { handler in
-                        viewModel.focusEditorHandler = handler
-                    }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if viewModel.isPreviewMode {
+                    MarkdownPreviewView(markdown: viewModel.content)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    MarkdownTextView(
+                        text: $viewModel.content,
+                        onSave: viewModel.save,
+                        onNaturalHeightChanged: viewModel.onNaturalHeightChanged,
+                        onRegisterFocusHandler: { handler in
+                            viewModel.focusEditorHandler = handler
+                        }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
             .background(.regularMaterial)
 
@@ -380,6 +405,14 @@ struct FloatingNoteView: View {
                     viewModel.toggleFilePicker()
                 }
                 .opacity(viewModel.hasRootFolder ? 1 : 0)
+
+                ToolbarIconButton(
+                    systemName: viewModel.isPreviewMode ? "pencil" : "doc.richtext",
+                    shortcut: "⌘⇧P",
+                    isActive: viewModel.isPreviewMode
+                ) {
+                    viewModel.togglePreview()
+                }
             }
             .opacity(isToolbarHovered ? 1 : 0)
             .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
@@ -399,6 +432,9 @@ final class FloatingNoteViewModel: ObservableObject {
     @Published var isSaving: Bool = false
     @Published var lastSaveError: Error?
     @Published private(set) var fileURL: URL?
+
+    // 预览模式
+    @Published var isPreviewMode = false
 
     // 文件选择器状态
     @Published var isFilePickerVisible = false
@@ -515,6 +551,14 @@ final class FloatingNoteViewModel: ObservableObject {
 
     func toggleFilePicker() {
         if isFilePickerVisible { hideFilePicker() } else { showFilePicker() }
+    }
+
+    func togglePreview() {
+        // 切换预览时关闭文件选择器，避免两层覆盖
+        if isFilePickerVisible { hideFilePicker() }
+        isPreviewMode.toggle()
+        // 切回编辑时恢复 NSTextView 焦点
+        if !isPreviewMode { focusEditorHandler?() }
     }
 
     func movePickerSelection(by delta: Int) {
