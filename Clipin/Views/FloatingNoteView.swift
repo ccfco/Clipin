@@ -298,30 +298,23 @@ struct FloatingNoteFilePicker: View {
 
 // MARK: - ToolbarIconButton
 
-/// 工具栏图标按钮：hover 时在图标右侧淡入快捷键文字，移开消失。
+/// 工具栏图标按钮：hover 时图标微亮，系统 tooltip 显示说明。
 private struct ToolbarIconButton: View {
     let systemName: String
-    let shortcut: String          // 空字符串表示不显示快捷键
+    let shortcut: String          // 仅用于 .help() tooltip，不在界面展示
     var isActive: Bool = false
     let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 3) {
-                Image(systemName: systemName)
-                    .font(.system(size: 12))
-                    .foregroundStyle(isActive ? Color.accentColor : .secondary)
-                if !shortcut.isEmpty {
-                    Text(shortcut)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .opacity(isHovered ? 0.65 : 0)
-                        .animation(.easeInOut(duration: 0.1), value: isHovered)
-                }
-            }
+            Image(systemName: systemName)
+                .font(.system(size: 12))
+                .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                .opacity(isHovered ? 1 : 0.75)
         }
         .buttonStyle(.plain)
+        .help(shortcut.isEmpty ? "" : shortcut)
         .onHover { isHovered = $0 }
     }
 }

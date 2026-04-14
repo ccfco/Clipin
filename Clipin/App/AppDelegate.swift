@@ -102,7 +102,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var floatingNoteViewModel: FloatingNoteViewModel?
 
     private enum FloatingNotePanelMetrics {
-        static let defaultSize = NSSize(width: 400, height: 320)
+        static let defaultSize = NSSize(width: 400, height: 480)
         static let minHeight: CGFloat = 160
         static let toolbarHeight: CGFloat = 40
         static let originXKey = "floatingNote.savedOriginX"
