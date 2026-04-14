@@ -11,10 +11,15 @@ struct MarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     var onSave: (String) -> Void
     var onNaturalHeightChanged: ((CGFloat) -> Void)?
+    var onScrollStateChanged: ((Bool) -> Void)?
     var onRegisterFocusHandler: ((@escaping () -> Void) -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onSave: onSave, onNaturalHeightChanged: onNaturalHeightChanged)
+        Coordinator(
+            onSave: onSave,
+            onNaturalHeightChanged: onNaturalHeightChanged,
+            onScrollStateChanged: onScrollStateChanged
+        )
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -50,30 +55,39 @@ struct MarkdownTextView: NSViewRepresentable {
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        context.coordinator.startObservingScroll(in: scrollView)
 
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.onScrollStateChanged = onScrollStateChanged
         // 只在内容真正不同时才赋值，避免光标跳位
         if textView.string != text {
             textView.string = text
         }
+        context.coordinator.reportScrollState(for: scrollView)
     }
 
     // MARK: - Coordinator
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
+        weak var observedClipView: NSClipView?
         private let onSave: (String) -> Void
         private let onNaturalHeightChanged: ((CGFloat) -> Void)?
+        var onScrollStateChanged: ((Bool) -> Void)?
         private var saveTask: Task<Void, Never>?
 
         init(onSave: @escaping (String) -> Void,
-             onNaturalHeightChanged: ((CGFloat) -> Void)?) {
+             onNaturalHeightChanged: ((CGFloat) -> Void)?,
+             onScrollStateChanged: ((Bool) -> Void)?) {
             self.onSave = onSave
             self.onNaturalHeightChanged = onNaturalHeightChanged
+            self.onScrollStateChanged = onScrollStateChanged
         }
 
         func textDidChange(_ notification: Notification) {
@@ -101,6 +115,36 @@ struct MarkdownTextView: NSViewRepresentable {
             let used = lm.usedRect(for: tc)
             let height = used.height + tv.textContainerInset.height * 2
             onNaturalHeightChanged?(height)
+        }
+
+        func startObservingScroll(in scrollView: NSScrollView) {
+            if let observedClipView {
+                NotificationCenter.default.removeObserver(
+                    self,
+                    name: NSView.boundsDidChangeNotification,
+                    object: observedClipView
+                )
+            }
+            observedClipView = scrollView.contentView
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleClipViewBoundsDidChange(_:)),
+                name: NSView.boundsDidChangeNotification,
+                object: scrollView.contentView
+            )
+            reportScrollState(for: scrollView)
+        }
+
+        func reportScrollState(for scrollView: NSScrollView) {
+            let isAtTop = scrollView.contentView.bounds.minY <= 1
+            onScrollStateChanged?(isAtTop)
+        }
+
+        @objc
+        private func handleClipViewBoundsDidChange(_ notification: Notification) {
+            guard let clipView = notification.object as? NSClipView,
+                  let scrollView = clipView.superview as? NSScrollView else { return }
+            reportScrollState(for: scrollView)
         }
     }
 }
@@ -325,6 +369,7 @@ private struct ToolbarIconButton: View {
 struct FloatingNoteView: View {
     @ObservedObject var viewModel: FloatingNoteViewModel
     @State private var isToolbarHovered = false
+    @State private var isContentAtTop = true
 
     var body: some View {
         ZStack {
@@ -338,6 +383,9 @@ struct FloatingNoteView: View {
                         text: $viewModel.content,
                         onSave: viewModel.save,
                         onNaturalHeightChanged: viewModel.onNaturalHeightChanged,
+                        onScrollStateChanged: { isAtTop in
+                            isContentAtTop = isAtTop
+                        },
                         onRegisterFocusHandler: { handler in
                             viewModel.focusEditorHandler = handler
                         }
@@ -345,7 +393,11 @@ struct FloatingNoteView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .background(.thickMaterial)
+            .background(noteSurface)
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 0.5)
+            }
 
             if viewModel.isFilePickerVisible {
                 FloatingNoteFilePicker(viewModel: viewModel)
@@ -357,62 +409,91 @@ struct FloatingNoteView: View {
     // MARK: Toolbar（无分割线，浑然一体）
 
     private var toolbar: some View {
-        HStack(spacing: 8) {
-            // 文件名：hover 时正常显示，平时变淡
-            Text(viewModel.displayFileName)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .opacity(isToolbarHovered ? 1 : 0.38)
-                .lineLimit(1)
-                .truncationMode(.middle)
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                // 文件名：hover 时正常显示，平时变淡
+                Text(viewModel.displayFileName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .opacity(isToolbarHovered ? 0.92 : 0.34)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
+
+                Spacer()
+
+                // 保存状态（hover 时才可见）
+                Group {
+                    if viewModel.isSaving {
+                        Text("Saving…")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    } else if viewModel.lastSaveError != nil {
+                        Text("Save failed")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red.opacity(0.8))
+                    }
+                }
+
+                // 功能按钮组：整体随 toolbar hover 淡入/淡出
+                Group {
+                    ToolbarIconButton(systemName: "folder", shortcut: "") {
+                        viewModel.revealInFinder()
+                    }
+                    .opacity(viewModel.fileURL == nil ? 0 : 1)
+
+                    ToolbarIconButton(
+                        systemName: "doc.text.magnifyingglass",
+                        shortcut: "⌘P",
+                        isActive: viewModel.isFilePickerVisible
+                    ) {
+                        viewModel.toggleFilePicker()
+                    }
+                    .opacity(viewModel.hasRootFolder ? 1 : 0)
+
+                    ToolbarIconButton(
+                        systemName: viewModel.isPreviewMode ? "pencil" : "doc.richtext",
+                        shortcut: "⌘⇧P",
+                        isActive: viewModel.isPreviewMode
+                    ) {
+                        viewModel.togglePreview()
+                    }
+                }
+                .opacity(isToolbarHovered ? 1 : 0)
                 .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
-
-            Spacer()
-
-            // 保存状态（hover 时才可见）
-            Group {
-                if viewModel.isSaving {
-                    Text("Saving…")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                } else if viewModel.lastSaveError != nil {
-                    Text("Save failed")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.red.opacity(0.8))
-                }
             }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+            .padding(.bottom, 7)
 
-            // 功能按钮组：整体随 toolbar hover 淡入/淡出
-            Group {
-                ToolbarIconButton(systemName: "folder", shortcut: "") {
-                    viewModel.revealInFinder()
-                }
-                .opacity(viewModel.fileURL == nil ? 0 : 1)
-
-                ToolbarIconButton(
-                    systemName: "doc.text.magnifyingglass",
-                    shortcut: "⌘P",
-                    isActive: viewModel.isFilePickerVisible
-                ) {
-                    viewModel.toggleFilePicker()
-                }
-                .opacity(viewModel.hasRootFolder ? 1 : 0)
-
-                ToolbarIconButton(
-                    systemName: viewModel.isPreviewMode ? "pencil" : "doc.richtext",
-                    shortcut: "⌘⇧P",
-                    isActive: viewModel.isPreviewMode
-                ) {
-                    viewModel.togglePreview()
-                }
-            }
-            .opacity(isToolbarHovered ? 1 : 0)
-            .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
+            Rectangle()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 0.5)
+                .opacity(isContentAtTop ? 0 : 1)
+                .animation(.easeInOut(duration: 0.16), value: isContentAtTop)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
         .contentShape(Rectangle())   // 让整个矩形区域响应 hover
         .onHover { isToolbarHovered = $0 }
+    }
+
+    private var noteSurface: some View {
+        ZStack {
+            Rectangle()
+                .fill(Color(nsColor: .windowBackgroundColor).opacity(0.97))
+
+            Rectangle()
+                .fill(.ultraThinMaterial.opacity(0.18))
+
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.30),
+                    Color.white.opacity(0.06),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
     }
 }
 
