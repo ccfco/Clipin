@@ -599,12 +599,14 @@ extension ClipinGlassPalette {
         case .sidebar:
             return ClipinSurfaceStyle(
                 material: isDark ? .thinMaterial : .thickMaterial,
-                tint: sidebarTint.opacity(isDark ? 1.0 : 1.0),
+                // 浅色模式用 5% 黑色 tint：比纯 windowBg 更灰，和 shell 形成可见色差
+                tint: isDark ? sidebarTint.opacity(1.0) : Color.primary.opacity(0.05),
                 stroke: controlStroke.opacity(isDark ? 0.96 : 1.10),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.015),
-                shadowColor: .black.opacity(isDark ? 0.14 : 0.032),
-                shadowRadius: isDark ? 5 : 5,
-                shadowYOffset: isDark ? 2 : 1
+                // 浅色模式大幅增加 shadow：主要靠高度差而非颜色差来分层
+                shadowColor: .black.opacity(isDark ? 0.14 : 0.14),
+                shadowRadius: isDark ? 5 : 12,
+                shadowYOffset: isDark ? 2 : 3
             )
 
         case .column:
@@ -635,20 +637,21 @@ extension ClipinGlassPalette {
                 tint: controlFill.opacity(isDark ? 0.96 : 1.0),
                 stroke: controlStroke.opacity(isDark ? 0.96 : 1.08),
                 highlight: shellHighlight.opacity(isDark ? 0.12 : 0.010),
-                shadowColor: .black.opacity(isDark ? 0.0 : 0.032),
-                shadowRadius: isDark ? 0 : 5,
-                shadowYOffset: isDark ? 0 : 1
+                shadowColor: .black.opacity(isDark ? 0.0 : 0.08),
+                shadowRadius: isDark ? 0 : 8,
+                shadowYOffset: isDark ? 0 : 2
             )
 
         case .strip:
             return ClipinSurfaceStyle(
                 material: isDark ? .ultraThinMaterial : .thickMaterial,
-                tint: controlFill.opacity(isDark ? 0.92 : 0.96),
+                // 浅色模式用 4% 黑：命令条比 sidebar 稍浅，作为收尾而非主角
+                tint: isDark ? controlFill.opacity(0.92) : Color.primary.opacity(0.04),
                 stroke: controlStroke.opacity(isDark ? 0.92 : 1.08),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.010),
-                shadowColor: .black.opacity(isDark ? 0.12 : 0.036),
-                shadowRadius: isDark ? 4 : 5,
-                shadowYOffset: isDark ? 2 : 1
+                shadowColor: .black.opacity(isDark ? 0.12 : 0.10),
+                shadowRadius: isDark ? 4 : 8,
+                shadowYOffset: isDark ? 2 : 2
             )
 
         case .grouped:

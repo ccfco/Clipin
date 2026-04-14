@@ -476,9 +476,11 @@ struct FloatingNoteView: View {
 
     private var noteSurface: some View {
         ZStack {
-            Rectangle()
-                .fill(Color(nsColor: .windowBackgroundColor))
-            // 底部 accent 渐变：和 Launcher shell 同一视觉语言，比 Launcher 更轻
+            // regularMaterial：和 preview pane 同款毛玻璃质感，不再是纯实色
+            Rectangle().fill(Material.regularMaterial)
+            // 轻薄白色蒙层：保持笔记区亮度，防止 material 采样背景色过深
+            Color.white.opacity(0.22)
+            // 底部 accent 渐变：和 Launcher shell 同一视觉语言
             LinearGradient(
                 colors: [Color.clear, Color.accentColor.opacity(0.04)],
                 startPoint: UnitPoint(x: 0.5, y: 0.5),
