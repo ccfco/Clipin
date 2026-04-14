@@ -105,11 +105,20 @@ struct MarkdownTextView: NSViewRepresentable {
 // MARK: - FilePickerSearchField
 
 /// NSTextField 子类：拦截 ↑↓/Enter/Esc，避免这些按键被默认文本行为消耗。
+/// viewDidMoveToWindow 时主动抢焦点——makeNSView 执行时视图尚未进入窗口层级，
+/// 直接调用 makeFirstResponder 会拿到 nil window，必须等到真正进入层级后再请求。
 fileprivate final class NavigableTextField: NSTextField {
     var onUpArrow: (() -> Void)?
     var onDownArrow: (() -> Void)?
     var onReturn: (() -> Void)?
     var onEscape: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else { return }
+        // ZStack 条件渲染每次显示都会触发此回调，确保每次弹出都能获焦
+        DispatchQueue.main.async { window.makeFirstResponder(self) }
+    }
 
     override func keyDown(with event: NSEvent) {
         switch event.keyCode {
@@ -143,8 +152,7 @@ fileprivate struct FilePickerSearchField: NSViewRepresentable {
         field.onDownArrow = onMoveDown
         field.onReturn = onConfirm
         field.onEscape = onCancel
-        // 弹出后立即获焦
-        DispatchQueue.main.async { field.window?.makeFirstResponder(field) }
+        // 焦点由 NavigableTextField.viewDidMoveToWindow 负责，此处不重复请求
         return field
     }
 
