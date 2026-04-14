@@ -25,13 +25,20 @@ struct MainPanel: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            headerBar
-            contentArea
-            bottomBar
+        ZStack {
+            VStack(spacing: 0) {
+                headerBar
+                contentArea
+                bottomBar
+            }
+            .frame(width: 800, height: 540)
+            .background(ClipinShellBackground(glass: glass, sceneState: sceneState))
         }
-        .frame(width: 800, height: 540)
-        .background(ClipinShellBackground(glass: glass, sceneState: sceneState))
+        .padding(ClipinChrome.shellOuterPadding)
+        .frame(
+            width: 800 + (ClipinChrome.shellOuterPadding * 2),
+            height: 540 + (ClipinChrome.shellOuterPadding * 2)
+        )
         .overlay(alignment: .top) {
             if viewModel.isContinuousPasteEnabled {
                 LinearGradient(

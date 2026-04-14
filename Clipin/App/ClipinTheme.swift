@@ -24,6 +24,7 @@ enum VisualTheme: String, CaseIterable {
 enum ClipinChrome {
     // 圆角层级：shell 24 → section 16 → contentStage/search 14 → metadata 12 → row 12 → badge 10/7
     static let shellCornerRadius: CGFloat = 24
+    static let shellOuterPadding: CGFloat = 12
     static let sectionCornerRadius: CGFloat = 16
     static let cardCornerRadius: CGFloat = 18
     static let searchCornerRadius: CGFloat = 14
@@ -297,7 +298,28 @@ struct ClipinShellBackground: View {
             }
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.16), lineWidth: 0.5)
+                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.10 : 0.34), lineWidth: 0.55)
+                    .mask(
+                        LinearGradient(
+                            colors: [Color.white, Color.white.opacity(0.22), Color.clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.055 : 0.085), lineWidth: 0.5)
+            )
+            .shadow(
+                color: .black.opacity(colorScheme == .dark ? 0.28 : 0.13),
+                radius: colorScheme == .dark ? 30 : 22,
+                y: colorScheme == .dark ? 16 : 10
+            )
+            .shadow(
+                color: .black.opacity(colorScheme == .dark ? 0.10 : 0.045),
+                radius: colorScheme == .dark ? 9 : 7,
+                y: colorScheme == .dark ? 3 : 2
             )
             .onAppear {
                 guard !reduceMotion else { return }

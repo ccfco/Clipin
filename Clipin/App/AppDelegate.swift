@@ -49,9 +49,21 @@ private final class ClipinFloatingNotePanel: NSPanel {
     var onEscape: (() -> Void)?
     var onShowFilePicker: (() -> Void)?
     var onTogglePreview: (() -> Void)?
+    var onDoubleClickToolbar: (() -> Void)?
 
     override func cancelOperation(_ sender: Any?) {
         onEscape?()
+    }
+
+    /// 双击工具栏区域（顶部 40pt）触发自适应高度。
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2,
+           let cv = contentView,
+           event.locationInWindow.y >= cv.bounds.height - 40 {
+            onDoubleClickToolbar?()
+            return
+        }
+        super.mouseDown(with: event)
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -100,10 +112,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let floatingNoteHotKey = HotKeyService(id: 2)
     private var floatingNotePanel: ClipinFloatingNotePanel?
     private var floatingNoteViewModel: FloatingNoteViewModel?
+    private var lastFloatingNoteContentHeight: CGFloat =
+        FloatingNotePanelMetrics.defaultSize.height - FloatingNotePanelMetrics.toolbarHeight
 
     private enum FloatingNotePanelMetrics {
-        static let defaultSize = NSSize(width: 400, height: 480)
-        static let minHeight: CGFloat = 160
+        static let defaultSize = NSSize(
+            width: 400 + (ClipinChrome.shellOuterPadding * 2),
+            height: 480 + (ClipinChrome.shellOuterPadding * 2)
+        )
+        static let minHeight: CGFloat = 160 + (ClipinChrome.shellOuterPadding * 2)
         static let toolbarHeight: CGFloat = 40
         static let originXKey = "floatingNote.savedOriginX"
         static let originYKey = "floatingNote.savedOriginY"
@@ -345,7 +362,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.viewModel = vm
 
         let panel = ClipinPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 540),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: 800 + (ClipinChrome.shellOuterPadding * 2),
+                height: 540 + (ClipinChrome.shellOuterPadding * 2)
+            ),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -374,7 +396,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let vm = FloatingNoteViewModel()
         vm.onClose = { [weak self] in self?.hideFloatingNotePanel() }
         vm.onNaturalHeightChanged = { [weak self] height in
-            self?.resizeFloatingNotePanel(toContentHeight: height)
+            guard let self else { return }
+            self.lastFloatingNoteContentHeight = height
+            self.resizeFloatingNotePanel(toContentHeight: height)
         }
         self.floatingNoteViewModel = vm
 
@@ -389,14 +413,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.level = .statusBar   // 25，高于 Raycast Note 等 floating 工具
-        panel.isFloatingPanel = true
+        panel.isFloatingPanel = true   // 先设（内部会把 level 重置为 .floating=3）
+        panel.level = .statusBar       // 再覆写（25 > Raycast Note 的 modalPanel=8）
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.onEscape = { [weak self] in self?.hideFloatingNotePanel() }
         panel.onShowFilePicker = { [weak self] in self?.floatingNoteViewModel?.toggleFilePicker() }
         panel.onTogglePreview  = { [weak self] in self?.floatingNoteViewModel?.togglePreview() }
+        panel.onDoubleClickToolbar = { [weak self] in
+            self?.fitFloatingNotePanel(animated: true)
+        }
 
         // 恢复上次位置，否则居中显示
         let defaults = UserDefaults.standard
@@ -412,16 +439,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 根据文本内容高度自动调整面板高度（保持顶边固定，向下扩展），
     /// 最小 minHeight，最大不超过屏幕可用高度的 75%。
-    private func resizeFloatingNotePanel(toContentHeight contentHeight: CGFloat) {
+    private func resizeFloatingNotePanel(
+        toContentHeight contentHeight: CGFloat,
+        animated: Bool = false,
+        force: Bool = false
+    ) {
         guard let panel = floatingNotePanel, panel.isVisible else { return }
-        let total = contentHeight + FloatingNotePanelMetrics.toolbarHeight
+        let total = contentHeight
+            + FloatingNotePanelMetrics.toolbarHeight
+            + (ClipinChrome.shellOuterPadding * 2)
         let maxH = (NSScreen.main?.visibleFrame.height ?? 800) * 0.75
         let newH = min(max(total, FloatingNotePanelMetrics.minHeight), maxH)
-        guard abs(panel.frame.height - newH) > 4 else { return }
-        let maxY = panel.frame.maxY
-        panel.setFrame(NSRect(x: panel.frame.origin.x, y: maxY - newH,
-                              width: panel.frame.width, height: newH),
-                       display: true, animate: false)
+        guard force || abs(panel.frame.height - newH) > 4 else { return }
+        let newFrame = NSRect(
+            x: panel.frame.origin.x,
+            y: panel.frame.maxY - newH,
+            width: panel.frame.width,
+            height: newH
+        )
+        panel.setFrame(newFrame, display: true, animate: animated)
+    }
+
+    private func fitFloatingNotePanel(animated: Bool) {
+        resizeFloatingNotePanel(
+            toContentHeight: lastFloatingNoteContentHeight,
+            animated: animated,
+            force: true
+        )
     }
 
     private func toggleFloatingNotePanel() {
