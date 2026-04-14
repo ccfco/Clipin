@@ -125,34 +125,19 @@ struct MarkdownPreviewView: NSViewRepresentable {
 
 // MARK: - FilePickerSearchField
 
-/// NSTextField 子类：拦截 ↑↓/Enter/Esc，避免这些按键被默认文本行为消耗。
-/// viewDidMoveToWindow 时主动抢焦点——makeNSView 执行时视图尚未进入窗口层级，
-/// 直接调用 makeFirstResponder 会拿到 nil window，必须等到真正进入层级后再请求。
+/// NSTextField 子类：唯一职责是在进入窗口层级时主动抢焦点。
+/// 不 override keyDown——NSTextField 激活后真正的 first responder 是内嵌的
+/// field editor（共享 NSTextView），keyDown 压根不会到达 NSTextField 本身。
 fileprivate final class NavigableTextField: NSTextField {
-    var onUpArrow: (() -> Void)?
-    var onDownArrow: (() -> Void)?
-    var onReturn: (() -> Void)?
-    var onEscape: (() -> Void)?
-
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         guard let window else { return }
-        // ZStack 条件渲染每次显示都会触发此回调，确保每次弹出都能获焦
         DispatchQueue.main.async { window.makeFirstResponder(self) }
-    }
-
-    override func keyDown(with event: NSEvent) {
-        switch event.keyCode {
-        case 126: onUpArrow?()        // ↑
-        case 125: onDownArrow?()       // ↓
-        case 36, 76: onReturn?()       // Return / numpad Enter
-        case 53: onEscape?()           // Esc
-        default: super.keyDown(with: event)
-        }
     }
 }
 
-/// 文件搜索框：自动获焦，上下键/Enter/Esc 通过回调上报。
+/// 文件搜索框：自动获焦，↑↓/Enter/Esc 通过 doCommandBy delegate 回调上报。
+/// 特殊键必须走 control(_:textView:doCommandBy:)，这才是 field editor 真正的出口。
 fileprivate struct FilePickerSearchField: NSViewRepresentable {
     @Binding var text: String
     var onMoveUp: () -> Void
@@ -169,29 +154,41 @@ fileprivate struct FilePickerSearchField: NSViewRepresentable {
         field.focusRingType = .none
         field.font = .systemFont(ofSize: 14)
         field.delegate = context.coordinator
-        field.onUpArrow = onMoveUp
-        field.onDownArrow = onMoveDown
-        field.onReturn = onConfirm
-        field.onEscape = onCancel
-        // 焦点由 NavigableTextField.viewDidMoveToWindow 负责，此处不重复请求
         return field
     }
 
     func updateNSView(_ field: NavigableTextField, context: Context) {
         if field.stringValue != text { field.stringValue = text }
-        field.onUpArrow = onMoveUp
-        field.onDownArrow = onMoveDown
-        field.onReturn = onConfirm
-        field.onEscape = onCancel
+        // 每次 SwiftUI 更新时同步最新闭包，确保 coordinator 持有的回调不过期
+        context.coordinator.parent = self
     }
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
-        let parent: FilePickerSearchField
+        var parent: FilePickerSearchField   // var：updateNSView 会替换为最新值
+
         init(parent: FilePickerSearchField) { self.parent = parent }
 
         func controlTextDidChange(_ obj: Notification) {
             guard let field = obj.object as? NSTextField else { return }
             parent.text = field.stringValue
+        }
+
+        /// field editor 遇到特殊键时调用此方法（而非 NSTextField.keyDown）。
+        /// 返回 true 表示已处理，false 让系统继续默认行为。
+        func control(_ control: NSControl, textView: NSTextView,
+                     doCommandBy commandSelector: Selector) -> Bool {
+            switch commandSelector {
+            case #selector(NSResponder.moveUp(_:)):
+                parent.onMoveUp(); return true
+            case #selector(NSResponder.moveDown(_:)):
+                parent.onMoveDown(); return true
+            case #selector(NSResponder.insertNewline(_:)):
+                parent.onConfirm(); return true
+            case #selector(NSResponder.cancelOperation(_:)):
+                parent.onCancel(); return true
+            default:
+                return false
+            }
         }
     }
 }
