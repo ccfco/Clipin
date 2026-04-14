@@ -253,12 +253,17 @@ struct SearchBar: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                .strokeBorder(glass.emphasisStroke.opacity(sceneState.headerAccentOpacity), lineWidth: 0.6)
+                .strokeBorder(
+                    glass.emphasisStroke.opacity(colorScheme == .dark ? sceneState.headerAccentOpacity : max(0.28, sceneState.headerAccentOpacity)),
+                    lineWidth: 0.6
+                )
         }
         .shadow(
-            color: glass.emphasisStrongFill.opacity(sceneState.headerGlowOpacity),
-            radius: 12,
-            y: 2
+            color: colorScheme == .dark
+                ? glass.emphasisStrongFill.opacity(sceneState.headerGlowOpacity)
+                : .black.opacity(0.028 + (sceneState.headerGlowOpacity * 0.10)),
+            radius: colorScheme == .dark ? 12 : 5,
+            y: colorScheme == .dark ? 2 : 1
         )
         .animation(ClipinMotion.focusShift, value: sceneState)
     }

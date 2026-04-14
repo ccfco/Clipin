@@ -66,7 +66,14 @@ struct PreviewPane: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: ClipinChrome.detailStageCornerRadius, style: .continuous)
-                    .strokeBorder(glass.emphasisStroke.opacity(sceneState.hasSelection ? 0.12 : 0.06), lineWidth: 0.6)
+                    .strokeBorder(
+                        glass.emphasisStroke.opacity(
+                            colorScheme == .dark
+                                ? (sceneState.hasSelection ? 0.12 : 0.06)
+                                : (sceneState.hasSelection ? 0.24 : 0.14)
+                        ),
+                        lineWidth: 0.6
+                    )
             }
             .padding(.horizontal, ClipinChrome.detailObjectInset)
     }

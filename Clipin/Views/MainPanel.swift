@@ -230,12 +230,17 @@ struct MainPanel: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                .strokeBorder(glass.emphasisStroke.opacity(sceneState.stripAccentOpacity), lineWidth: 0.6)
+                .strokeBorder(
+                    glass.emphasisStroke.opacity(colorScheme == .dark ? sceneState.stripAccentOpacity : max(0.22, sceneState.stripAccentOpacity)),
+                    lineWidth: 0.6
+                )
         }
         .shadow(
-            color: glass.emphasisStrongFill.opacity(sceneState.stripAccentOpacity * (colorScheme == .dark ? 0.18 : 0.10)),
-            radius: 10,
-            y: 3
+            color: colorScheme == .dark
+                ? glass.emphasisStrongFill.opacity(sceneState.stripAccentOpacity * 0.18)
+                : .black.opacity(0.028 + (sceneState.stripAccentOpacity * 0.05)),
+            radius: colorScheme == .dark ? 10 : 5,
+            y: colorScheme == .dark ? 3 : 2
         )
         .scaleEffect(sceneState.stripScale)
         .padding(.horizontal, ClipinChrome.shellGap)
@@ -293,9 +298,9 @@ struct MainPanel: View {
                 tint: hierarchy.command.fill,
                 stroke: hierarchy.command.stroke,
                 highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.18 : 0.34),
-                shadowColor: .black.opacity(colorScheme == .dark ? 0.14 : 0.05),
-                shadowRadius: 8,
-                shadowYOffset: 3
+                shadowColor: .black.opacity(colorScheme == .dark ? 0.14 : 0.04),
+                shadowRadius: colorScheme == .dark ? 8 : 5,
+                shadowYOffset: colorScheme == .dark ? 3 : 2
             )
         )
     }
