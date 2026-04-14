@@ -28,6 +28,12 @@ if [ ! -d "$BUILT_APP" ]; then
     exit 1
 fi
 
+# owner 不匹配时用 osascript 弹图形授权对话框删除并重建（无需 TTY）
+if [ -d "$DEST_APP" ] && [ "$(stat -f '%Su' "$DEST_APP")" != "$(whoami)" ]; then
+    echo "Removing old app (owned by $(stat -f '%Su' "$DEST_APP"), requesting admin privileges)..."
+    osascript -e "do shell script \"rm -rf '$DEST_APP'\" with administrator privileges"
+fi
+
 # 增量同步
 rsync -a --delete "$BUILT_APP/" "$DEST_APP/"
 
