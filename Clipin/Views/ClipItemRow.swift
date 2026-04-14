@@ -232,14 +232,14 @@ struct ClipItemRow: View {
         if isSelected {
             return hierarchy.selection.badgeFill.opacity(0.94)
         }
-        return glass.controlFill.opacity(isHovered ? 0.62 : 0.42)
+        return glass.keycapTint.opacity(isHovered ? 0.94 : 0.82)
     }
 
     private var metaStroke: Color {
         if isSelected {
             return hierarchy.selection.stroke.opacity(0.72)
         }
-        return glass.controlStroke.opacity(isHovered ? 0.58 : 0.38)
+        return glass.controlStroke.opacity(isHovered ? 0.72 : 0.56)
     }
 
     private var typeIndicatorScale: CGFloat {

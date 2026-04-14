@@ -14,7 +14,9 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
         layer?.backgroundColor = .clear
         layer?.cornerRadius = ClipinChrome.shellCornerRadius
         layer?.cornerCurve = .continuous
+        layer?.allowsEdgeAntialiasing = true
         layer?.masksToBounds = true
+        window?.invalidateShadow()
     }
 }
 
@@ -134,6 +136,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickOutsideMonitor: Any?
     private var keyMonitor: Any?
     private var appSwitchObserver: Any?
+    private var activeSpaceObserver: Any?
     private var suppressResignKey = false
     private var hideGeneration: Int = 0
     private var savedPanelOrigin: NSPoint?
@@ -175,6 +178,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupSettingsObservers()
         setupUpdateReminderObservers()
         startKeyMonitor()
+        startActiveSpaceObserver()
         runCleanupAndReload()
         showLaunchExperienceIfNeeded()
         updateReminder.start()
@@ -373,11 +377,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
+        panel.collectionBehavior = [.moveToActiveSpace, .transient, .fullScreenAuxiliary]
         panel.becomesKeyOnlyIfNeeded = false
         panel.onResignKey = { [weak self] in
             self?.handlePanelResignKey()
         }
         panel.delegate = self
+        panel.invalidateShadow()
 
         self.panel = panel
     }
@@ -688,7 +694,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    private func hidePanel() {
+    private func hidePanel(restorePreviousApp: Bool = true) {
         guard let panel else { return }
         viewModel?.isContinuousPasteEnabled = false
         viewModel?.hideActionsPalette()
@@ -710,11 +716,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 panel.orderOut(nil)
                 panel.alphaValue = 1
                 // settings 窗口可见时不还原焦点，避免把 settings 推到其他 app 后面
-                if self.settingsWindow?.isVisible != true {
+                if restorePreviousApp, self.settingsWindow?.isVisible != true {
                     self.previousApp?.activate()
                 }
             }
         })
+    }
+
+    private func startActiveSpaceObserver() {
+        guard activeSpaceObserver == nil else { return }
+        activeSpaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self,
+                  let panel = self.panel,
+                  panel.isVisible else { return }
+            self.hidePanel(restorePreviousApp: false)
+        }
+    }
+
+    private func stopActiveSpaceObserver() {
+        if let observer = activeSpaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            activeSpaceObserver = nil
+        }
     }
 
     /// 根据当前状态决定面板出现位置：优先使用已记忆的位置，否则计算友好默认位置。
@@ -900,6 +927,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         backfillTask?.cancel()
+        stopActiveSpaceObserver()
     }
 
     private func runCleanupAndReload(selectLatest: Bool = false) {

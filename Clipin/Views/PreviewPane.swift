@@ -64,18 +64,6 @@ struct PreviewPane: View {
                     glass: glass
                 )
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: ClipinChrome.detailStageCornerRadius, style: .continuous)
-                    .strokeBorder(
-                        glass.emphasisStroke.opacity(
-                            colorScheme == .dark
-                                ? (sceneState.hasSelection ? 0.12 : 0.06)
-                                : (sceneState.hasSelection ? 0.24 : 0.14)
-                        ),
-                        lineWidth: 0.6
-                    )
-            }
-            .padding(.horizontal, ClipinChrome.detailObjectInset)
     }
 
     private func previewFooter(for item: ClipItem) -> some View {
@@ -740,6 +728,11 @@ private struct PreviewValueBadge: View {
                         .strokeBorder(borderColor, lineWidth: 0.5)
                 )
         )
+        .shadow(
+            color: .black.opacity(isDark ? 0.0 : (item.emphasis ? 0.032 : 0.024)),
+            radius: isDark ? 0 : 2,
+            y: isDark ? 0 : 1
+        )
         .help(item.helpText ?? item.title)
     }
 
@@ -756,9 +749,13 @@ private struct PreviewValueBadge: View {
         }
         switch prominence {
         case .context:
-            return glass.keycapTint.opacity(isDark ? 1.0 : 0.94)
+            return isDark
+                ? glass.keycapTint.opacity(1.0)
+                : Color.white.opacity(0.84)
         case .supporting:
-            return glass.controlFill.opacity(isDark ? 0.76 : 0.60)
+            return isDark
+                ? glass.controlFill.opacity(0.76)
+                : Color.white.opacity(0.70)
         }
     }
 
@@ -768,9 +765,13 @@ private struct PreviewValueBadge: View {
         }
         switch prominence {
         case .context:
-            return glass.hoverStroke.opacity(isDark ? 0.85 : 0.68)
+            return isDark
+                ? glass.hoverStroke.opacity(0.85)
+                : Color.primary.opacity(0.12)
         case .supporting:
-            return glass.controlStroke.opacity(isDark ? 0.72 : 0.50)
+            return isDark
+                ? glass.controlStroke.opacity(0.72)
+                : Color.primary.opacity(0.10)
         }
     }
 }
@@ -783,7 +784,7 @@ private struct PreviewFooterRail: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
+            HStack(spacing: 8) {
                 ForEach(entries) { entry in
                     PreviewValueBadge(
                         item: entry.item,

@@ -228,20 +228,6 @@ struct MainPanel: View {
                 glass: glass
             )
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: ClipinChrome.sectionCornerRadius, style: .continuous)
-                .strokeBorder(
-                    glass.emphasisStroke.opacity(colorScheme == .dark ? sceneState.stripAccentOpacity : max(0.22, sceneState.stripAccentOpacity)),
-                    lineWidth: 0.6
-                )
-        }
-        .shadow(
-            color: colorScheme == .dark
-                ? glass.emphasisStrongFill.opacity(sceneState.stripAccentOpacity * 0.18)
-                : .black.opacity(0.028 + (sceneState.stripAccentOpacity * 0.05)),
-            radius: colorScheme == .dark ? 10 : 5,
-            y: colorScheme == .dark ? 3 : 2
-        )
         .scaleEffect(sceneState.stripScale)
         .padding(.horizontal, ClipinChrome.shellGap)
         .padding(.top, ClipinChrome.shellGap)
@@ -256,12 +242,11 @@ struct MainPanel: View {
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
         .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius + 2, style: .continuous)
-                .fill(glass.controlFill.opacity(colorScheme == .dark ? 0.64 : 0.48))
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius + 2, style: .continuous)
-                        .strokeBorder(glass.controlStroke.opacity(colorScheme == .dark ? 0.64 : 0.42), lineWidth: 0.5)
-                )
+            ClipinSurfaceBackground(
+                role: .grouped,
+                cornerRadius: ClipinChrome.badgeCornerRadius + 2,
+                glass: glass
+            )
         )
     }
 

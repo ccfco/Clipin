@@ -203,14 +203,6 @@ struct SearchBar: View {
         glass.hoverStroke.opacity(colorScheme == .dark ? 0.95 : 0.75)
     }
 
-    private var filterRailFill: Color {
-        glass.controlFill.opacity(colorScheme == .dark ? 0.68 : 0.52)
-    }
-
-    private var filterRailStroke: Color {
-        glass.controlStroke.opacity(colorScheme == .dark ? 0.68 : 0.46)
-    }
-
     var body: some View {
         HStack(spacing: 7) {
             searchGlyph
@@ -251,20 +243,6 @@ struct SearchBar: View {
                 glass: glass
             )
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
-                .strokeBorder(
-                    glass.emphasisStroke.opacity(colorScheme == .dark ? sceneState.headerAccentOpacity : max(0.28, sceneState.headerAccentOpacity)),
-                    lineWidth: 0.6
-                )
-        }
-        .shadow(
-            color: colorScheme == .dark
-                ? glass.emphasisStrongFill.opacity(sceneState.headerGlowOpacity)
-                : .black.opacity(0.028 + (sceneState.headerGlowOpacity * 0.10)),
-            radius: colorScheme == .dark ? 12 : 5,
-            y: colorScheme == .dark ? 2 : 1
-        )
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
@@ -284,12 +262,11 @@ struct SearchBar: View {
             .padding(.horizontal, 4)
             .padding(.vertical, 3)
             .background(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(filterRailFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(filterRailStroke, lineWidth: 0.5)
-                    )
+                ClipinSurfaceBackground(
+                    role: .grouped,
+                    cornerRadius: 9,
+                    glass: glass
+                )
             )
     }
 
