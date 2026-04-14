@@ -324,18 +324,10 @@ private struct ToolbarIconButton: View {
 /// 工具栏默认收起（文件名变淡、按钮隐藏），hover 后展开显示完整控件。
 struct FloatingNoteView: View {
     @ObservedObject var viewModel: FloatingNoteViewModel
-    @ObservedObject private var settings = SettingsStore.shared
-    @Environment(\.colorScheme) private var colorScheme
     @State private var isToolbarHovered = false
-
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
 
     var body: some View {
         ZStack {
-            ClipinShellBackground(glass: glass)
-
             VStack(spacing: 0) {
                 toolbar
                 if viewModel.isPreviewMode {
@@ -353,12 +345,12 @@ struct FloatingNoteView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .background(.thickMaterial)
 
             if viewModel.isFilePickerVisible {
                 FloatingNoteFilePicker(viewModel: viewModel)
             }
         }
-        .padding(ClipinChrome.shellOuterPadding)
         .onAppear { viewModel.loadFile() }
     }
 

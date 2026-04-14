@@ -116,11 +116,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         FloatingNotePanelMetrics.defaultSize.height - FloatingNotePanelMetrics.toolbarHeight
 
     private enum FloatingNotePanelMetrics {
-        static let defaultSize = NSSize(
-            width: 400 + (ClipinChrome.shellOuterPadding * 2),
-            height: 480 + (ClipinChrome.shellOuterPadding * 2)
-        )
-        static let minHeight: CGFloat = 160 + (ClipinChrome.shellOuterPadding * 2)
+        static let defaultSize = NSSize(width: 400, height: 480)
+        static let minHeight: CGFloat = 160
         static let toolbarHeight: CGFloat = 40
         static let originXKey = "floatingNote.savedOriginX"
         static let originYKey = "floatingNote.savedOriginY"
@@ -362,12 +359,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.viewModel = vm
 
         let panel = ClipinPanel(
-            contentRect: NSRect(
-                x: 0,
-                y: 0,
-                width: 800 + (ClipinChrome.shellOuterPadding * 2),
-                height: 540 + (ClipinChrome.shellOuterPadding * 2)
-            ),
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 540),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -445,9 +437,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         force: Bool = false
     ) {
         guard let panel = floatingNotePanel, panel.isVisible else { return }
-        let total = contentHeight
-            + FloatingNotePanelMetrics.toolbarHeight
-            + (ClipinChrome.shellOuterPadding * 2)
+        let total = contentHeight + FloatingNotePanelMetrics.toolbarHeight
         let maxH = (NSScreen.main?.visibleFrame.height ?? 800) * 0.75
         let newH = min(max(total, FloatingNotePanelMetrics.minHeight), maxH)
         guard force || abs(panel.frame.height - newH) > 4 else { return }
