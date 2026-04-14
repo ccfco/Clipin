@@ -245,27 +245,65 @@ fileprivate struct FilePickerSearchField: NSViewRepresentable {
 private struct FilePickerRow: View {
     let displayPath: String
     let isSelected: Bool
+    let isCurrent: Bool
+    let metadata: FloatingNoteViewModel.NoteMetadata?
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "doc.text")
                 .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
                 .frame(width: 16)
-            Text(displayPath)
-                .font(.system(size: 13))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer()
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(displayPath)
+                        .font(.system(size: 13))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if isCurrent {
+                        Text("当前")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.accentColor, in: Capsule())
+                    }
+                    Spacer()
+                }
+                if let meta = metadata {
+                    HStack(spacing: 8) {
+                        if let date = meta.modifiedDate {
+                            Text(relativeTimeString(from: date))
+                        }
+                        if !meta.fileSizeString.isEmpty {
+                            Text(meta.fileSizeString)
+                        }
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                }
+            }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.vertical, metadata != nil ? 9 : 7)
         .background(
             isSelected ? Color.accentColor.opacity(0.15) : Color.clear,
             in: RoundedRectangle(cornerRadius: 6, style: .continuous)
         )
         .padding(.horizontal, 6)
         .contentShape(Rectangle())
+    }
+
+    private func relativeTimeString(from date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        switch interval {
+        case ..<60:          return "刚刚"
+        case ..<3600:        return "\(Int(interval / 60)) 分钟前"
+        case ..<86400:       return "\(Int(interval / 3600)) 小时前"
+        case ..<604800:      return "\(Int(interval / 86400)) 天前"
+        default:             return "\(Int(interval / 604800)) 周前"
+        }
     }
 }
 
@@ -294,10 +332,30 @@ struct FloatingNoteFilePicker: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
 
+                // 笔记列表 section header：标题 + 数量
+                let files = viewModel.filteredPickerFiles
+                let totalCount = viewModel.filePickerFiles.count
+                HStack {
+                    Text(viewModel.filePickerQuery.isEmpty ? "最近笔记" : "搜索结果")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if viewModel.filePickerQuery.isEmpty {
+                        Text("\(totalCount) 个")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text("\(files.count) / \(totalCount)")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+
                 Divider().opacity(0.3)
 
                 // 文件列表
-                let files = viewModel.filteredPickerFiles
                 if files.isEmpty {
                     Text(viewModel.filePickerQuery.isEmpty ? "Root Folder 内没有 Markdown 文件" : "无匹配文件")
                         .font(.system(size: 13))
@@ -311,7 +369,9 @@ struct FloatingNoteFilePicker: View {
                                 ForEach(Array(files.enumerated()), id: \.element) { idx, url in
                                     FilePickerRow(
                                         displayPath: viewModel.displayPath(for: url),
-                                        isSelected: idx == viewModel.filePickerSelectedIndex
+                                        isSelected: idx == viewModel.filePickerSelectedIndex,
+                                        isCurrent: url == viewModel.fileURL,
+                                        metadata: viewModel.fileMetadata[url]
                                     )
                                     .id(idx)
                                     .onTapGesture {
@@ -322,7 +382,7 @@ struct FloatingNoteFilePicker: View {
                             }
                             .padding(.vertical, 6)
                         }
-                        .frame(maxHeight: 260)
+                        .frame(maxHeight: 280)
                         .onChange(of: viewModel.filePickerSelectedIndex) { _, idx in
                             withAnimation { proxy.scrollTo(idx, anchor: .center) }
                         }
@@ -418,6 +478,18 @@ struct FloatingNoteView: View {
                     .truncationMode(.middle)
                     .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
 
+                // 字数统计：非空时始终显示
+                if !viewModel.content.isEmpty {
+                    Text("·")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.quaternary)
+                    Text("\(viewModel.content.count) 字")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .opacity(isToolbarHovered ? 0.85 : 0.5)
+                        .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
+                }
+
                 Spacer()
 
                 // 保存状态（hover 时才可见）
@@ -494,6 +566,21 @@ struct FloatingNoteView: View {
 
 @MainActor
 final class FloatingNoteViewModel: ObservableObject {
+
+    // MARK: - 笔记元数据（文件选择器用）
+
+    struct NoteMetadata {
+        let modifiedDate: Date?
+        let fileSize: Int   // bytes
+
+        var fileSizeString: String {
+            guard fileSize > 0 else { return "" }
+            return fileSize < 1024
+                ? "\(fileSize) B"
+                : String(format: "%.1f KB", Double(fileSize) / 1024.0)
+        }
+    }
+
     @Published var content: String = ""
     @Published var isSaving: Bool = false
     @Published var lastSaveError: Error?
@@ -507,6 +594,7 @@ final class FloatingNoteViewModel: ObservableObject {
     @Published var filePickerQuery = ""
     @Published var filePickerSelectedIndex = 0
     @Published var filePickerFiles: [URL] = []
+    @Published var fileMetadata: [URL: NoteMetadata] = [:]
 
     var onClose: (() -> Void)?
     var onNaturalHeightChanged: ((CGFloat) -> Void)?
@@ -598,7 +686,15 @@ final class FloatingNoteViewModel: ObservableObject {
 
     func showFilePicker() {
         guard hasRootFolder, let root = settings.floatingNoteRootFolder else { return }
-        filePickerFiles = service.listMarkdownFiles(in: root)
+        var files = service.listMarkdownFiles(in: root)
+        // 先加载 metadata，再按最近修改时间排序（最新的在前）
+        loadFileMetadata(for: files)
+        files.sort { a, b in
+            let dateA = fileMetadata[a]?.modifiedDate ?? .distantPast
+            let dateB = fileMetadata[b]?.modifiedDate ?? .distantPast
+            return dateA > dateB
+        }
+        filePickerFiles = files
         filePickerQuery = ""
         // 预选当前打开的文件
         if let current = fileURL,
@@ -608,6 +704,20 @@ final class FloatingNoteViewModel: ObservableObject {
             filePickerSelectedIndex = 0
         }
         isFilePickerVisible = true
+    }
+
+    private func loadFileMetadata(for files: [URL]) {
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey, .fileSizeKey]
+        var result: [URL: NoteMetadata] = [:]
+        for url in files {
+            if let values = try? url.resourceValues(forKeys: keys) {
+                result[url] = NoteMetadata(
+                    modifiedDate: values.contentModificationDate,
+                    fileSize: values.fileSize ?? 0
+                )
+            }
+        }
+        fileMetadata = result
     }
 
     func hideFilePicker() {
