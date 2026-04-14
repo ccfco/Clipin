@@ -9,9 +9,10 @@ import Combine
 struct MarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     var onSave: (String) -> Void
+    var onNaturalHeightChanged: ((CGFloat) -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onSave: onSave)
+        Coordinator(onSave: onSave, onNaturalHeightChanged: onNaturalHeightChanged)
     }
 
     func makeNSView(context: Context) -> NSScrollView {
@@ -20,6 +21,10 @@ struct MarkdownTextView: NSViewRepresentable {
 
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
+        // 初始加载完毕后上报一次高度，让窗口在显示前先调整好尺寸
+        DispatchQueue.main.async {
+            context.coordinator.reportNaturalHeight(for: textView)
+        }
 
         textView.isRichText = false
         textView.allowsUndo = true
@@ -54,10 +59,13 @@ struct MarkdownTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
         private let onSave: (String) -> Void
+        private let onNaturalHeightChanged: ((CGFloat) -> Void)?
         private var saveTask: Task<Void, Never>?
 
-        init(onSave: @escaping (String) -> Void) {
+        init(onSave: @escaping (String) -> Void,
+             onNaturalHeightChanged: ((CGFloat) -> Void)?) {
             self.onSave = onSave
+            self.onNaturalHeightChanged = onNaturalHeightChanged
         }
 
         func textDidChange(_ notification: Notification) {
@@ -73,6 +81,17 @@ struct MarkdownTextView: NSViewRepresentable {
                     self.onSave(newText)
                 }
             }
+
+            // 上报内容自然高度，供窗口自动调整
+            reportNaturalHeight(for: tv)
+        }
+
+        func reportNaturalHeight(for tv: NSTextView) {
+            guard let lm = tv.layoutManager, let tc = tv.textContainer else { return }
+            lm.ensureLayout(for: tc)
+            let used = lm.usedRect(for: tc)
+            let height = used.height + tv.textContainerInset.height * 2
+            onNaturalHeightChanged?(height)
         }
     }
 }
@@ -88,8 +107,12 @@ struct FloatingNoteView: View {
             toolbar
             Divider()
                 .opacity(0.3)
-            MarkdownTextView(text: $viewModel.content, onSave: viewModel.save)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            MarkdownTextView(
+                text: $viewModel.content,
+                onSave: viewModel.save,
+                onNaturalHeightChanged: viewModel.onNaturalHeightChanged
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(.regularMaterial)
         .onAppear { viewModel.loadFile() }
@@ -169,6 +192,7 @@ final class FloatingNoteViewModel: ObservableObject {
     @Published private(set) var fileURL: URL?
 
     var onClose: (() -> Void)?
+    var onNaturalHeightChanged: ((CGFloat) -> Void)?
 
     private let service = FloatingNoteService.shared
     private let settings = SettingsStore.shared

@@ -41,6 +41,17 @@ private final class ClipinSettingsWindow: NSWindow {
     }
 }
 
+/// 浮动笔记面板：需要 canBecomeKey 才能让 NSTextView 接收键盘输入；
+/// cancelOperation 处理 Esc 关闭。
+private final class ClipinFloatingNotePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+    var onEscape: (() -> Void)?
+    override func cancelOperation(_ sender: Any?) {
+        onEscape?()
+    }
+}
+
 /// 更新提醒需要轻量浮层：不抢主面板焦点，但要支持首击按钮和 Esc 关闭。
 private final class ClipinUpdateReminderPanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -65,11 +76,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewModel: ClipboardViewModel?
     private let hotKey = HotKeyService(id: 1)
     private let floatingNoteHotKey = HotKeyService(id: 2)
-    private var floatingNotePanel: NSPanel?
+    private var floatingNotePanel: ClipinFloatingNotePanel?
     private var floatingNoteViewModel: FloatingNoteViewModel?
 
     private enum FloatingNotePanelMetrics {
-        static let size = NSSize(width: 600, height: 480)
+        static let defaultSize = NSSize(width: 400, height: 320)
+        static let minHeight: CGFloat = 160
+        static let toolbarHeight: CGFloat = 40
         static let originXKey = "floatingNote.savedOriginX"
         static let originYKey = "floatingNote.savedOriginY"
     }
@@ -338,13 +351,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupFloatingNotePanel() {
         let vm = FloatingNoteViewModel()
         vm.onClose = { [weak self] in self?.hideFloatingNotePanel() }
+        vm.onNaturalHeightChanged = { [weak self] height in
+            self?.resizeFloatingNotePanel(toContentHeight: height)
+        }
         self.floatingNoteViewModel = vm
 
-        // 复用 ClipinPanel：.borderless 下默认 canBecomeKey=false，
-        // ClipinPanel 已 override 为 true，确保 NSTextView 能接收键盘输入。
-        let panel = ClipinPanel(
-            contentRect: NSRect(origin: .zero, size: FloatingNotePanelMetrics.size),
-            styleMask: [.borderless, .nonactivatingPanel],
+        let panel = ClipinFloatingNotePanel(
+            contentRect: NSRect(origin: .zero, size: FloatingNotePanelMetrics.defaultSize),
+            styleMask: [.borderless, .nonactivatingPanel, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -357,6 +371,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
+        panel.onEscape = { [weak self] in self?.hideFloatingNotePanel() }
 
         // 恢复上次位置，否则居中显示
         let defaults = UserDefaults.standard
@@ -368,6 +383,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         self.floatingNotePanel = panel
+    }
+
+    /// 根据文本内容高度自动调整面板高度（保持顶边固定，向下扩展），
+    /// 最小 minHeight，最大不超过屏幕可用高度的 75%。
+    private func resizeFloatingNotePanel(toContentHeight contentHeight: CGFloat) {
+        guard let panel = floatingNotePanel, panel.isVisible else { return }
+        let total = contentHeight + FloatingNotePanelMetrics.toolbarHeight
+        let maxH = (NSScreen.main?.visibleFrame.height ?? 800) * 0.75
+        let newH = min(max(total, FloatingNotePanelMetrics.minHeight), maxH)
+        guard abs(panel.frame.height - newH) > 4 else { return }
+        let maxY = panel.frame.maxY
+        panel.setFrame(NSRect(x: panel.frame.origin.x, y: maxY - newH,
+                              width: panel.frame.width, height: newH),
+                       display: true, animate: false)
     }
 
     private func toggleFloatingNotePanel() {
