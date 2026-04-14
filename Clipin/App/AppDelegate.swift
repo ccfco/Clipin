@@ -42,13 +42,25 @@ private final class ClipinSettingsWindow: NSWindow {
 }
 
 /// 浮动笔记面板：需要 canBecomeKey 才能让 NSTextView 接收键盘输入；
-/// cancelOperation 处理 Esc 关闭。
+/// cancelOperation 处理 Esc 关闭，performKeyEquivalent 拦截 ⌘P 打开文件选择器。
 private final class ClipinFloatingNotePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     var onEscape: (() -> Void)?
+    var onShowFilePicker: (() -> Void)?
+
     override func cancelOperation(_ sender: Any?) {
         onEscape?()
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // 拦截 ⌘P：在 NSTextView keyDown 之前捕获，不走系统 Print 路径
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers == "p" {
+            onShowFilePicker?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
 
@@ -372,6 +384,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
         panel.onEscape = { [weak self] in self?.hideFloatingNotePanel() }
+        panel.onShowFilePicker = { [weak self] in self?.floatingNoteViewModel?.toggleFilePicker() }
 
         // 恢复上次位置，否则居中显示
         let defaults = UserDefaults.standard

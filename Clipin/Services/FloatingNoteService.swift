@@ -49,6 +49,29 @@ final class FloatingNoteService: @unchecked Sendable {
         try String(contentsOf: url, encoding: .utf8)
     }
 
+    /// 枚举 rootFolder 下所有 .md 文件，按最后修改时间降序排列，最多返回 limit 条。
+    func listMarkdownFiles(in rootFolder: String, limit: Int = 100) -> [URL] {
+        let root = URL(fileURLWithPath: rootFolder, isDirectory: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var files: [(url: URL, date: Date)] = []
+        for case let url as URL in enumerator {
+            guard url.pathExtension.lowercased() == "md" else { continue }
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+            guard values?.isRegularFile == true else { continue }
+            files.append((url, values?.contentModificationDate ?? .distantPast))
+        }
+
+        return files
+            .sorted { $0.date > $1.date }
+            .prefix(limit)
+            .map(\.url)
+    }
+
     // MARK: - Placeholder Substitution
 
     /// 支持的占位符：
