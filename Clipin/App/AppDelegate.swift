@@ -393,6 +393,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
+        // 加深阴影：比系统默认更大的扩散半径，强化悬浮层次感
+        panel.contentView?.shadow = {
+            let s = NSShadow()
+            s.shadowColor = NSColor.black.withAlphaComponent(0.35)
+            s.shadowBlurRadius = 32
+            s.shadowOffset = NSSize(width: 0, height: -6)
+            return s
+        }()
         panel.onEscape = { [weak self] in self?.hideFloatingNotePanel() }
         panel.onShowFilePicker = { [weak self] in self?.floatingNoteViewModel?.toggleFilePicker() }
         panel.onTogglePreview  = { [weak self] in self?.floatingNoteViewModel?.togglePreview() }
