@@ -26,7 +26,7 @@ targets:
         excludes:
           - Info.plist
         optional: true
-      - path: Clipin/Generated
+      - path: Clipin/Generated/clipin_core.swift
         optional: true
     settings:
       base:
