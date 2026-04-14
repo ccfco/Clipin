@@ -393,6 +393,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .utilityWindow
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.onEscape = { [weak self] in self?.hideFloatingNotePanel() }
         panel.onShowFilePicker = { [weak self] in self?.floatingNoteViewModel?.toggleFilePicker() }
         panel.onTogglePreview  = { [weak self] in self?.floatingNoteViewModel?.togglePreview() }
