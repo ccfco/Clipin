@@ -468,6 +468,7 @@ struct FloatingNoteView: View {
                 if viewModel.isPreviewMode {
                     MarkdownPreviewView(markdown: viewModel.content)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .overlay(alignment: .bottom) { bottomBar }
                 } else {
                     MarkdownTextView(
                         text: $viewModel.content,
@@ -481,6 +482,7 @@ struct FloatingNoteView: View {
                         }
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .bottom) { bottomBar }
                 }
             }
             .background(noteSurface)
@@ -498,26 +500,13 @@ struct FloatingNoteView: View {
         VStack(spacing: 0) {
             ZStack {
                 // ── 中间：文件名居中 ──────────────────────────────────
-                HStack(spacing: 4) {
-                    Text(viewModel.displayFileName)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .opacity(isToolbarHovered ? 0.92 : 0.38)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
-
-                    if !viewModel.content.isEmpty {
-                        Text("·")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.quaternary)
-                        Text("\(viewModel.content.count) 字")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                            .opacity(isToolbarHovered ? 0.85 : 0.45)
-                            .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
-                    }
-                }
+                Text(viewModel.displayFileName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .opacity(isToolbarHovered ? 0.92 : 0.38)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
 
                 // ── 两侧 HStack，撑满宽度 ────────────────────────────
                 HStack(spacing: 0) {
@@ -578,6 +567,47 @@ struct FloatingNoteView: View {
         }
         .contentShape(Rectangle())   // 让整个矩形区域响应 hover
         .onHover { isToolbarHovered = $0 }
+    }
+
+    // MARK: 底部状态栏（Raycast 风格：字数居中，右侧对称图标）
+
+    private var bottomBar: some View {
+        ZStack {
+            // 字数居中
+            Text(viewModel.content.isEmpty ? "0 字符" : "\(viewModel.content.count) 字符")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+
+            // 右侧：保存状态 or 格式图标（视觉平衡）
+            HStack {
+                Spacer()
+                Group {
+                    if viewModel.isSaving {
+                        Text("保存中…")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                    } else if viewModel.lastSaveError != nil {
+                        Image(systemName: "exclamationmark.circle")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.red.opacity(0.7))
+                    } else {
+                        Image(systemName: "textformat")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.quaternary)
+                    }
+                }
+                .padding(.trailing, 14)
+            }
+        }
+        .frame(height: 28)
+        .background(
+            // 渐变遮罩：让底部文字在内容背景上可读
+            LinearGradient(
+                colors: [Color.clear, Color.primary.opacity(0.03)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
 
     private var noteSurface: some View {
