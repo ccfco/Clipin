@@ -401,6 +401,34 @@ struct FloatingNoteFilePicker: View {
     }
 }
 
+// MARK: - TrafficLightCloseButton
+
+/// 仿 Raycast Note 的红色关闭按钮：hover 时亮红 + ✕，非 hover 时灰色圆点。
+private struct TrafficLightCloseButton: View {
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(isHovered
+                          ? Color(red: 1.0, green: 0.37, blue: 0.34)
+                          : Color.primary.opacity(0.18))
+                    .frame(width: 12, height: 12)
+                if isHovered {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 6.5, weight: .bold))
+                        .foregroundStyle(Color.black.opacity(0.55))
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .help("关闭 (⌘W)")
+        .onHover { isHovered = $0 }
+    }
+}
+
 // MARK: - ToolbarIconButton
 
 /// 工具栏图标按钮：hover 时图标微亮，系统 tooltip 显示说明。
@@ -464,77 +492,83 @@ struct FloatingNoteView: View {
         .onAppear { viewModel.loadFile() }
     }
 
-    // MARK: Toolbar（无分割线，浑然一体）
+    // MARK: Toolbar（Raycast 三段式：左侧 traffic light / 中间 title / 右侧按钮）
 
     private var toolbar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                // 文件名：hover 时正常显示，平时变淡
-                Text(viewModel.displayFileName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .opacity(isToolbarHovered ? 0.92 : 0.34)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
-
-                // 字数统计：非空时始终显示
-                if !viewModel.content.isEmpty {
-                    Text("·")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.quaternary)
-                    Text("\(viewModel.content.count) 字")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
-                        .opacity(isToolbarHovered ? 0.85 : 0.5)
+            ZStack {
+                // ── 中间：文件名居中 ──────────────────────────────────
+                HStack(spacing: 4) {
+                    Text(viewModel.displayFileName)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .opacity(isToolbarHovered ? 0.92 : 0.38)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                         .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
-                }
 
-                Spacer()
-
-                // 保存状态（hover 时才可见）
-                Group {
-                    if viewModel.isSaving {
-                        Text("Saving…")
+                    if !viewModel.content.isEmpty {
+                        Text("·")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.quaternary)
+                        Text("\(viewModel.content.count) 字")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
-                    } else if viewModel.lastSaveError != nil {
-                        Text("Save failed")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.red.opacity(0.8))
+                            .opacity(isToolbarHovered ? 0.85 : 0.45)
+                            .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
                     }
                 }
 
-                // 功能按钮组：整体随 toolbar hover 淡入/淡出
-                Group {
-                    ToolbarIconButton(systemName: "folder", shortcut: "") {
-                        viewModel.revealInFinder()
+                // ── 两侧 HStack，撑满宽度 ────────────────────────────
+                HStack(spacing: 0) {
+                    // 左侧：traffic light 关闭按钮（hover 区域内始终响应）
+                    TrafficLightCloseButton {
+                        viewModel.close()
                     }
-                    .opacity(viewModel.fileURL == nil ? 0 : 1)
+                    .padding(.leading, 12)
 
-                    ToolbarIconButton(
-                        systemName: "doc.text.magnifyingglass",
-                        shortcut: "⌘P",
-                        isActive: viewModel.isFilePickerVisible
-                    ) {
-                        viewModel.toggleFilePicker()
-                    }
-                    .opacity(viewModel.hasRootFolder ? 1 : 0)
+                    Spacer()
 
-                    ToolbarIconButton(
-                        systemName: viewModel.isPreviewMode ? "pencil" : "doc.richtext",
-                        shortcut: "⌘⇧P",
-                        isActive: viewModel.isPreviewMode
-                    ) {
-                        viewModel.togglePreview()
+                    // 右侧：保存状态 + 功能按钮（hover 时淡入）
+                    Group {
+                        if viewModel.isSaving {
+                            Text("Saving…")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.tertiary)
+                        } else if viewModel.lastSaveError != nil {
+                            Text("Save failed")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.red.opacity(0.8))
+                        }
+
+                        ToolbarIconButton(systemName: "folder", shortcut: "") {
+                            viewModel.revealInFinder()
+                        }
+                        .opacity(viewModel.fileURL == nil ? 0 : 1)
+
+                        ToolbarIconButton(
+                            systemName: "doc.text.magnifyingglass",
+                            shortcut: "⌘P",
+                            isActive: viewModel.isFilePickerVisible
+                        ) {
+                            viewModel.toggleFilePicker()
+                        }
+                        .opacity(viewModel.hasRootFolder ? 1 : 0)
+
+                        ToolbarIconButton(
+                            systemName: viewModel.isPreviewMode ? "pencil" : "doc.richtext",
+                            shortcut: "⌘⇧P",
+                            isActive: viewModel.isPreviewMode
+                        ) {
+                            viewModel.togglePreview()
+                        }
                     }
+                    .opacity(isToolbarHovered ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
+                    .padding(.trailing, 12)
                 }
-                .opacity(isToolbarHovered ? 1 : 0)
-                .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 7)
+            .padding(.vertical, 9)
 
             Rectangle()
                 .fill(Color.primary.opacity(0.08))

@@ -14,7 +14,7 @@ struct HotKeyShortcut: Codable, Equatable {
 
     static let defaultFloatingNote = HotKeyShortcut(
         keyCode: UInt32(kVK_ANSI_N),
-        modifierFlagsRaw: NSEvent.ModifierFlags.command.union(.shift).rawValue,
+        modifierFlagsRaw: NSEvent.ModifierFlags.option.rawValue,
         key: "N"
     )
 
