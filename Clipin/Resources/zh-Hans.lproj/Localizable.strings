@@ -293,6 +293,8 @@
 "Clipin launches automatically after you sign in." = "登录后自动启动 Clipin。";
 "Remember panel position between sessions" = "记住面板位置";
 "Reopen the panel where you last moved it, even after restarting Clipin." = "即使重启 Clipin，也在你上次移动到的位置重新打开面板。";
+"Use Ctrl+V for images in terminal" = "终端中粘贴图片使用 Ctrl+V";
+"When the target app is a terminal and the clipboard item is an image, send Ctrl+V instead of Cmd+V. Useful for TUI apps like Claude Code that expect this shortcut for image paste." = "当目标应用是终端且剪贴板项为图片时，发送 Ctrl+V 而非 Cmd+V。适用于 Claude Code 等需要该快捷键来粘贴图片的 TUI 应用。";
 "Adjust the panel tint while keeping native materials and shared chrome." = "在保留原生材质和统一界面骨架的前提下，调整面板色调。";
 "Restart Clipin after changing the app language." = "更改应用语言后需要重启 Clipin。";
 "Skip clipboard writes that were not triggered by an explicit copy action so noisy transient items do not enter history." = "跳过不是由明确复制动作触发的剪贴板写入，避免噪音临时项进入历史记录。";

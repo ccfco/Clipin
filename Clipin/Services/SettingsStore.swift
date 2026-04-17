@@ -216,6 +216,11 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(rememberPanelPosition, forKey: Keys.rememberPanelPosition) }
     }
 
+    /// 在终端中粘贴图片时使用 Ctrl+V（部分 TUI 如 Claude Code 需要），默认关闭
+    @Published var useCtrlVInTerminalForImages: Bool {
+        didSet { defaults.set(useCtrlVInTerminalForImages, forKey: Keys.useCtrlVInTerminalForImages) }
+    }
+
     @Published var pinnedItemsPresentation: PinnedItemsPresentation {
         didSet { defaults.set(pinnedItemsPresentation.rawValue, forKey: Keys.pinnedItemsPresentation) }
     }
@@ -274,6 +279,7 @@ final class SettingsStore: ObservableObject {
         static let visualTheme = "settings.visualTheme"
         static let appLanguage = "settings.appLanguage"
         static let rememberPanelPosition = "settings.rememberPanelPosition"
+        static let useCtrlVInTerminalForImages = "settings.useCtrlVInTerminalForImages"
         static let pinnedItemsPresentation = "settings.pinnedItemsPresentation"
         static let launcherDefaultView = "settings.launcherDefaultView"
         static let lastLauncherBrowseMode = "settings.lastLauncherBrowseMode"
@@ -298,6 +304,7 @@ final class SettingsStore: ObservableObject {
             Keys.visualTheme,
             Keys.appLanguage,
             Keys.rememberPanelPosition,
+            Keys.useCtrlVInTerminalForImages,
             Keys.pinnedItemsPresentation,
             Keys.launcherDefaultView,
             Keys.lastLauncherBrowseMode,
@@ -349,6 +356,7 @@ final class SettingsStore: ObservableObject {
         self.visualTheme = storedVisualTheme
         self.appLanguage = storedAppLanguage
         self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
+        self.useCtrlVInTerminalForImages = defaults.object(forKey: Keys.useCtrlVInTerminalForImages) as? Bool ?? false
         self.pinnedItemsPresentation = storedPinnedItemsPresentation
         self.launcherDefaultView = storedLauncherDefaultView
         self.lastLauncherBrowseMode = storedLastLauncherBrowseMode

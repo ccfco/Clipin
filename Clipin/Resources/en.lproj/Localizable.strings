@@ -293,6 +293,8 @@
 "Clipin launches automatically after you sign in." = "Clipin launches automatically after you sign in.";
 "Remember panel position between sessions" = "Remember panel position between sessions";
 "Reopen the panel where you last moved it, even after restarting Clipin." = "Reopen the panel where you last moved it, even after restarting Clipin.";
+"Use Ctrl+V for images in terminal" = "Use Ctrl+V for images in terminal";
+"When the target app is a terminal and the clipboard item is an image, send Ctrl+V instead of Cmd+V. Useful for TUI apps like Claude Code that expect this shortcut for image paste." = "When the target app is a terminal and the clipboard item is an image, send Ctrl+V instead of Cmd+V. Useful for TUI apps like Claude Code that expect this shortcut for image paste.";
 "Adjust the panel tint while keeping native materials and shared chrome." = "Adjust the panel tint while keeping native materials and shared chrome.";
 "Restart Clipin after changing the app language." = "Restart Clipin after changing the app language.";
 "Skip clipboard writes that were not triggered by an explicit copy action so noisy transient items do not enter history." = "Skip clipboard writes that were not triggered by an explicit copy action so noisy transient items do not enter history.";

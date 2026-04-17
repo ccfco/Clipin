@@ -1417,7 +1417,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         try? appState.core.incrementPasteCount(id: item.id)
-        executePasteFlow()
+        executePasteFlow(isImage: item.clipType == .image)
     }
 
     private func performPastePlain(_ item: ClipItem) {
@@ -1427,7 +1427,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         try? appState.core.incrementPasteCount(id: item.id)
-        executePasteFlow()
+        executePasteFlow(isImage: false)
     }
 
     /// 连续粘贴模式下实时查询 frontmostApplication 作为粘贴目标（LSUIElement app 不会成为 frontmostApplication）；
@@ -1443,7 +1443,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return previousApp
     }
 
-    private func executePasteFlow() {
+    private func executePasteFlow(isImage: Bool = false) {
         let permission = PermissionManager.shared
         permission.checkNow()
 
@@ -1466,8 +1466,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 激活目标并精准投递粘贴事件
         targetApp?.activate()
 
+        let useCtrlV = isImage
+            && SettingsStore.shared.useCtrlVInTerminalForImages
+            && PasteService.isTerminalApp(targetApp)
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            PasteService.simulatePaste(to: targetApp?.processIdentifier)
+            PasteService.simulatePaste(to: targetApp?.processIdentifier, useCtrlV: useCtrlV)
             self?.monitor?.resume()
 
             if continuousPasteEnabled {

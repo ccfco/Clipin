@@ -383,6 +383,14 @@ struct SettingsView: View {
                         description: "Reopen the panel where you last moved it, even after restarting Clipin.",
                         isOn: $settings.rememberPanelPosition
                     )
+
+                    groupDivider
+
+                    toggleSettingRow(
+                        "Use Ctrl+V for images in terminal",
+                        description: "When the target app is a terminal and the clipboard item is an image, send Ctrl+V instead of Cmd+V. Useful for TUI apps like Claude Code that expect this shortcut for image paste.",
+                        isOn: $settings.useCtrlVInTerminalForImages
+                    )
                 }
             }
 

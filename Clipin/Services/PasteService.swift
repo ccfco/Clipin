@@ -59,14 +59,33 @@ enum PasteService {
         }
     }
 
-    /// 模拟 Cmd+V 按键
-    static func simulatePaste(to pid: pid_t? = nil) {
+    /// 已知终端仿真器的 bundle ID 集合（用于图片粘贴时自动切换到 Ctrl+V）
+    static let terminalBundleIDs: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "dev.warp.Warp-Stable",
+        "org.alacritty",
+        "io.alacritty",
+        "net.kovidgoyal.kitty",
+        "com.mitchellh.ghostty",
+        "co.zeit.hyper",
+    ]
+
+    static func isTerminalApp(_ app: NSRunningApplication?) -> Bool {
+        guard let id = app?.bundleIdentifier else { return false }
+        return terminalBundleIDs.contains(id)
+    }
+
+    /// 模拟粘贴按键。
+    /// - `useCtrlV: true` 发送 Ctrl+V（终端 TUI 图片粘贴），默认发送 Cmd+V
+    static func simulatePaste(to pid: pid_t? = nil, useCtrlV: Bool = false) {
         let source = CGEventSource(stateID: .hidSystemState)
+        let flags: CGEventFlags = useCtrlV ? .maskControl : .maskCommand
 
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)  // V key
-        keyDown?.flags = .maskCommand
+        keyDown?.flags = flags
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-        keyUp?.flags = .maskCommand
+        keyUp?.flags = flags
 
         if let pid = pid {
             keyDown?.postToPid(pid)
