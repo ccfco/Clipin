@@ -9,8 +9,15 @@ final class MarkdownRenderer: @unchecked Sendable {
     private init() {}
 
     func renderHTML(from markdown: String) -> String {
-        let body = processBlocks(markdown.components(separatedBy: "\n"), index: 0).html
-        return htmlPage(body)
+        previewShellHTML(body: renderBodyHTML(from: markdown))
+    }
+
+    func renderBodyHTML(from markdown: String) -> String {
+        processBlocks(markdown.components(separatedBy: "\n"), index: 0).html
+    }
+
+    func previewShellHTML(body: String = "") -> String {
+        htmlPage(body)
     }
 
     // MARK: - Block Processing
@@ -183,7 +190,21 @@ final class MarkdownRenderer: @unchecked Sendable {
     // MARK: - HTML Page
 
     private func htmlPage(_ body: String) -> String {
-        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>\(css)</style></head><body>\(body)</body></html>"
+        """
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>\(css)</style>
+        <script>
+        window.__updateBody = function(html) {
+            document.body.innerHTML = html;
+        };
+        </script>
+        </head>
+        <body>\(body)</body>
+        </html>
+        """
     }
 
     private let css = """

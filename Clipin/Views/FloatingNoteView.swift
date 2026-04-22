@@ -157,16 +157,58 @@ struct MarkdownTextView: NSViewRepresentable {
 struct MarkdownPreviewView: NSViewRepresentable {
     let markdown: String
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView()
         // 透明背景，让 .regularMaterial 透出
         webView.setValue(false, forKey: "drawsBackground")
         webView.layer?.backgroundColor = .clear
+        webView.navigationDelegate = context.coordinator
+        let bodyHTML = MarkdownRenderer.shared.renderBodyHTML(from: markdown)
+        context.coordinator.lastBodyHTML = bodyHTML
+        webView.loadHTMLString(MarkdownRenderer.shared.previewShellHTML(body: bodyHTML), baseURL: nil)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        webView.loadHTMLString(MarkdownRenderer.shared.renderHTML(from: markdown), baseURL: nil)
+        let bodyHTML = MarkdownRenderer.shared.renderBodyHTML(from: markdown)
+        guard bodyHTML != context.coordinator.lastBodyHTML else { return }
+        context.coordinator.lastBodyHTML = bodyHTML
+        if context.coordinator.isShellReady {
+            context.coordinator.apply(bodyHTML: bodyHTML, to: webView)
+        } else {
+            context.coordinator.pendingBodyHTML = bodyHTML
+        }
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var lastBodyHTML = ""
+        var pendingBodyHTML: String?
+        var isShellReady = false
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            isShellReady = true
+            if let pendingBodyHTML, pendingBodyHTML != lastBodyHTML {
+                apply(bodyHTML: pendingBodyHTML, to: webView)
+            } else if let pendingBodyHTML {
+                apply(bodyHTML: pendingBodyHTML, to: webView)
+            }
+            pendingBodyHTML = nil
+        }
+
+        func apply(bodyHTML: String, to webView: WKWebView) {
+            let payload = bodyHTML
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .replacingOccurrences(of: "\r", with: "\\r")
+                .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+                .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+            webView.evaluateJavaScript("window.__updateBody(\"\(payload)\")", completionHandler: nil)
+        }
     }
 }
 
@@ -454,8 +496,8 @@ private struct ToolbarIconButton: View {
 
 // MARK: - FloatingNoteView
 
-/// 浮动笔记主界面：工具栏 + Markdown 编辑区 + ⌘P 文件选择器覆盖层。
-/// 工具栏默认收起（文件名变淡、按钮隐藏），hover 后展开显示完整控件。
+/// 浮动笔记主界面：工具栏 + Markdown 编辑区 + 实时渲染区 + ⌘P 文件选择器覆盖层。
+/// 所见即所得的第一阶段仍以 Markdown 为唯一存储格式，只把实时渲染常驻到编辑过程里。
 struct FloatingNoteView: View {
     @ObservedObject var viewModel: FloatingNoteViewModel
     @State private var isToolbarHovered = false
@@ -465,25 +507,9 @@ struct FloatingNoteView: View {
         ZStack {
             VStack(spacing: 0) {
                 toolbar
-                if viewModel.isPreviewMode {
-                    MarkdownPreviewView(markdown: viewModel.content)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .overlay(alignment: .bottom) { bottomBar }
-                } else {
-                    MarkdownTextView(
-                        text: $viewModel.content,
-                        onSave: viewModel.save,
-                        onNaturalHeightChanged: viewModel.onNaturalHeightChanged,
-                        onScrollStateChanged: { isAtTop in
-                            isContentAtTop = isAtTop
-                        },
-                        onRegisterFocusHandler: { handler in
-                            viewModel.focusEditorHandler = handler
-                        }
-                    )
+                contentArea
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottom) { bottomBar }
-                }
             }
             .background(noteSurface)
 
@@ -492,6 +518,89 @@ struct FloatingNoteView: View {
             }
         }
         .onAppear { viewModel.loadFile() }
+    }
+
+    private var contentArea: some View {
+        GeometryReader { proxy in
+            if viewModel.isWysiwygMode {
+                wysiwygWorkspace(for: proxy.size)
+            } else {
+                editorPane(adjustHeightForWysiwyg: false)
+            }
+        }
+    }
+
+    private func wysiwygWorkspace(for size: CGSize) -> some View {
+        Group {
+            if size.width >= 680 {
+                HStack(spacing: 0) {
+                    editorPane(adjustHeightForWysiwyg: true)
+                    verticalWorkspaceDivider
+                    previewPane
+                }
+            } else {
+                VStack(spacing: 0) {
+                    editorPane(adjustHeightForWysiwyg: true)
+                    horizontalWorkspaceDivider
+                    previewPane
+                        .frame(minHeight: 180)
+                }
+            }
+        }
+    }
+
+    private func editorPane(adjustHeightForWysiwyg: Bool) -> some View {
+        MarkdownTextView(
+            text: $viewModel.content,
+            onSave: viewModel.save,
+            onNaturalHeightChanged: { height in
+                let adjustedHeight = adjustHeightForWysiwyg ? max(height, 320) : height
+                viewModel.onNaturalHeightChanged?(adjustedHeight)
+            },
+            onScrollStateChanged: { isAtTop in
+                isContentAtTop = isAtTop
+            },
+            onRegisterFocusHandler: { handler in
+                viewModel.focusEditorHandler = handler
+            }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var previewPane: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label("实时效果", systemImage: "sparkles.rectangle.stack")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            MarkdownPreviewView(markdown: viewModel.content)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(
+            LinearGradient(
+                colors: [Color.white.opacity(0.20), Color.white.opacity(0.08)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+
+    private var verticalWorkspaceDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.08))
+            .frame(width: 0.5)
+    }
+
+    private var horizontalWorkspaceDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.08))
+            .frame(height: 0.5)
     }
 
     // MARK: Toolbar（Raycast 三段式：左侧 traffic light / 中间 title / 右侧按钮）
@@ -545,9 +654,9 @@ struct FloatingNoteView: View {
                         .opacity(viewModel.hasRootFolder ? 1 : 0)
 
                         ToolbarIconButton(
-                            systemName: viewModel.isPreviewMode ? "pencil" : "doc.richtext",
-                            shortcut: "⌘⇧P",
-                            isActive: viewModel.isPreviewMode
+                            systemName: viewModel.isWysiwygMode ? "rectangle.split.2x1.fill" : "rectangle.split.2x1",
+                            shortcut: "所见即所得 (⌘⇧P)",
+                            isActive: viewModel.isWysiwygMode
                         ) {
                             viewModel.togglePreview()
                         }
@@ -578,6 +687,14 @@ struct FloatingNoteView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
 
+            HStack {
+                Text(viewModel.isWysiwygMode ? "所见即所得" : "Markdown")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary.opacity(0.78))
+                Spacer()
+            }
+            .padding(.leading, 14)
+
             // 右侧：保存状态 or 格式图标（视觉平衡）
             HStack {
                 Spacer()
@@ -591,7 +708,7 @@ struct FloatingNoteView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.red.opacity(0.7))
                     } else {
-                        Image(systemName: "textformat")
+                        Image(systemName: viewModel.isWysiwygMode ? "eye.text" : "textformat")
                             .font(.system(size: 11))
                             .foregroundStyle(.quaternary)
                     }
@@ -650,8 +767,8 @@ final class FloatingNoteViewModel: ObservableObject {
     @Published var lastSaveError: Error?
     @Published private(set) var fileURL: URL?
 
-    // 预览模式
-    @Published var isPreviewMode = false
+    // 所见即所得模式：编辑与渲染同屏，不改变底层 Markdown 文件格式。
+    @Published var isWysiwygMode = false
 
     // 文件选择器状态
     @Published var isFilePickerVisible = false
@@ -794,11 +911,13 @@ final class FloatingNoteViewModel: ObservableObject {
     }
 
     func togglePreview() {
-        // 切换预览时关闭文件选择器，避免两层覆盖
+        // 切换所见即所得时关闭文件选择器，避免两层覆盖
         if isFilePickerVisible { hideFilePicker() }
-        isPreviewMode.toggle()
-        // 切回编辑时恢复 NSTextView 焦点
-        if !isPreviewMode { focusEditorHandler?() }
+        isWysiwygMode.toggle()
+        // 两种模式都包含编辑器，切换后立即把焦点还给 NSTextView，保持连续输入。
+        DispatchQueue.main.async { [weak self] in
+            self?.focusEditorHandler?()
+        }
     }
 
     func movePickerSelection(by delta: Int) {
