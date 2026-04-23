@@ -20,6 +20,34 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     }
 }
 
+/// 浮动笔记专用 HostingView：接收鼠标拖拽事件，转发给 NSPanel 实现拖动窗口。
+private final class FloatingNoteHostingView<V: View>: NSHostingView<V> {
+    private weak var panel: NSPanel?
+
+    init(rootView: V, panel: NSPanel) {
+        self.panel = panel
+        super.init(rootView: rootView)
+    }
+
+    required init(rootView: V) {
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override var isOpaque: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let panel else {
+            super.mouseDragged(with: event)
+            return
+        }
+        panel.performDrag(with: event)
+    }
+}
+
 /// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
 private final class ClipinPanel: NSPanel {
@@ -406,7 +434,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.contentView = ClipinHostingView(rootView: FloatingNoteView(viewModel: vm))
+        let hostingView = FloatingNoteHostingView(rootView: FloatingNoteView(viewModel: vm), panel: panel)
+        panel.contentView = hostingView
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
@@ -423,10 +452,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.fitFloatingNotePanel(animated: true)
         }
 
-        // 恢复上次位置，否则居中显示
+        // 恢复上次位置，否则居中显示；位置超出屏幕时自动回退到居中
         let defaults = UserDefaults.standard
+        let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         if let x = defaults.object(forKey: FloatingNotePanelMetrics.originXKey) as? CGFloat,
-           let y = defaults.object(forKey: FloatingNotePanelMetrics.originYKey) as? CGFloat {
+           let y = defaults.object(forKey: FloatingNotePanelMetrics.originYKey) as? CGFloat,
+           screenFrame.contains(NSRect(x: x, y: y, width: 400, height: 480)) {
             panel.setFrameOrigin(NSPoint(x: x, y: y))
         } else {
             panel.center()
