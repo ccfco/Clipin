@@ -6,8 +6,8 @@ import WebKit
 // MARK: - MarkdownTextView
 
 /// NSTextView 的 SwiftUI 包装，用于浮动笔记编辑区。
-/// 使用标准 NSScrollView + NSTextView 组合，避免裸 NSTextView 的尺寸协商问题。
-/// WYSIWYM 模式下使用 MarkdownTextStorage 实现实时 Markdown 样式渲染。
+/// 使用标准 NSTextStorage + NSLayoutManager 临时属性实现 WYSIWYM 样式渲染。
+/// 临时属性仅影响视觉，不触发 NSTextStorage 递归，保证编辑流畅。
 struct MarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     var isWysiwygMode: Bool
@@ -25,36 +25,26 @@ struct MarkdownTextView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = false
-        scrollView.backgroundColor = .clear
+        let scrollView = NSTextView.scrollableTextView()
+        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
 
-        let textStorage = MarkdownTextStorage()
-        textStorage.isWysiwygMode = isWysiwygMode
-        textStorage.append(NSAttributedString(string: text))
-
-        let layoutManager = NSLayoutManager()
-        textStorage.addLayoutManager(layoutManager)
-
-        let textContainer = NSTextContainer()
-        textContainer.widthTracksTextView = true
-        textContainer.lineFragmentPadding = 0
-        layoutManager.addTextContainer(textContainer)
-
-        let textView = NSTextView(frame: scrollView.bounds, textContainer: textContainer)
-        textView.autoresizingMask = [.width, .height]
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
-        context.coordinator.textStorage = textStorage
 
-        // 初始加载完毕后上报一次高度，让窗口在显示前先调整好尺寸
+        // 初始化样式渲染器（使用 NSLayoutManager 临时属性）
+        let applier = MarkdownStyleApplier(
+            layoutManager: textView.layoutManager!,
+            textStorage: textView.textStorage!
+        )
+        applier.isWysiwygMode = isWysiwygMode
+        context.coordinator.styleApplier = applier
+
+        // 初始加载完毕后上报高度
         DispatchQueue.main.async {
             context.coordinator.reportNaturalHeight(for: textView)
         }
 
-        // 注册"让编辑器重新获焦"的回调，供文件选择器关闭后调用
+        // 注册焦点恢复回调
         onRegisterFocusHandler?({ [weak textView] in
             textView?.window?.makeFirstResponder(textView)
         })
@@ -66,13 +56,15 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.isContinuousSpellCheckingEnabled = false
 
         textView.insertionPointColor = NSColor(red: 0.80, green: 0.15, blue: 0.38, alpha: 1)
-        if !isWysiwygMode {
-            textView.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
-        }
+        textView.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.textContainerInset = NSSize(width: 16, height: 16)
+        textView.textContainer?.lineFragmentPadding = 0
         textView.backgroundColor = .clear
 
-        scrollView.documentView = textView
+        scrollView.backgroundColor = .clear
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
         scrollView.contentView.postsBoundsChangedNotifications = true
         context.coordinator.startObservingScroll(in: scrollView)
 
@@ -84,20 +76,13 @@ struct MarkdownTextView: NSViewRepresentable {
         context.coordinator.onScrollStateChanged = onScrollStateChanged
 
         // 切换 WYSIWYM 模式
-        if let storage = context.coordinator.textStorage,
-           storage.isWysiwygMode != isWysiwygMode {
-            storage.isWysiwygMode = isWysiwygMode
+        if context.coordinator.styleApplier?.isWysiwygMode != isWysiwygMode {
+            context.coordinator.styleApplier?.isWysiwygMode = isWysiwygMode
         }
 
         // 只在内容真正不同时才赋值，避免光标跳位
         if textView.string != text {
-            // 在 WYSIWYM 模式下通过 textStorage 更新，保持样式
-            if let storage = context.coordinator.textStorage, storage.isWysiwygMode {
-                storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: text)
-            } else {
-                textView.string = text
-            }
-            // 内容变化后同步上报自然高度，让窗口在显示时即 fit 到正确尺寸
+            textView.string = text
             context.coordinator.reportNaturalHeight(for: textView)
         }
         context.coordinator.reportScrollState(for: scrollView)
@@ -108,7 +93,7 @@ struct MarkdownTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
-        weak var textStorage: MarkdownTextStorage?
+        var styleApplier: MarkdownStyleApplier?
         weak var observedClipView: NSClipView?
         private let onSave: (String) -> Void
         private let onNaturalHeightChanged: ((CGFloat) -> Void)?
@@ -137,7 +122,10 @@ struct MarkdownTextView: NSViewRepresentable {
                 }
             }
 
-            // 上报内容自然高度，供窗口自动调整
+            // 通知样式渲染器内容已变化
+            styleApplier?.contentDidChange()
+
+            // 上报自然高度
             reportNaturalHeight(for: tv)
         }
 

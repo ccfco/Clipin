@@ -20,8 +20,9 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     }
 }
 
-/// 浮动笔记专用 HostingView：接收鼠标拖拽事件，转发给 NSPanel 实现拖动窗口。
-private final class FloatingNoteHostingView<V: View>: NSHostingView<V> {
+/// 浮动笔记 HostingView：复用 ClipinHostingView 的 updateLayer 圆角逻辑，
+/// 同时通过 mouseDragged 转发给 panel 实现从任意区域拖动窗口。
+private final class NoteHostingView<V: View>: NSHostingView<V> {
     private weak var panel: NSPanel?
 
     init(rootView: V, panel: NSPanel) {
@@ -38,6 +39,16 @@ private final class FloatingNoteHostingView<V: View>: NSHostingView<V> {
 
     override var isOpaque: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateLayer() {
+        super.updateLayer()
+        layer?.backgroundColor = .clear
+        layer?.cornerRadius = ClipinChrome.shellCornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.allowsEdgeAntialiasing = true
+        layer?.masksToBounds = true
+        window?.invalidateShadow()
+    }
 
     override func mouseDragged(with event: NSEvent) {
         guard let panel else {
@@ -434,9 +445,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        let hostingView = FloatingNoteHostingView(rootView: FloatingNoteView(viewModel: vm), panel: panel)
+
+        let hostingView = NoteHostingView(rootView: FloatingNoteView(viewModel: vm), panel: panel)
         panel.contentView = hostingView
-        panel.isMovableByWindowBackground = true
+
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
