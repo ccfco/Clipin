@@ -568,27 +568,17 @@ struct FloatingNoteView: View {
     }
 
     private var contentArea: some View {
-        GeometryReader { proxy in
-            if viewModel.isWysiwygMode {
-                wysiwygWorkspace(for: proxy.size)
-            } else {
-                editorPane(adjustHeightForWysiwyg: false)
-            }
-        }
+        // WYSIWYM 模式下编辑器本身即是所见即所得
+        editorPane()
     }
 
-    private func wysiwygWorkspace(for size: CGSize) -> some View {
-        // WYSIWYM 模式下编辑器本身即是所见即所得，不需要分栏预览
-        editorPane(adjustHeightForWysiwyg: true)
-    }
-
-    private func editorPane(adjustHeightForWysiwyg: Bool) -> some View {
+    private func editorPane() -> some View {
         MarkdownTextView(
             text: $viewModel.content,
             isWysiwygMode: viewModel.isWysiwygMode,
             onSave: viewModel.save,
             onNaturalHeightChanged: { height in
-                let adjustedHeight = adjustHeightForWysiwyg ? max(height, 320) : height
+                let adjustedHeight = max(height, 320)
                 viewModel.onNaturalHeightChanged?(adjustedHeight)
             },
             onScrollStateChanged: { isAtTop in
@@ -599,42 +589,6 @@ struct FloatingNoteView: View {
             }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var previewPane: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Label("实时效果", systemImage: "sparkles.rectangle.stack")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-
-            MarkdownPreviewView(markdown: viewModel.content)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .background(
-            LinearGradient(
-                colors: [Color.white.opacity(0.20), Color.white.opacity(0.08)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-
-    private var verticalWorkspaceDivider: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.08))
-            .frame(width: 0.5)
-    }
-
-    private var horizontalWorkspaceDivider: some View {
-        Rectangle()
-            .fill(Color.primary.opacity(0.08))
-            .frame(height: 0.5)
     }
 
     // MARK: Toolbar（Raycast 三段式：左侧 traffic light / 中间 title / 右侧按钮）
@@ -693,14 +647,6 @@ struct FloatingNoteView: View {
                         ) {
                             viewModel.createNewNote()
                         }
-
-                        ToolbarIconButton(
-                            systemName: viewModel.isWysiwygMode ? "rectangle.split.2x1.fill" : "rectangle.split.2x1",
-                            shortcut: "所见即所得 (⌘⇧P)",
-                            isActive: viewModel.isWysiwygMode
-                        ) {
-                            viewModel.togglePreview()
-                        }
                     }
                     .opacity(isToolbarHovered ? 1 : 0)
                     .animation(.easeInOut(duration: 0.18), value: isToolbarHovered)
@@ -719,24 +665,16 @@ struct FloatingNoteView: View {
         .onHover { isToolbarHovered = $0 }
     }
 
-    // MARK: 底部状态栏（Raycast 风格：字数居中，右侧对称图标）
+    // MARK: 底部状态栏（简洁：仅字符数 + 保存状态）
 
     private var bottomBar: some View {
         ZStack {
-            // 字数居中
+            // 字符数居中
             Text(viewModel.content.isEmpty ? "0 字符" : "\(viewModel.content.count) 字符")
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
 
-            HStack {
-                Text(viewModel.isWysiwygMode ? "所见即所得" : "Markdown")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary.opacity(0.78))
-                Spacer()
-            }
-            .padding(.leading, 14)
-
-            // 右侧：保存状态 or 格式图标（视觉平衡）
+            // 右侧：仅显示保存状态
             HStack {
                 Spacer()
                 Group {
@@ -748,10 +686,6 @@ struct FloatingNoteView: View {
                         Image(systemName: "exclamationmark.circle")
                             .font(.system(size: 11))
                             .foregroundStyle(.red.opacity(0.7))
-                    } else {
-                        Image(systemName: viewModel.isWysiwygMode ? "eye.text" : "textformat")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.quaternary)
                     }
                 }
                 .padding(.trailing, 14)
@@ -808,8 +742,8 @@ final class FloatingNoteViewModel: ObservableObject {
     @Published var lastSaveError: Error?
     @Published private(set) var fileURL: URL?
 
-    // 所见即所得模式：编辑与渲染同屏，不改变底层 Markdown 文件格式。
-    @Published var isWysiwygMode = false
+    // 所见即所得模式：编辑与渲染同屏，不改变底层 Markdown 文件格式。默认开启。
+    @Published var isWysiwygMode = true
 
     // 文件选择器状态
     @Published var isFilePickerVisible = false
