@@ -7,8 +7,10 @@ import WebKit
 
 /// NSTextView 的 SwiftUI 包装，用于浮动笔记编辑区。
 /// 使用标准 NSScrollView + NSTextView 组合，避免裸 NSTextView 的尺寸协商问题。
+/// WYSIWYM 模式下使用 MarkdownTextStorage 实现实时 Markdown 样式渲染。
 struct MarkdownTextView: NSViewRepresentable {
     @Binding var text: String
+    var isWysiwygMode: Bool
     var onSave: (String) -> Void
     var onNaturalHeightChanged: ((CGFloat) -> Void)?
     var onScrollStateChanged: ((Bool) -> Void)?
@@ -23,11 +25,30 @@ struct MarkdownTextView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSTextView.scrollableTextView()
-        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+        scrollView.backgroundColor = .clear
 
+        let textStorage = MarkdownTextStorage()
+        textStorage.isWysiwygMode = isWysiwygMode
+        textStorage.append(NSAttributedString(string: text))
+
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+
+        let textContainer = NSTextContainer()
+        textContainer.widthTracksTextView = true
+        textContainer.lineFragmentPadding = 0
+        layoutManager.addTextContainer(textContainer)
+
+        let textView = NSTextView(frame: scrollView.bounds, textContainer: textContainer)
+        textView.autoresizingMask = [.width, .height]
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
+        context.coordinator.textStorage = textStorage
+
         // 初始加载完毕后上报一次高度，让窗口在显示前先调整好尺寸
         DispatchQueue.main.async {
             context.coordinator.reportNaturalHeight(for: textView)
@@ -38,7 +59,6 @@ struct MarkdownTextView: NSViewRepresentable {
             textView?.window?.makeFirstResponder(textView)
         })
 
-        textView.isRichText = false
         textView.allowsUndo = true
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticDashSubstitutionEnabled = false
@@ -46,15 +66,13 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.isContinuousSpellCheckingEnabled = false
 
         textView.insertionPointColor = NSColor(red: 0.80, green: 0.15, blue: 0.38, alpha: 1)
-        textView.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        if !isWysiwygMode {
+            textView.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
+        }
         textView.textContainerInset = NSSize(width: 16, height: 16)
-        textView.textContainer?.lineFragmentPadding = 0
         textView.backgroundColor = .clear
 
-        scrollView.backgroundColor = .clear
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
+        scrollView.documentView = textView
         scrollView.contentView.postsBoundsChangedNotifications = true
         context.coordinator.startObservingScroll(in: scrollView)
 
@@ -64,9 +82,21 @@ struct MarkdownTextView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.onScrollStateChanged = onScrollStateChanged
+
+        // 切换 WYSIWYM 模式
+        if let storage = context.coordinator.textStorage,
+           storage.isWysiwygMode != isWysiwygMode {
+            storage.isWysiwygMode = isWysiwygMode
+        }
+
         // 只在内容真正不同时才赋值，避免光标跳位
         if textView.string != text {
-            textView.string = text
+            // 在 WYSIWYM 模式下通过 textStorage 更新，保持样式
+            if let storage = context.coordinator.textStorage, storage.isWysiwygMode {
+                storage.replaceCharacters(in: NSRange(location: 0, length: storage.length), with: text)
+            } else {
+                textView.string = text
+            }
             // 内容变化后同步上报自然高度，让窗口在显示时即 fit 到正确尺寸
             context.coordinator.reportNaturalHeight(for: textView)
         }
@@ -78,6 +108,7 @@ struct MarkdownTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
+        weak var textStorage: MarkdownTextStorage?
         weak var observedClipView: NSClipView?
         private let onSave: (String) -> Void
         private let onNaturalHeightChanged: ((CGFloat) -> Void)?
@@ -430,6 +461,22 @@ struct FloatingNoteFilePicker: View {
                         }
                     }
                 }
+
+                // 新建笔记按钮
+                Divider().opacity(0.3)
+                Button(action: { viewModel.createNewNote() }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.badge.plus")
+                            .font(.system(size: 12))
+                        Text("新建笔记")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundStyle(Color.accentColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
             }
             .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -531,27 +578,14 @@ struct FloatingNoteView: View {
     }
 
     private func wysiwygWorkspace(for size: CGSize) -> some View {
-        Group {
-            if size.width >= 680 {
-                HStack(spacing: 0) {
-                    editorPane(adjustHeightForWysiwyg: true)
-                    verticalWorkspaceDivider
-                    previewPane
-                }
-            } else {
-                VStack(spacing: 0) {
-                    editorPane(adjustHeightForWysiwyg: true)
-                    horizontalWorkspaceDivider
-                    previewPane
-                        .frame(minHeight: 180)
-                }
-            }
-        }
+        // WYSIWYM 模式下编辑器本身即是所见即所得，不需要分栏预览
+        editorPane(adjustHeightForWysiwyg: true)
     }
 
     private func editorPane(adjustHeightForWysiwyg: Bool) -> some View {
         MarkdownTextView(
             text: $viewModel.content,
+            isWysiwygMode: viewModel.isWysiwygMode,
             onSave: viewModel.save,
             onNaturalHeightChanged: { height in
                 let adjustedHeight = adjustHeightForWysiwyg ? max(height, 320) : height
@@ -652,6 +686,13 @@ struct FloatingNoteView: View {
                             viewModel.toggleFilePicker()
                         }
                         .opacity(viewModel.hasRootFolder ? 1 : 0)
+
+                        ToolbarIconButton(
+                            systemName: "plus",
+                            shortcut: "新建笔记"
+                        ) {
+                            viewModel.createNewNote()
+                        }
 
                         ToolbarIconButton(
                             systemName: viewModel.isWysiwygMode ? "rectangle.split.2x1.fill" : "rectangle.split.2x1",
@@ -792,12 +833,16 @@ final class FloatingNoteViewModel: ObservableObject {
     }
 
     var hasRootFolder: Bool {
+        true // 始终有默认路径
+    }
+
+    /// 用户是否自定义了 Root Folder
+    var isUserConfiguredRootFolder: Bool {
         !(settings.floatingNoteRootFolder ?? "").isEmpty
     }
 
     var rootFolderURL: URL? {
-        guard let root = settings.floatingNoteRootFolder, !root.isEmpty else { return nil }
-        return URL(fileURLWithPath: root, isDirectory: true)
+        URL(fileURLWithPath: settings.effectiveFloatingNoteRootFolder, isDirectory: true)
     }
 
     /// 相对于 Root Folder 的显示路径（用于文件选择器列表）
@@ -813,11 +858,7 @@ final class FloatingNoteViewModel: ObservableObject {
     // MARK: - 文件加载 / 保存
 
     func loadFile() {
-        guard let root = settings.floatingNoteRootFolder, !root.isEmpty else {
-            content = ""
-            fileURL = nil
-            return
-        }
+        let root = settings.effectiveFloatingNoteRootFolder
         let url = service.resolveURL(rootFolder: root, pattern: settings.floatingNotePattern)
         fileURL = url
         do {
@@ -831,13 +872,21 @@ final class FloatingNoteViewModel: ObservableObject {
 
     func save(_ text: String) {
         guard let url = fileURL else { return }
+        let root = settings.effectiveFloatingNoteRootFolder
         isSaving = true
         lastSaveError = nil
         Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
             do {
                 try self.service.save(content: text, to: url)
-                await MainActor.run { self.isSaving = false }
+                // 尝试根据内容重命名文件（仅在新建笔记时生效）
+                let newURL = try self.service.renameByContentIfNeeded(currentURL: url, content: text, rootFolder: root)
+                await MainActor.run {
+                    self.isSaving = false
+                    if newURL.path != url.path {
+                        self.fileURL = newURL
+                    }
+                }
             } catch {
                 await MainActor.run {
                     self.isSaving = false
@@ -866,7 +915,7 @@ final class FloatingNoteViewModel: ObservableObject {
     }
 
     func showFilePicker() {
-        guard hasRootFolder, let root = settings.floatingNoteRootFolder else { return }
+        let root = settings.effectiveFloatingNoteRootFolder
         var files = service.listMarkdownFiles(in: root)
         // 先加载 metadata，再按最近修改时间排序（最新的在前）
         loadFileMetadata(for: files)
@@ -920,6 +969,18 @@ final class FloatingNoteViewModel: ObservableObject {
         }
     }
 
+    func createNewNote() {
+        let root = settings.effectiveFloatingNoteRootFolder
+        do {
+            let url = try service.createNote(content: "", in: root)
+            fileURL = url
+            content = ""
+        } catch {
+            lastSaveError = error
+        }
+        hideFilePicker()
+    }
+
     func movePickerSelection(by delta: Int) {
         let count = filteredPickerFiles.count
         guard count > 0 else { return }
@@ -935,11 +996,7 @@ final class FloatingNoteViewModel: ObservableObject {
 
     /// 打开指定文件（不影响 Root Folder 配置，只切换编辑内容）
     func openFile(_ url: URL) {
-        do {
-            content = try service.load(from: url)
-            fileURL = url
-        } catch {
-            lastSaveError = error
-        }
+        content = (try? service.load(from: url)) ?? ""
+        fileURL = url
     }
 }

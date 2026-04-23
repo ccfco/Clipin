@@ -44,6 +44,22 @@ final class FloatingNoteService: @unchecked Sendable {
         try content.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    /// 根据内容重命名文件，返回新的 URL。
+    /// 仅在目标文件名不存在时执行重命名，避免覆盖已有文件。
+    func renameByContentIfNeeded(currentURL: URL, content: String, rootFolder: String) throws -> URL {
+        let root = URL(fileURLWithPath: rootFolder, isDirectory: true)
+        let newName = deriveFilename(from: content)
+        let newURL = root.appendingPathComponent(newName)
+
+        // 如果新名和当前名相同，或目标已存在，跳过
+        guard newURL.path != currentURL.path, !FileManager.default.fileExists(atPath: newURL.path) else {
+            return currentURL
+        }
+
+        try FileManager.default.moveItem(at: currentURL, to: newURL)
+        return newURL
+    }
+
     /// 从磁盘读取文件内容。
     func load(from url: URL) throws -> String {
         try String(contentsOf: url, encoding: .utf8)
@@ -70,6 +86,75 @@ final class FloatingNoteService: @unchecked Sendable {
             .sorted { $0.date > $1.date }
             .prefix(limit)
             .map(\.url)
+    }
+
+    /// 从 Markdown 内容的前几行截取前 N 个字符，生成安全的文件名。
+    /// 去除 Markdown 标记（#、-、* 等），跳过空行。
+    func deriveFilename(from content: String, maxLength: Int = 20) -> String {
+        for line in content.components(separatedBy: .newlines) {
+            let stripped = line.trimmingCharacters(in: .whitespaces)
+            guard !stripped.isEmpty else { continue }
+            // 去除 Markdown 前缀
+            var clean = stripped
+            // 去除 # 前缀
+            if clean.hasPrefix("#") {
+                clean = clean.trimmingCharacters(in: CharacterSet(charactersIn: "# "))
+            }
+            // 去除列表前缀
+            if clean.hasPrefix("- ") || clean.hasPrefix("* ") || clean.hasPrefix("+ ") {
+                clean = String(clean.dropFirst(2))
+            }
+            // 去除有序列表前缀
+            if let range = clean.range(of: #"^\d+\.\s*"#, options: .regularExpression) {
+                clean = String(clean[range.upperBound...])
+            }
+            // 去除 > 引用前缀
+            if clean.hasPrefix("> ") {
+                clean = String(clean.dropFirst(2))
+            }
+            clean = clean.trimmingCharacters(in: .whitespaces)
+            guard !clean.isEmpty else { continue }
+            // 截断到指定长度
+            if clean.count > maxLength {
+                clean = String(clean.prefix(maxLength)).trimmingCharacters(in: .whitespaces)
+            }
+            // 替换文件系统不安全的字符
+            clean = clean
+                .replacingOccurrences(of: "/", with: "／")
+                .replacingOccurrences(of: "\\", with: "＼")
+                .replacingOccurrences(of: ":", with: "：")
+                .replacingOccurrences(of: "*", with: "·")
+                .replacingOccurrences(of: "?", with: "？")
+                .replacingOccurrences(of: "\"", with: "\u{201D}")
+                .replacingOccurrences(of: "<", with: "‹")
+                .replacingOccurrences(of: ">", with: "›")
+                .replacingOccurrences(of: "|", with: "｜")
+            return clean + ".md"
+        }
+        return "新笔记.md"
+    }
+
+    /// 以内容派生的文件名创建新笔记，确保文件唯一。
+    /// - Returns: 新笔记的 URL
+    func createNote(content: String, in rootFolder: String) throws -> URL {
+        let root = URL(fileURLWithPath: rootFolder, isDirectory: true)
+        if !FileManager.default.fileExists(atPath: root.path) {
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        }
+
+        let filename = deriveFilename(from: content)
+        var url = root.appendingPathComponent(filename)
+
+        // 如果文件已存在，追加时间戳保证唯一
+        var counter = 0
+        while FileManager.default.fileExists(atPath: url.path) {
+            counter += 1
+            let name = (filename as NSString).deletingPathExtension
+            url = root.appendingPathComponent("\(name)-\(counter).md")
+        }
+
+        try content.write(to: url, atomically: true, encoding: .utf8)
+        return url
     }
 
     // MARK: - Placeholder Substitution

@@ -240,9 +240,24 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    /// 浮动笔记的根目录绝对路径，nil 表示未配置
+    /// 浮动笔记的根目录绝对路径，nil 表示未配置（使用内置默认路径）
     @Published var floatingNoteRootFolder: String? {
         didSet { defaults.set(floatingNoteRootFolder, forKey: Keys.floatingNoteRootFolder) }
+    }
+
+    /// 内置默认笔记目录：~/Library/Application Support/Clipin/Notes/
+    /// 用户未配置 Root Folder 时自动使用此路径。
+    var floatingNoteDefaultRootFolder: String {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport.appendingPathComponent("Clipin/Notes").path
+    }
+
+    /// 实际生效的笔记根目录：优先取用户配置，为空则回退到默认路径。
+    var effectiveFloatingNoteRootFolder: String {
+        if let folder = floatingNoteRootFolder, !folder.isEmpty {
+            return folder
+        }
+        return floatingNoteDefaultRootFolder
     }
 
     /// 文件命名规则，支持 YYYY MM DD HH WW 占位符，或固定文件名（如 inbox.md）
@@ -395,6 +410,10 @@ final class SettingsStore: ObservableObject {
         case .rememberLastView:
             return lastLauncherBrowseMode
         }
+    }
+
+    func resetFloatingNoteRootFolder() {
+        floatingNoteRootFolder = nil
     }
 
     func recordLastLauncherBrowseMode(_ mode: LauncherBrowseMode) {

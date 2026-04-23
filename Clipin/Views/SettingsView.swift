@@ -822,17 +822,25 @@ struct SettingsView: View {
                         Text("Note folder")
                             .font(.system(size: 13, weight: .medium))
 
-                        Text(settings.floatingNoteRootFolder.map(abbreviatedPath)
-                            ?? "Choose the folder where note files will be created.")
+                        Text(abbreviatedPath(settings.effectiveFloatingNoteRootFolder))
                             .font(.system(size: 12))
                             .foregroundStyle(hierarchy.support.subduedInk)
                             .lineLimit(2)
                             .truncationMode(.middle)
 
-                        Button(settings.floatingNoteRootFolder == nil ? "Choose Folder…" : "Change…") {
-                            chooseFloatingNoteFolder()
+                        HStack(spacing: 8) {
+                            Button(settings.floatingNoteRootFolder == nil ? "Choose Folder…" : "Change…") {
+                                chooseFloatingNoteFolder()
+                            }
+                            .buttonStyle(.bordered)
+
+                            if settings.floatingNoteRootFolder != nil {
+                                Button("Reset to default") {
+                                    settings.resetFloatingNoteRootFolder()
+                                }
+                                .buttonStyle(.borderless)
+                            }
                         }
-                        .buttonStyle(.bordered)
                     }
 
                     groupDivider
