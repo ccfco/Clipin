@@ -339,18 +339,17 @@ struct FloatingNoteFilePicker: View {
 
                 // 笔记列表 section header：标题 + 数量
                 let files = viewModel.filteredPickerFiles
-                let totalCount = viewModel.filePickerFiles.count
                 HStack {
                     Text(viewModel.filePickerQuery.isEmpty ? "最近笔记" : "搜索结果")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                     Spacer()
                     if viewModel.filePickerQuery.isEmpty {
-                        Text("\(totalCount) 个")
+                        Text("\(viewModel.filePickerFiles.count) 个")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                     } else {
-                        Text("\(files.count) / \(totalCount)")
+                        Text("\(files.count) / \(viewModel.filePickerFiles.count)")
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                     }
@@ -508,9 +507,7 @@ struct FloatingNoteView: View {
         MarkdownTextView(
             text: $viewModel.content,
             onTextChange: { newText in
-                if viewModel.content != newText {
-                    viewModel.content = newText
-                }
+                viewModel.content = newText
             },
             onSave: viewModel.save,
             onNaturalHeightChanged: { height in
@@ -554,11 +551,11 @@ struct FloatingNoteView: View {
                     // 右侧：保存状态 + 功能按钮（hover 时淡入）
                     Group {
                         if viewModel.isSaving {
-                            Text("Saving…")
+                            Text("保存中…")
                                 .font(.system(size: 11))
                                 .foregroundStyle(.tertiary)
                         } else if viewModel.lastSaveError != nil {
-                            Text("Save failed")
+                            Text("保存失败")
                                 .font(.system(size: 11))
                                 .foregroundStyle(.red.opacity(0.8))
                         }
@@ -699,14 +696,7 @@ final class FloatingNoteViewModel: ObservableObject {
         fileURL?.lastPathComponent ?? "No file configured"
     }
 
-    var hasRootFolder: Bool {
-        true // 始终有默认路径
-    }
-
-    /// 用户是否自定义了 Root Folder
-    var isUserConfiguredRootFolder: Bool {
-        !(settings.floatingNoteRootFolder ?? "").isEmpty
-    }
+    var hasRootFolder: Bool { true }
 
     var rootFolderURL: URL? {
         URL(fileURLWithPath: settings.effectiveFloatingNoteRootFolder, isDirectory: true)

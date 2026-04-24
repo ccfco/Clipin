@@ -35,18 +35,12 @@ final class MarkdownSyntaxHighlighter {
               textStorage.length > 0 else { return }
 
         let fullRange = NSRange(location: 0, length: textStorage.length)
-
-        // 清除旧高亮
         layoutManager.setTemporaryAttributes([:], forCharacterRange: fullRange)
 
-        // 逐行高亮
-        let text = textStorage.string
-        let lines = text.components(separatedBy: .newlines)
+        let lines = textStorage.string.components(separatedBy: .newlines)
         var charOffset = 0
-
         for line in lines {
-            let lineRange = NSRange(location: charOffset, length: line.utf16.count)
-            highlightLine(line, range: lineRange, layoutManager: layoutManager)
+            highlightLine(line, range: NSRange(location: charOffset, length: line.utf16.count), layoutManager: layoutManager)
             charOffset += line.utf16.count + 1
         }
     }
@@ -54,67 +48,46 @@ final class MarkdownSyntaxHighlighter {
     private func highlightLine(_ line: String, range: NSRange, layoutManager: NSLayoutManager) {
         let stripped = line.trimmingCharacters(in: .whitespaces)
 
-        // 标题
-        if let heading = parseHeading(stripped) {
+        if let heading = parseHeading(stripped), heading.level + 1 <= range.length {
             let markerLen = heading.level + 1
-            if markerLen <= range.length {
-                let markerRange = NSRange(location: range.location, length: markerLen)
-                layoutManager.setTemporaryAttributes([.foregroundColor: markerColor()], forCharacterRange: markerRange)
-                let textRange = NSRange(location: range.location + markerLen, length: range.length - markerLen)
-                if textRange.length > 0 {
-                    layoutManager.setTemporaryAttributes([.font: headingFont(level: heading.level)], forCharacterRange: textRange)
-                }
+            layoutManager.setTemporaryAttributes([.foregroundColor: Self.markerColor], forCharacterRange: NSRange(location: range.location, length: markerLen))
+            let textRange = NSRange(location: range.location + markerLen, length: range.length - markerLen)
+            if textRange.length > 0 {
+                layoutManager.setTemporaryAttributes([.font: Self.headingFonts[heading.level]], forCharacterRange: textRange)
             }
             return
         }
 
-        // 引用
         if line.hasPrefix("> ") || line.hasPrefix(">") {
             let markerLen = line.hasPrefix("> ") ? 2 : 1
             if markerLen <= range.length {
-                layoutManager.setTemporaryAttributes([.foregroundColor: markerColor()], forCharacterRange: NSRange(location: range.location, length: markerLen))
+                layoutManager.setTemporaryAttributes([.foregroundColor: Self.markerColor], forCharacterRange: NSRange(location: range.location, length: markerLen))
                 let textRange = NSRange(location: range.location + markerLen, length: max(0, range.length - markerLen))
                 if textRange.length > 0 {
-                    layoutManager.setTemporaryAttributes([.foregroundColor: blockquoteColor()], forCharacterRange: textRange)
+                    layoutManager.setTemporaryAttributes([.foregroundColor: Self.blockquoteColor], forCharacterRange: textRange)
                 }
             }
             return
         }
 
-        // 列表标记
-        if let (_, markerLen) = listMarkerLength(of: stripped) {
-            if markerLen <= range.length {
-                layoutManager.setTemporaryAttributes([.foregroundColor: markerColor()], forCharacterRange: NSRange(location: range.location, length: markerLen))
-            }
+        if let (_, markerLen) = listMarkerLength(of: stripped), markerLen <= range.length {
+            layoutManager.setTemporaryAttributes([.foregroundColor: Self.markerColor], forCharacterRange: NSRange(location: range.location, length: markerLen))
         }
 
-        // 行内样式
         highlightInline(line, baseOffset: range.location, layoutManager: layoutManager, range: range)
     }
 
     private func highlightInline(_ line: String, baseOffset: Int, layoutManager: NSLayoutManager, range: NSRange) {
-        // 行内代码 ``
-        let codeRe = try! NSRegularExpression(pattern: #"`([^`]+)`"#)
-        for m in codeRe.matches(in: line, range: NSRange(line.startIndex..., in: line)) {
-            let innerRange = m.range(at: 1)
-            let absRange = NSRange(location: baseOffset + innerRange.location, length: innerRange.length)
-            let clipped = NSIntersectionRange(absRange, range)
+        for m in Self.codeRe.matches(in: line, range: NSRange(line.startIndex..., in: line)) {
+            let clipped = NSIntersectionRange(NSRange(location: baseOffset + m.range(at: 1).location, length: m.range(at: 1).length), range)
             if clipped.length > 0 {
-                layoutManager.setTemporaryAttributes([
-                    .font: codeFont(),
-                    .backgroundColor: codeBackground(),
-                ], forCharacterRange: clipped)
+                layoutManager.setTemporaryAttributes([.font: Self.codeFont, .backgroundColor: Self.codeBackground], forCharacterRange: clipped)
             }
         }
-
-        // 粗体 **text**
-        let boldRe = try! NSRegularExpression(pattern: #"\*\*(.+?)\*\*"#)
-        for m in boldRe.matches(in: line, range: NSRange(line.startIndex..., in: line)) {
-            let innerRange = m.range(at: 1)
-            let absRange = NSRange(location: baseOffset + innerRange.location, length: innerRange.length)
-            let clipped = NSIntersectionRange(absRange, range)
+        for m in Self.boldRe.matches(in: line, range: NSRange(line.startIndex..., in: line)) {
+            let clipped = NSIntersectionRange(NSRange(location: baseOffset + m.range(at: 1).location, length: m.range(at: 1).length), range)
             if clipped.length > 0 {
-                layoutManager.setTemporaryAttributes([.font: NSFont.systemFont(ofSize: 14, weight: .bold)], forCharacterRange: clipped)
+                layoutManager.setTemporaryAttributes([.font: Self.boldFont], forCharacterRange: clipped)
             }
         }
     }
@@ -140,14 +113,22 @@ final class MarkdownSyntaxHighlighter {
         return nil
     }
 
-    // MARK: - 样式
+    // MARK: - 缓存样式
 
-    private func markerColor() -> NSColor { NSColor(white: 0.4, alpha: 0.4) }
-    private func codeBackground() -> NSColor { NSColor(white: 0.0, alpha: 0.06) }
-    private func blockquoteColor() -> NSColor { NSColor(white: 0.0, alpha: 0.5) }
-    private func codeFont() -> NSFont { NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) }
-    private func headingFont(level: Int) -> NSFont {
-        let sizes: [Int: CGFloat] = [1: 22, 2: 18, 3: 16, 4: 15, 5: 14, 6: 13]
-        return NSFont.systemFont(ofSize: sizes[level] ?? 14, weight: .semibold)
-    }
+    private static var markerColor: NSColor { NSColor(white: 0.4, alpha: 0.4) }
+    private static var codeBackground: NSColor { NSColor(white: 0.0, alpha: 0.06) }
+    private static var blockquoteColor: NSColor { NSColor(white: 0.0, alpha: 0.5) }
+    private static var codeFont: NSFont { NSFont.monospacedSystemFont(ofSize: 13, weight: .regular) }
+    private static var boldFont: NSFont { NSFont.systemFont(ofSize: 14, weight: .bold) }
+    private static var headingFonts: [Int: NSFont] { [
+        1: .systemFont(ofSize: 22, weight: .semibold),
+        2: .systemFont(ofSize: 18, weight: .semibold),
+        3: .systemFont(ofSize: 16, weight: .semibold),
+        4: .systemFont(ofSize: 15, weight: .semibold),
+        5: .systemFont(ofSize: 14, weight: .semibold),
+        6: .systemFont(ofSize: 13, weight: .semibold),
+    ] }
+
+    private static let codeRe = try! NSRegularExpression(pattern: #"`([^`]+)`"#)
+    private static let boldRe = try! NSRegularExpression(pattern: #"\*\*(.+?)\*\*"#)
 }
