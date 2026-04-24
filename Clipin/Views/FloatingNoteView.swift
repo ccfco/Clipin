@@ -11,6 +11,7 @@ import WebKit
 struct MarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     var isWysiwygMode: Bool
+    var onTextChange: (String) -> Void
     var onSave: (String) -> Void
     var onNaturalHeightChanged: ((CGFloat) -> Void)?
     var onScrollStateChanged: ((Bool) -> Void)?
@@ -18,6 +19,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
+            onTextChange: onTextChange,
             onSave: onSave,
             onNaturalHeightChanged: onNaturalHeightChanged,
             onScrollStateChanged: onScrollStateChanged
@@ -73,6 +75,8 @@ struct MarkdownTextView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.onTextChange = onTextChange
+        context.coordinator.onSave = onSave
         context.coordinator.onScrollStateChanged = onScrollStateChanged
 
         // 切换 WYSIWYM 模式
@@ -95,14 +99,17 @@ struct MarkdownTextView: NSViewRepresentable {
         weak var textView: NSTextView?
         var styleApplier: MarkdownStyleApplier?
         weak var observedClipView: NSClipView?
-        private let onSave: (String) -> Void
+        var onTextChange: (String) -> Void
+        var onSave: (String) -> Void
         private let onNaturalHeightChanged: ((CGFloat) -> Void)?
         var onScrollStateChanged: ((Bool) -> Void)?
         private var saveTask: Task<Void, Never>?
 
-        init(onSave: @escaping (String) -> Void,
+        init(onTextChange: @escaping (String) -> Void,
+             onSave: @escaping (String) -> Void,
              onNaturalHeightChanged: ((CGFloat) -> Void)?,
              onScrollStateChanged: ((Bool) -> Void)?) {
+            self.onTextChange = onTextChange
             self.onSave = onSave
             self.onNaturalHeightChanged = onNaturalHeightChanged
             self.onScrollStateChanged = onScrollStateChanged
@@ -111,6 +118,9 @@ struct MarkdownTextView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
             let newText = tv.string
+
+            // 先同步给 SwiftUI 绑定，避免 updateNSView 用旧值覆盖用户刚输入的内容
+            onTextChange(newText)
 
             // debounce 500ms 后自动保存
             saveTask?.cancel()
@@ -564,6 +574,11 @@ struct FloatingNoteView: View {
         MarkdownTextView(
             text: $viewModel.content,
             isWysiwygMode: viewModel.isWysiwygMode,
+            onTextChange: { newText in
+                if viewModel.content != newText {
+                    viewModel.content = newText
+                }
+            },
             onSave: viewModel.save,
             onNaturalHeightChanged: { height in
                 let adjustedHeight = max(height, 320)
