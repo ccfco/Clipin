@@ -304,6 +304,7 @@ final class SettingsStore: ObservableObject {
         static let floatingNoteRootFolder = "settings.floatingNoteRootFolder"
         static let floatingNotePattern = "settings.floatingNotePattern"
         static let floatingNoteTemplate = "settings.floatingNoteTemplate"
+        static let floatingNoteLastFile = "settings.floatingNoteLastFile"
     }
 
     /// 老用户迁移信号：任意一个 key 已存在，就说明这个安装已经被实际使用过，不应突然弹欢迎页。
@@ -414,6 +415,16 @@ final class SettingsStore: ObservableObject {
 
     func resetFloatingNoteRootFolder() {
         floatingNoteRootFolder = nil
+    }
+
+    /// 保存上次打开的笔记文件路径
+    func saveLastFloatingNoteFile(_ path: String) {
+        defaults.set(path, forKey: Keys.floatingNoteLastFile)
+    }
+
+    /// 读取上次打开的笔记文件路径
+    var lastFloatingNoteFile: String? {
+        defaults.string(forKey: Keys.floatingNoteLastFile)
     }
 
     func recordLastLauncherBrowseMode(_ mode: LauncherBrowseMode) {

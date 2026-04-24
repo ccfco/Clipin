@@ -1,13 +1,11 @@
 import AppKit
 import SwiftUI
 import Combine
-import WebKit
 
 // MARK: - MarkdownTextView
 
-/// NSTextView 的 SwiftUI 包装，用于浮动笔记编辑区。
-/// WYSIWYM 模式：Markdown 语法标记不进入文本存储，用户只看到渲染后的效果。
-/// 保存时从富文本属性还原 Markdown 语法。
+/// 纯文本 Markdown 编辑器 + NSLayoutManager 临时属性语法高亮。
+/// 存储层保持纯 Markdown，不需要任何 roundtrip。
 struct MarkdownTextView: NSViewRepresentable {
     @Binding var text: String
     var onTextChange: (String) -> Void
@@ -32,9 +30,12 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
 
-        // 加载时渲染为富文本（无 markdown 语法标记）
-        let rendered = MarkdownWysiwygRenderer.render(from: text)
-        textView.textStorage?.setAttributedString(rendered)
+        // 初始化语法高亮器
+        let highlighter = MarkdownSyntaxHighlighter(layoutManager: textView.layoutManager!)
+        context.coordinator.highlighter = highlighter
+
+        // 加载 Markdown 原文
+        textView.string = text
 
         DispatchQueue.main.async {
             context.coordinator.reportNaturalHeight(for: textView)
@@ -51,6 +52,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.isContinuousSpellCheckingEnabled = false
 
         textView.insertionPointColor = NSColor(red: 0.80, green: 0.15, blue: 0.38, alpha: 1)
+        textView.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.textContainer?.lineFragmentPadding = 0
         textView.backgroundColor = .clear
@@ -71,17 +73,15 @@ struct MarkdownTextView: NSViewRepresentable {
         context.coordinator.onSave = onSave
         context.coordinator.onScrollStateChanged = onScrollStateChanged
 
-        // 用户正在编辑时跳过 diff 比较，避免 roundtrip 不等价导致的闪烁
+        // 外部加载新内容时（切换文件），跳过编辑期间的更新
         guard !context.coordinator.isUserEditing else {
             context.coordinator.reportScrollState(for: scrollView)
             return
         }
 
-        // 外部加载新内容时（切换文件），用渲染后的富文本替换
-        let currentMarkdown = MarkdownWysiwygRenderer.reconstructMarkdown(from: textView.attributedString())
-        if currentMarkdown != text {
-            let rendered = MarkdownWysiwygRenderer.render(from: text)
-            textView.textStorage?.setAttributedString(rendered)
+        if textView.string != text {
+            textView.string = text
+            context.coordinator.highlighter?.contentDidChange()
             context.coordinator.reportNaturalHeight(for: textView)
         }
         context.coordinator.reportScrollState(for: scrollView)
@@ -93,6 +93,7 @@ struct MarkdownTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
         weak var observedClipView: NSClipView?
+        var highlighter: MarkdownSyntaxHighlighter?
         var isUserEditing = false
         var onTextChange: (String) -> Void
         var onSave: (String) -> Void
@@ -114,9 +115,7 @@ struct MarkdownTextView: NSViewRepresentable {
             guard let tv = notification.object as? NSTextView else { return }
             isUserEditing = true
 
-            // 从富文本还原 Markdown 并同步
-            let markdown = MarkdownWysiwygRenderer.reconstructMarkdown(from: tv.attributedString())
-            onTextChange(markdown)
+            onTextChange(tv.string)
 
             // debounce 500ms 后自动保存
             saveTask?.cancel()
@@ -124,11 +123,13 @@ struct MarkdownTextView: NSViewRepresentable {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self.onSave(markdown)
+                    self.onSave(tv.string)
                 }
-                // 保存完成后重置编辑标记
                 self.isUserEditing = false
             }
+
+            // 触发语法高亮
+            highlighter?.contentDidChange()
 
             reportNaturalHeight(for: tv)
         }
@@ -170,67 +171,6 @@ struct MarkdownTextView: NSViewRepresentable {
             guard let clipView = notification.object as? NSClipView,
                   let scrollView = clipView.superview as? NSScrollView else { return }
             reportScrollState(for: scrollView)
-        }
-    }
-}
-
-// MARK: - MarkdownPreviewView
-
-/// WKWebView 包装：渲染 Markdown 预览，背景透明以透出面板毛玻璃。
-struct MarkdownPreviewView: NSViewRepresentable {
-    let markdown: String
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeNSView(context: Context) -> WKWebView {
-        let webView = WKWebView()
-        // 透明背景，让 .regularMaterial 透出
-        webView.setValue(false, forKey: "drawsBackground")
-        webView.layer?.backgroundColor = .clear
-        webView.navigationDelegate = context.coordinator
-        let bodyHTML = MarkdownRenderer.shared.renderBodyHTML(from: markdown)
-        context.coordinator.lastBodyHTML = bodyHTML
-        webView.loadHTMLString(MarkdownRenderer.shared.previewShellHTML(body: bodyHTML), baseURL: nil)
-        return webView
-    }
-
-    func updateNSView(_ webView: WKWebView, context: Context) {
-        let bodyHTML = MarkdownRenderer.shared.renderBodyHTML(from: markdown)
-        guard bodyHTML != context.coordinator.lastBodyHTML else { return }
-        context.coordinator.lastBodyHTML = bodyHTML
-        if context.coordinator.isShellReady {
-            context.coordinator.apply(bodyHTML: bodyHTML, to: webView)
-        } else {
-            context.coordinator.pendingBodyHTML = bodyHTML
-        }
-    }
-
-    final class Coordinator: NSObject, WKNavigationDelegate {
-        var lastBodyHTML = ""
-        var pendingBodyHTML: String?
-        var isShellReady = false
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            isShellReady = true
-            if let pendingBodyHTML, pendingBodyHTML != lastBodyHTML {
-                apply(bodyHTML: pendingBodyHTML, to: webView)
-            } else if let pendingBodyHTML {
-                apply(bodyHTML: pendingBodyHTML, to: webView)
-            }
-            pendingBodyHTML = nil
-        }
-
-        func apply(bodyHTML: String, to webView: WKWebView) {
-            let payload = bodyHTML
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
-                .replacingOccurrences(of: "\n", with: "\\n")
-                .replacingOccurrences(of: "\r", with: "\\r")
-                .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
-                .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
-            webView.evaluateJavaScript("window.__updateBody(\"\(payload)\")", completionHandler: nil)
         }
     }
 }
@@ -786,8 +726,28 @@ final class FloatingNoteViewModel: ObservableObject {
 
     func loadFile() {
         let root = settings.effectiveFloatingNoteRootFolder
+
+        // 优先加载上次打开的笔记
+        if let lastPath = settings.lastFloatingNoteFile,
+           FileManager.default.fileExists(atPath: lastPath) {
+            let url = URL(fileURLWithPath: lastPath)
+            fileURL = url
+            do {
+                content = try service.load(from: url)
+            } catch {
+                // 上次文件读不到，回退到 pattern 默认文件
+                loadDefaultFile(root: root)
+            }
+            return
+        }
+
+        loadDefaultFile(root: root)
+    }
+
+    private func loadDefaultFile(root: String) {
         let url = service.resolveURL(rootFolder: root, pattern: settings.floatingNotePattern)
         fileURL = url
+        settings.saveLastFloatingNoteFile(url.path)
         do {
             try service.ensureFileExists(at: url, template: settings.floatingNoteTemplate)
             content = try service.load(from: url)
@@ -892,6 +852,7 @@ final class FloatingNoteViewModel: ObservableObject {
             let url = try service.createNote(content: "", in: root)
             fileURL = url
             content = ""
+            settings.saveLastFloatingNoteFile(url.path)
         } catch {
             lastSaveError = error
         }
@@ -915,5 +876,6 @@ final class FloatingNoteViewModel: ObservableObject {
     func openFile(_ url: URL) {
         content = (try? service.load(from: url)) ?? ""
         fileURL = url
+        settings.saveLastFloatingNoteFile(url.path)
     }
 }
