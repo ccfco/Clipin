@@ -6,11 +6,10 @@ import WebKit
 // MARK: - MarkdownTextView
 
 /// NSTextView 的 SwiftUI 包装，用于浮动笔记编辑区。
-/// 使用标准 NSTextStorage + NSLayoutManager 临时属性实现 WYSIWYM 样式渲染。
-/// 临时属性仅影响视觉，不触发 NSTextStorage 递归，保证编辑流畅。
+/// WYSIWYM 模式：Markdown 语法标记不进入文本存储，用户只看到渲染后的效果。
+/// 保存时从富文本属性还原 Markdown 语法。
 struct MarkdownTextView: NSViewRepresentable {
     @Binding var text: String
-    var isWysiwygMode: Bool
     var onTextChange: (String) -> Void
     var onSave: (String) -> Void
     var onNaturalHeightChanged: ((CGFloat) -> Void)?
@@ -33,20 +32,14 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
 
-        // 初始化样式渲染器（使用 NSLayoutManager 临时属性）
-        let applier = MarkdownStyleApplier(
-            layoutManager: textView.layoutManager!,
-            textStorage: textView.textStorage!
-        )
-        applier.isWysiwygMode = isWysiwygMode
-        context.coordinator.styleApplier = applier
+        // 加载时渲染为富文本（无 markdown 语法标记）
+        let rendered = MarkdownWysiwygRenderer.render(from: text)
+        textView.textStorage?.setAttributedString(rendered)
 
-        // 初始加载完毕后上报高度
         DispatchQueue.main.async {
             context.coordinator.reportNaturalHeight(for: textView)
         }
 
-        // 注册焦点恢复回调
         onRegisterFocusHandler?({ [weak textView] in
             textView?.window?.makeFirstResponder(textView)
         })
@@ -58,7 +51,6 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.isContinuousSpellCheckingEnabled = false
 
         textView.insertionPointColor = NSColor(red: 0.80, green: 0.15, blue: 0.38, alpha: 1)
-        textView.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.textContainer?.lineFragmentPadding = 0
         textView.backgroundColor = .clear
@@ -79,14 +71,11 @@ struct MarkdownTextView: NSViewRepresentable {
         context.coordinator.onSave = onSave
         context.coordinator.onScrollStateChanged = onScrollStateChanged
 
-        // 切换 WYSIWYM 模式
-        if context.coordinator.styleApplier?.isWysiwygMode != isWysiwygMode {
-            context.coordinator.styleApplier?.isWysiwygMode = isWysiwygMode
-        }
-
-        // 只在内容真正不同时才赋值，避免光标跳位
-        if textView.string != text {
-            textView.string = text
+        // 外部加载新内容时（切换文件），用渲染后的富文本替换
+        let currentMarkdown = MarkdownWysiwygRenderer.reconstructMarkdown(from: textView.attributedString())
+        if currentMarkdown != text {
+            let rendered = MarkdownWysiwygRenderer.render(from: text)
+            textView.textStorage?.setAttributedString(rendered)
             context.coordinator.reportNaturalHeight(for: textView)
         }
         context.coordinator.reportScrollState(for: scrollView)
@@ -97,7 +86,6 @@ struct MarkdownTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
-        var styleApplier: MarkdownStyleApplier?
         weak var observedClipView: NSClipView?
         var onTextChange: (String) -> Void
         var onSave: (String) -> Void
@@ -117,10 +105,10 @@ struct MarkdownTextView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
-            let newText = tv.string
 
-            // 先同步给 SwiftUI 绑定，避免 updateNSView 用旧值覆盖用户刚输入的内容
-            onTextChange(newText)
+            // 从富文本还原 Markdown 并同步
+            let markdown = MarkdownWysiwygRenderer.reconstructMarkdown(from: tv.attributedString())
+            onTextChange(markdown)
 
             // debounce 500ms 后自动保存
             saveTask?.cancel()
@@ -128,14 +116,10 @@ struct MarkdownTextView: NSViewRepresentable {
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
-                    self.onSave(newText)
+                    self.onSave(markdown)
                 }
             }
 
-            // 通知样式渲染器内容已变化
-            styleApplier?.contentDidChange()
-
-            // 上报自然高度
             reportNaturalHeight(for: tv)
         }
 
@@ -573,7 +557,6 @@ struct FloatingNoteView: View {
     private func editorPane() -> some View {
         MarkdownTextView(
             text: $viewModel.content,
-            isWysiwygMode: viewModel.isWysiwygMode,
             onTextChange: { newText in
                 if viewModel.content != newText {
                     viewModel.content = newText
@@ -745,9 +728,6 @@ final class FloatingNoteViewModel: ObservableObject {
     @Published var lastSaveError: Error?
     @Published private(set) var fileURL: URL?
 
-    // 所见即所得模式：编辑与渲染同屏，不改变底层 Markdown 文件格式。默认开启。
-    @Published var isWysiwygMode = true
-
     // 文件选择器状态
     @Published var isFilePickerVisible = false
     @Published var filePickerQuery = ""
@@ -894,16 +874,6 @@ final class FloatingNoteViewModel: ObservableObject {
 
     func toggleFilePicker() {
         if isFilePickerVisible { hideFilePicker() } else { showFilePicker() }
-    }
-
-    func togglePreview() {
-        // 切换所见即所得时关闭文件选择器，避免两层覆盖
-        if isFilePickerVisible { hideFilePicker() }
-        isWysiwygMode.toggle()
-        // 两种模式都包含编辑器，切换后立即把焦点还给 NSTextView，保持连续输入。
-        DispatchQueue.main.async { [weak self] in
-            self?.focusEditorHandler?()
-        }
     }
 
     func createNewNote() {

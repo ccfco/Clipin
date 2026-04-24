@@ -89,7 +89,6 @@ private final class ClipinFloatingNotePanel: NSPanel {
     override var canBecomeMain: Bool { false }
     var onEscape: (() -> Void)?
     var onShowFilePicker: (() -> Void)?
-    var onTogglePreview: (() -> Void)?
     var onDoubleClickToolbar: (() -> Void)?
 
     override func cancelOperation(_ sender: Any?) {
@@ -114,12 +113,6 @@ private final class ClipinFloatingNotePanel: NSPanel {
             switch char {
             case "p": onShowFilePicker?(); return true   // ⌘P：文件选择器
             case "w": onEscape?(); return true           // ⌘W：关闭面板
-            default: break
-            }
-        }
-        if flags == [.command, .shift] {
-            switch char {
-            case "p": onTogglePreview?(); return true    // ⌘⇧P：切换预览
             default: break
             }
         }
@@ -459,7 +452,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.onEscape = { [weak self] in self?.hideFloatingNotePanel() }
         panel.onShowFilePicker = { [weak self] in self?.floatingNoteViewModel?.toggleFilePicker() }
-        panel.onTogglePreview  = { [weak self] in self?.floatingNoteViewModel?.togglePreview() }
         panel.onDoubleClickToolbar = { [weak self] in
             self?.fitFloatingNotePanel(animated: true)
         }
