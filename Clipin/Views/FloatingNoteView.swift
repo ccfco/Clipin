@@ -71,6 +71,12 @@ struct MarkdownTextView: NSViewRepresentable {
         context.coordinator.onSave = onSave
         context.coordinator.onScrollStateChanged = onScrollStateChanged
 
+        // 用户正在编辑时跳过 diff 比较，避免 roundtrip 不等价导致的闪烁
+        guard !context.coordinator.isUserEditing else {
+            context.coordinator.reportScrollState(for: scrollView)
+            return
+        }
+
         // 外部加载新内容时（切换文件），用渲染后的富文本替换
         let currentMarkdown = MarkdownWysiwygRenderer.reconstructMarkdown(from: textView.attributedString())
         if currentMarkdown != text {
@@ -87,6 +93,7 @@ struct MarkdownTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         weak var textView: NSTextView?
         weak var observedClipView: NSClipView?
+        var isUserEditing = false
         var onTextChange: (String) -> Void
         var onSave: (String) -> Void
         private let onNaturalHeightChanged: ((CGFloat) -> Void)?
@@ -105,6 +112,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
+            isUserEditing = true
 
             // 从富文本还原 Markdown 并同步
             let markdown = MarkdownWysiwygRenderer.reconstructMarkdown(from: tv.attributedString())
@@ -118,6 +126,8 @@ struct MarkdownTextView: NSViewRepresentable {
                 await MainActor.run {
                     self.onSave(markdown)
                 }
+                // 保存完成后重置编辑标记
+                self.isUserEditing = false
             }
 
             reportNaturalHeight(for: tv)
