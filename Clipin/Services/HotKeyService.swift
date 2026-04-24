@@ -109,7 +109,7 @@ final class HotKeyService: @unchecked Sendable {
 
     var onToggle: (() -> Void)?
 
-    /// - Parameter id: 每个实例必须使用唯一 id（1=主面板，2=浮动笔记）
+    /// - Parameter id: 每个实例必须使用唯一 id（当前仅 1=主面板）
     init(id: UInt32 = 1) {
         self.hotKeyID = id
     }
