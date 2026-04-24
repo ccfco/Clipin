@@ -12,12 +12,6 @@ struct HotKeyShortcut: Codable, Equatable {
         key: "V"
     )
 
-    static let defaultFloatingNote = HotKeyShortcut(
-        keyCode: UInt32(kVK_ANSI_N),
-        modifierFlagsRaw: NSEvent.ModifierFlags.option.rawValue,
-        key: "N"
-    )
-
     var modifierFlags: NSEvent.ModifierFlags {
         NSEvent.ModifierFlags(rawValue: modifierFlagsRaw).intersection(.deviceIndependentFlagsMask)
     }

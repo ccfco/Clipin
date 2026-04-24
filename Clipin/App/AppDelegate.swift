@@ -20,45 +20,6 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     }
 }
 
-/// 浮动笔记 HostingView：复用 ClipinHostingView 的 updateLayer 圆角逻辑，
-/// 同时通过 mouseDragged 转发给 panel 实现从任意区域拖动窗口。
-private final class NoteHostingView<V: View>: NSHostingView<V> {
-    private weak var panel: NSPanel?
-
-    init(rootView: V, panel: NSPanel) {
-        self.panel = panel
-        super.init(rootView: rootView)
-    }
-
-    required init(rootView: V) {
-        super.init(rootView: rootView)
-    }
-
-    @available(*, unavailable)
-    required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-    override var isOpaque: Bool { false }
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-
-    override func updateLayer() {
-        super.updateLayer()
-        layer?.backgroundColor = .clear
-        layer?.cornerRadius = ClipinChrome.shellCornerRadius
-        layer?.cornerCurve = .continuous
-        layer?.allowsEdgeAntialiasing = true
-        layer?.masksToBounds = true
-        window?.invalidateShadow()
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let panel else {
-            super.mouseDragged(with: event)
-            return
-        }
-        panel.performDrag(with: event)
-    }
-}
-
 /// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
 private final class ClipinPanel: NSPanel {
@@ -79,44 +40,6 @@ private final class ClipinPanel: NSPanel {
 private final class ClipinSettingsWindow: NSWindow {
     override func cancelOperation(_ sender: Any?) {
         performClose(sender)
-    }
-}
-
-/// 浮动笔记面板：需要 canBecomeKey 才能让 NSTextView 接收键盘输入；
-/// cancelOperation 处理 Esc 关闭，performKeyEquivalent 拦截 ⌘P 打开文件选择器。
-private final class ClipinFloatingNotePanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-    var onEscape: (() -> Void)?
-    var onShowFilePicker: (() -> Void)?
-    var onDoubleClickToolbar: (() -> Void)?
-
-    override func cancelOperation(_ sender: Any?) {
-        onEscape?()
-    }
-
-    /// 双击工具栏区域（顶部 40pt）触发自适应高度。
-    override func mouseDown(with event: NSEvent) {
-        if event.clickCount == 2,
-           let cv = contentView,
-           event.locationInWindow.y >= cv.bounds.height - 40 {
-            onDoubleClickToolbar?()
-            return
-        }
-        super.mouseDown(with: event)
-    }
-
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let char = event.charactersIgnoringModifiers
-        if flags == .command {
-            switch char {
-            case "p": onShowFilePicker?(); return true   // ⌘P：文件选择器
-            case "w": onEscape?(); return true           // ⌘W：关闭面板
-            default: break
-            }
-        }
-        return super.performKeyEquivalent(with: event)
     }
 }
 
@@ -143,19 +66,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: ClipboardMonitor?
     private var viewModel: ClipboardViewModel?
     private let hotKey = HotKeyService(id: 1)
-    private let floatingNoteHotKey = HotKeyService(id: 2)
-    private var floatingNotePanel: ClipinFloatingNotePanel?
-    private var floatingNoteViewModel: FloatingNoteViewModel?
-    private var lastFloatingNoteContentHeight: CGFloat =
-        FloatingNotePanelMetrics.defaultSize.height - FloatingNotePanelMetrics.toolbarHeight
-
-    private enum FloatingNotePanelMetrics {
-        static let defaultSize = NSSize(width: 400, height: 480)
-        static let minHeight: CGFloat = 160
-        static let toolbarHeight: CGFloat = 40
-        static let originXKey = "floatingNote.savedOriginX"
-        static let originYKey = "floatingNote.savedOriginY"
-    }
     private var cancellables = Set<AnyCancellable>()
     private var permissionGrantedObserver: AnyCancellable?
     private var permissionWindow: NSWindow?
@@ -203,10 +113,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         setupPanel()
         loadSavedPanelPosition()
-        setupFloatingNotePanel()
         startMonitoring()
         setupHotKey()
-        setupFloatingNoteHotKey()
         setupSettingsObservers()
         setupUpdateReminderObservers()
         startKeyMonitor()
@@ -420,112 +328,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.panel = panel
     }
 
-    // MARK: - Floating Note Panel
-
-    private func setupFloatingNotePanel() {
-        let vm = FloatingNoteViewModel()
-        vm.onClose = { [weak self] in self?.hideFloatingNotePanel() }
-        vm.onNaturalHeightChanged = { [weak self] height in
-            guard let self else { return }
-            self.lastFloatingNoteContentHeight = height
-            self.resizeFloatingNotePanel(toContentHeight: height)
-        }
-        self.floatingNoteViewModel = vm
-
-        let panel = ClipinFloatingNotePanel(
-            contentRect: NSRect(origin: .zero, size: FloatingNotePanelMetrics.defaultSize),
-            styleMask: [.borderless, .nonactivatingPanel, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-
-        let hostingView = NoteHostingView(rootView: FloatingNoteView(viewModel: vm), panel: panel)
-        panel.contentView = hostingView
-
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = true
-        panel.isFloatingPanel = true   // 先设（内部会把 level 重置为 .floating=3）
-        panel.level = .statusBar       // 再覆写（25 > Raycast Note 的 modalPanel=8）
-        panel.hidesOnDeactivate = false
-        panel.animationBehavior = .utilityWindow
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.onEscape = { [weak self] in self?.hideFloatingNotePanel() }
-        panel.onShowFilePicker = { [weak self] in self?.floatingNoteViewModel?.toggleFilePicker() }
-        panel.onDoubleClickToolbar = { [weak self] in
-            self?.fitFloatingNotePanel(animated: true)
-        }
-
-        // 恢复上次位置，否则居中显示；位置超出屏幕时自动回退到居中
-        let defaults = UserDefaults.standard
-        let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        if let x = defaults.object(forKey: FloatingNotePanelMetrics.originXKey) as? CGFloat,
-           let y = defaults.object(forKey: FloatingNotePanelMetrics.originYKey) as? CGFloat,
-           screenFrame.contains(NSRect(x: x, y: y, width: 400, height: 480)) {
-            panel.setFrameOrigin(NSPoint(x: x, y: y))
-        } else {
-            panel.center()
-        }
-
-        self.floatingNotePanel = panel
-    }
-
-    /// 根据文本内容高度自动调整面板高度（保持顶边固定，向下扩展），
-    /// 最小 minHeight，最大不超过屏幕可用高度的 75%。
-    private func resizeFloatingNotePanel(
-        toContentHeight contentHeight: CGFloat,
-        animated: Bool = false,
-        force: Bool = false
-    ) {
-        guard let panel = floatingNotePanel, panel.isVisible else { return }
-        let total = contentHeight + FloatingNotePanelMetrics.toolbarHeight
-        let maxH = (NSScreen.main?.visibleFrame.height ?? 800) * 0.75
-        let newH = min(max(total, FloatingNotePanelMetrics.minHeight), maxH)
-        guard force || abs(panel.frame.height - newH) > 4 else { return }
-        let newFrame = NSRect(
-            x: panel.frame.origin.x,
-            y: panel.frame.maxY - newH,
-            width: panel.frame.width,
-            height: newH
-        )
-        panel.setFrame(newFrame, display: true, animate: animated)
-    }
-
-    private func fitFloatingNotePanel(animated: Bool) {
-        resizeFloatingNotePanel(
-            toContentHeight: lastFloatingNoteContentHeight,
-            animated: animated,
-            force: true
-        )
-    }
-
-    private func toggleFloatingNotePanel() {
-        guard let panel = floatingNotePanel else { return }
-        if panel.isVisible {
-            hideFloatingNotePanel()
-        } else {
-            showFloatingNotePanel()
-        }
-    }
-
-    private func showFloatingNotePanel() {
-        guard let panel = floatingNotePanel else { return }
-        floatingNoteViewModel?.loadFile()
-        panel.makeKeyAndOrderFront(nil)
-        // 显示后刷新阴影：让 compositor 基于当前 alpha 轮廓重新计算投影
-        panel.invalidateShadow()
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    private func hideFloatingNotePanel() {
-        guard let panel = floatingNotePanel else { return }
-        // 保存位置
-        let origin = panel.frame.origin
-        UserDefaults.standard.set(origin.x, forKey: FloatingNotePanelMetrics.originXKey)
-        UserDefaults.standard.set(origin.y, forKey: FloatingNotePanelMetrics.originYKey)
-        panel.orderOut(nil)
-    }
-
     // MARK: - Monitoring
 
     private func startMonitoring() {
@@ -545,26 +347,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func setupFloatingNoteHotKey() {
-        floatingNoteHotKey.onToggle = { [weak self] in
-            self?.toggleFloatingNotePanel()
-        }
-    }
-
     private func setupSettingsObservers() {
         settings.$shortcut
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] shortcut in
                 self?.hotKey.start(with: shortcut)
-            }
-            .store(in: &cancellables)
-
-        settings.$floatingNoteShortcut
-            .removeDuplicates()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] shortcut in
-                self?.floatingNoteHotKey.start(with: shortcut)
             }
             .store(in: &cancellables)
 
