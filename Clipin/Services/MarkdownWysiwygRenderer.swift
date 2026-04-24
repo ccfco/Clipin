@@ -191,12 +191,8 @@ enum MarkdownWysiwygRenderer {
                 attrs[.foregroundColor] = NSColor.labelColor
                 result.append(NSAttributedString(string: p, attributes: attrs))
             }
-            // 合并块级标记
-            for (k, v) in extraAttrs {
-                result.addAttribute(k, value: v, range: NSRange(location: result.length - (segment.string?.count ?? 0), length: segment.string?.count ?? 0))
-            }
         }
-        // 对整个行应用块级标记（确保所有字符都有）
+        // 对整个行应用块级标记
         if result.length > 0 {
             for (k, v) in extraAttrs {
                 result.addAttribute(k, value: v, range: NSRange(location: 0, length: result.length))
