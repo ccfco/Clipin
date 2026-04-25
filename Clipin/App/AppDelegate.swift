@@ -1239,7 +1239,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.resume()
             return
         }
-        try? appState.core.incrementPasteCount(id: item.id)
+        do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
         executePasteFlow(isImage: item.clipType == .image)
     }
 
@@ -1249,7 +1249,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.resume()
             return
         }
-        try? appState.core.incrementPasteCount(id: item.id)
+        do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
         executePasteFlow(isImage: false)
     }
 

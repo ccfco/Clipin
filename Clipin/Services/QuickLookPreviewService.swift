@@ -105,23 +105,24 @@ extension QuickLookPreviewService: QLPreviewPanelDelegate {
 
         switch event.keyCode {
         case 0x7B, 0x7E:
-            return MainActor.assumeIsolated {
-                stepPreview(delta: -1, in: panel)
+            Task { @MainActor [weak self] in
+                self?.stepPreview(delta: -1, in: panel)
             }
+            return true
         case 0x7C, 0x7D:
-            return MainActor.assumeIsolated {
-                stepPreview(delta: 1, in: panel)
+            Task { @MainActor [weak self] in
+                self?.stepPreview(delta: 1, in: panel)
             }
+            return true
         default:
             return false
         }
     }
 
     func previewPanelWillClose(_ panel: QLPreviewPanel!) {
-        dispatchPrecondition(condition: .onQueue(.main))
-        MainActor.assumeIsolated {
-            clearPreviewSession()
-            setPreviewVisibility(false)
+        Task { @MainActor [weak self] in
+            self?.clearPreviewSession()
+            self?.setPreviewVisibility(false)
         }
     }
 }

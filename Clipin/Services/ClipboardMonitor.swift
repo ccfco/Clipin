@@ -40,7 +40,7 @@ final class ClipboardMonitor: ObservableObject {
     func start() {
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 self?.checkClipboard()
             }
         }
