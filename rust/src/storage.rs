@@ -635,6 +635,20 @@ impl Storage {
         result.unwrap_or_default()
     }
 
+    pub fn export_items_snapshot(&self) -> Vec<ClipItem> {
+        let conn = self.conn.lock().unwrap();
+        let result = conn.prepare(
+            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
+             FROM clip_items
+             ORDER BY is_pinned DESC, created_at DESC, id DESC",
+        ).and_then(|mut stmt| {
+            stmt.query_map([], Self::row_to_item)
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        });
+
+        result.unwrap_or_default()
+    }
+
     pub fn get_list_items(
         &self,
         limit: i32,

@@ -49,6 +49,11 @@ impl ClipinCore {
         self.storage.get_items(limit, offset, type_filter.as_ref())
     }
 
+    /// 获取导出专用快照。一次性读取稳定顺序，避免 OFFSET 分页期间历史变化导致跳项/重复。
+    pub fn export_items_snapshot(&self) -> Vec<ClipItem> {
+        self.storage.export_items_snapshot()
+    }
+
     /// 获取轻量列表项，避免大文本拖慢列表渲染
     pub fn get_list_items(
         &self,
@@ -373,6 +378,73 @@ mod tests {
         let list_results = core.search_list_items("common searchable".into(), None);
         assert_eq!(list_results[0].preview, "common searchable hot item");
         assert_eq!(list_results[0].paste_count, 50);
+    }
+
+    #[test]
+    fn test_export_items_snapshot_returns_stable_full_order() {
+        let core = setup_core();
+        let base = 1_700_000_000_000;
+
+        let older = core
+            .import_item(
+                "older".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                base,
+            )
+            .unwrap();
+        let newest = core
+            .import_item(
+                "newest".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                base + 1,
+            )
+            .unwrap();
+        let tied = core
+            .import_item(
+                "same timestamp".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                base + 1,
+            )
+            .unwrap();
+        let pinned = core
+            .import_item(
+                "pinned".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                true,
+                base - 1,
+            )
+            .unwrap();
+
+        let mut expected_unpinned = vec![newest, tied, older];
+        expected_unpinned.sort_by(|left, right| {
+            right
+                .created_at
+                .cmp(&left.created_at)
+                .then_with(|| right.id.cmp(&left.id))
+        });
+
+        let snapshot = core.export_items_snapshot();
+        let expected: Vec<String> = std::iter::once(pinned.content)
+            .chain(expected_unpinned.into_iter().map(|item| item.content))
+            .collect();
+        let actual: Vec<String> = snapshot.into_iter().map(|item| item.content).collect();
+
+        assert_eq!(actual, expected);
     }
 
     #[test]

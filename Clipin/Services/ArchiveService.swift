@@ -26,8 +26,6 @@ enum ArchiveError: LocalizedError {
 }
 
 enum ArchiveService {
-    private static let archivePageSize: Int32 = 500
-
     @MainActor
     static func exportArchive(core: ClipinCore) async throws -> ArchiveExportResult {
         let panel = NSSavePanel()
@@ -110,61 +108,69 @@ enum ArchiveService {
         }.value
     }
 
-    /// 将全部条目写入指定 URL，不弹出文件面板，供自动备份复用。重活在后台执行。
+    /// 将全部条目写入指定 URL，不弹出文件面板，供自动备份复用。
+    /// 归档重活在结构化后台子任务里执行，取消会传到真正写文件前。
     static func writeArchive(to url: URL, core: ClipinCore) async throws -> ArchiveExportResult {
-        try await Task.detached(priority: .utility) {
-            var exportedItems: [ArchiveItem] = []
-            var skippedCount = 0
-            var offset: Int32 = 0
-
-            while true {
-                try Task.checkCancellation()
-                let items = core.getItems(limit: archivePageSize, offset: offset, typeFilter: nil)
-                guard !items.isEmpty else { break }
-
-                for item in items {
-                    try Task.checkCancellation()
-                    if item.clipType == .image {
-                        guard let imagePath = item.imagePath,
-                              let imageData = try? Data(contentsOf: URL(fileURLWithPath: imagePath)) else {
-                            skippedCount += 1
-                            continue
-                        }
-                        exportedItems.append(ArchiveItem(
-                            content: item.content,
-                            clipType: archiveType(for: item.clipType),
-                            sourceApp: item.sourceApp,
-                            sourceName: item.sourceName,
-                            isPinned: item.isPinned,
-                            createdAt: item.createdAt,
-                            imageDataBase64: imageData.base64EncodedString()
-                        ))
-                        continue
-                    }
-                    exportedItems.append(ArchiveItem(
-                        content: item.content,
-                        clipType: archiveType(for: item.clipType),
-                        sourceApp: item.sourceApp,
-                        sourceName: item.sourceName,
-                        isPinned: item.isPinned,
-                        createdAt: item.createdAt,
-                        imageDataBase64: nil
-                    ))
-                }
-
-                if items.count < Int(archivePageSize) { break }
-                offset += archivePageSize
+        try Task.checkCancellation()
+        return try await withThrowingTaskGroup(of: ArchiveExportResult.self) { group in
+            group.addTask(priority: .utility) {
+                try Self.writeArchiveSnapshot(to: url, core: core)
             }
 
-            let archive = ClipboardArchive(schemaVersion: 1, exportedAt: Date(), items: exportedItems)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(archive)
-            try data.write(to: url, options: .atomic)
+            guard let result = try await group.next() else {
+                throw ArchiveError.cancelled
+            }
+            return result
+        }
+    }
 
-            return ArchiveExportResult(url: url, exportedCount: exportedItems.count, skippedCount: skippedCount)
-        }.value
+    private static func writeArchiveSnapshot(to url: URL, core: ClipinCore) throws -> ArchiveExportResult {
+        try Task.checkCancellation()
+        let items = core.exportItemsSnapshot()
+        var exportedItems: [ArchiveItem] = []
+        exportedItems.reserveCapacity(items.count)
+        var skippedCount = 0
+
+        for item in items {
+            try Task.checkCancellation()
+            if item.clipType == .image {
+                guard let imagePath = item.imagePath,
+                      let imageData = try? Data(contentsOf: URL(fileURLWithPath: imagePath)) else {
+                    skippedCount += 1
+                    continue
+                }
+                try Task.checkCancellation()
+                exportedItems.append(ArchiveItem(
+                    content: item.content,
+                    clipType: archiveType(for: item.clipType),
+                    sourceApp: item.sourceApp,
+                    sourceName: item.sourceName,
+                    isPinned: item.isPinned,
+                    createdAt: item.createdAt,
+                    imageDataBase64: imageData.base64EncodedString()
+                ))
+                continue
+            }
+            exportedItems.append(ArchiveItem(
+                content: item.content,
+                clipType: archiveType(for: item.clipType),
+                sourceApp: item.sourceApp,
+                sourceName: item.sourceName,
+                isPinned: item.isPinned,
+                createdAt: item.createdAt,
+                imageDataBase64: nil
+            ))
+        }
+
+        let archive = ClipboardArchive(schemaVersion: 1, exportedAt: Date(), items: exportedItems)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(archive)
+        try Task.checkCancellation()
+        try data.write(to: url, options: .atomic)
+
+        return ArchiveExportResult(url: url, exportedCount: exportedItems.count, skippedCount: skippedCount)
     }
 
     private static func suggestedFilename() -> String {
