@@ -32,6 +32,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.Clipin
         PRODUCT_NAME: Clipin
+        ARCHS: arm64
         INFOPLIST_FILE: Clipin/Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Clipin/Clipin.entitlements
         LIBRARY_SEARCH_PATHS:
@@ -68,3 +69,14 @@ targets:
           - $(SRCROOT)/Clipin/Generated/clipin_coreFFI.h
           - $(SRCROOT)/Clipin/Generated/clipin_coreFFI.modulemap
         basedOnDependencyAnalysis: true
+  ClipinTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: ClipinTests
+    dependencies:
+      - target: Clipin
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ccfco.ClipinTests
+        GENERATE_INFOPLIST_FILE: true

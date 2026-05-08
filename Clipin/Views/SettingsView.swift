@@ -1003,7 +1003,7 @@ struct SettingsView: View {
     private func runCleanup() {
         Task {
             do {
-                let result = try CleanupService(core: core, settings: settings).runNow()
+                let result = try await CleanupService(core: core, settings: settings).runNow()
                 NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
                 if result.totalRemoved == 0 {
                     showNotice(NSLocalizedString("Nothing needed cleanup. Your history already fits the current policy.", comment: ""))
@@ -1024,41 +1024,45 @@ struct SettingsView: View {
     }
 
     private func exportArchive() {
-        do {
-            let result = try ArchiveService.exportArchive(core: core)
-            showNotice(
-                localized(
-                    "Exported %d items to %@.",
-                    result.exportedCount,
-                    result.url.lastPathComponent
-                ) + skippedSuffix(result.skippedCount)
-            )
-        } catch ArchiveError.cancelled {
-            return
-        } catch {
-            showNotice(error.localizedDescription, isError: true)
+        Task {
+            do {
+                let result = try await ArchiveService.exportArchive(core: core)
+                showNotice(
+                    localized(
+                        "Exported %d items to %@.",
+                        result.exportedCount,
+                        result.url.lastPathComponent
+                    ) + skippedSuffix(result.skippedCount)
+                )
+            } catch ArchiveError.cancelled {
+                return
+            } catch {
+                showNotice(error.localizedDescription, isError: true)
+            }
         }
     }
 
     private func importArchive() {
-        do {
-            let result = try ArchiveService.importArchive(core: core)
-            let cleanup = try CleanupService(core: core, settings: settings).runNow()
-            NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
-            let cleanupSuffix = cleanup.totalRemoved > 0
-                ? " " + localized("Cleanup removed %d older items.", cleanup.totalRemoved)
-                : ""
-            showNotice(
-                localized(
-                    "Imported %d items from %@.",
-                    result.importedCount,
-                    result.url.lastPathComponent
-                ) + skippedSuffix(result.skippedCount) + cleanupSuffix
-            )
-        } catch ArchiveError.cancelled {
-            return
-        } catch {
-            showNotice(error.localizedDescription, isError: true)
+        Task {
+            do {
+                let result = try await ArchiveService.importArchive(core: core)
+                let cleanup = try await CleanupService(core: core, settings: settings).runNow()
+                NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
+                let cleanupSuffix = cleanup.totalRemoved > 0
+                    ? " " + localized("Cleanup removed %d older items.", cleanup.totalRemoved)
+                    : ""
+                showNotice(
+                    localized(
+                        "Imported %d items from %@.",
+                        result.importedCount,
+                        result.url.lastPathComponent
+                    ) + skippedSuffix(result.skippedCount) + cleanupSuffix
+                )
+            } catch ArchiveError.cancelled {
+                return
+            } catch {
+                showNotice(error.localizedDescription, isError: true)
+            }
         }
     }
 

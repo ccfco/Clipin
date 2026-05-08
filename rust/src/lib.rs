@@ -340,6 +340,42 @@ mod tests {
     }
 
     #[test]
+    fn test_search_ranks_candidates_before_limit() {
+        let core = setup_core();
+
+        for index in 0..240 {
+            core.save_item(
+                format!("common searchable cold item {index}"),
+                ClipType::Text,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        }
+        let hot = core
+            .save_item(
+                "common searchable hot item".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        for _ in 0..50 {
+            core.increment_paste_count(hot.id.clone()).unwrap();
+        }
+
+        let results = core.search("common searchable".into(), None);
+        assert_eq!(results[0].content, "common searchable hot item");
+        assert_eq!(results[0].paste_count, 50);
+
+        let list_results = core.search_list_items("common searchable".into(), None);
+        assert_eq!(list_results[0].preview, "common searchable hot item");
+        assert_eq!(list_results[0].paste_count, 50);
+    }
+
+    #[test]
     fn test_search_like_metachar_escaping() {
         let core = setup_core();
 

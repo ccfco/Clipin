@@ -11,7 +11,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-15.0%2B-blue" alt="macOS 15.0+">
-  <img src="https://img.shields.io/badge/Rust-1.75%2B-orange" alt="Rust 1.75+">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-arm64-blueviolet" alt="Apple Silicon arm64">
+  <img src="https://img.shields.io/badge/Rust-stable-orange" alt="Rust stable">
   <img src="https://img.shields.io/badge/Swift-6.0-red" alt="Swift 6.0">
   <img src="https://img.shields.io/badge/version-0.1.6-brightgreen" alt="v0.1.6">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
@@ -69,7 +70,7 @@
 
 ### 直接下载
 
-1. 前往 [Releases](https://github.com/ccfco/Clipin/releases/latest) 下载最新 `Clipin-vX.X.X-macOS.zip`
+1. 前往 [Releases](https://github.com/ccfco/Clipin/releases/latest) 下载最新 `Clipin-vX.X.X-macOS.zip`（当前只发布 Apple Silicon / arm64 版本）
 2. 解压得到 `Clipin.app`，拖入 `/Applications`
 3. 首次打开如果被系统拦截，右键点"打开"完成确认
 4. 首次启动会进入简短欢迎引导，记住主快捷键 `⌘⇧V`
@@ -77,7 +78,7 @@
 
 ### 源码构建
 
-需要：Rust stable、Xcode 16+、[xcodegen](https://github.com/yonaskolb/XcodeGen)
+需要：Apple Silicon Mac、Rust stable、Xcode 16+、[xcodegen](https://github.com/yonaskolb/XcodeGen)
 
 ```bash
 git clone https://github.com/ccfco/Clipin.git
@@ -89,7 +90,7 @@ cd Clipin
 # 生成 Xcode 项目
 xcodegen generate
 
-# 构建并部署到 /Applications（含稳定签名，辅助功能权限不丢失）
+# 构建并部署 arm64 版本到 /Applications（含稳定签名，辅助功能权限不丢失）
 ./scripts/deploy.sh
 ```
 
@@ -118,12 +119,12 @@ xcodegen generate
 
 **计划中：**
 
-- [ ] 拼音/首字母模糊搜索
 - [ ] 浮动便签/参考面板模式
 - [ ] iCloud 云同步
 
 **已完成：**
 
+- [x] 拼音/首字母模糊搜索
 - [x] 图片 OCR 文字识别与搜索
 - [x] Native Liquid Glass 主题系统
 - [x] 面板位置记忆 (持久化)
@@ -179,6 +180,7 @@ Clipin is a tiny, keyboard-first clipboard manager for macOS. It is built to lau
 
 **Why it stands out:**
 - Image OCR search: built-in text recognition for images (zh/en support)
+- Pinyin and initials search for Chinese text
 - Native Liquid Glass theme: modern macOS 26 style with 4 curated themes
 - Instant search: fast FTS5-based search for text and image content
 - Keyboard-first flow: arrow keys, Enter to paste, `⌘1-9` quick paste, `⌘K` palette
@@ -188,7 +190,7 @@ Clipin is a tiny, keyboard-first clipboard manager for macOS. It is built to lau
 
 ## Install
 
-Download the latest `.zip` from [Releases](https://github.com/ccfco/Clipin/releases/latest), unzip, drag to `/Applications`, and grant Accessibility permission on first launch.
+Download the latest Apple Silicon `.zip` from [Releases](https://github.com/ccfco/Clipin/releases/latest), unzip, drag to `/Applications`, and grant Accessibility permission on first launch.
 
 Or build from source:
 

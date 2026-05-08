@@ -9,18 +9,13 @@ GENERATED_DIR="$PROJECT_ROOT/Clipin/Generated"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-15.0}"
 
 TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable}"
-case "$(uname -m)" in
-    arm64)
-        RUST_TARGET="${RUST_TARGET:-aarch64-apple-darwin}"
-        ;;
-    x86_64)
-        RUST_TARGET="${RUST_TARGET:-x86_64-apple-darwin}"
-        ;;
-    *)
-        echo "❌ Unsupported macOS architecture: $(uname -m)"
-        exit 1
-        ;;
-esac
+RUST_TARGET="${RUST_TARGET:-aarch64-apple-darwin}"
+
+if [[ "$RUST_TARGET" != "aarch64-apple-darwin" ]]; then
+    echo "❌ Clipin currently ships Apple Silicon (arm64) builds only."
+    echo "   Remove RUST_TARGET or set it to aarch64-apple-darwin."
+    exit 1
+fi
 
 if command -v rustup >/dev/null 2>&1; then
     TOOLCHAIN_RUSTC="$(rustup which --toolchain "$TOOLCHAIN" rustc)"

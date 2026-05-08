@@ -757,10 +757,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func runCleanupAndReload(selectLatest: Bool = false) {
         let cleanup = cleanupService
-        Task.detached(priority: .utility) {
-            _ = try? await cleanup.runNow()
-        }
         viewModel?.loadItems(selectLatest: selectLatest)
+        Task { @MainActor [weak self] in
+            let result = try? await cleanup.runNow()
+            if (result?.totalRemoved ?? 0) > 0 {
+                self?.viewModel?.loadItems()
+            }
+        }
     }
 
     private func handleEscape(for vm: ClipboardViewModel) {

@@ -1,6 +1,6 @@
 use crate::models::*;
 use pinyin::ToPinyin;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, fs, io::ErrorKind, sync::Mutex};
 use uuid::Uuid;
@@ -782,6 +782,7 @@ impl Storage {
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                  LIMIT 200"
             } else {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
@@ -790,6 +791,7 @@ impl Storage {
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1
+                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                  LIMIT 200"
             };
 
@@ -812,12 +814,14 @@ impl Storage {
                  FROM clip_items
                  WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\')
                    AND clip_type = ?2
+                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
             } else {
                 "SELECT id, content, clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items
                  WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\'
+                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
             };
 
@@ -856,6 +860,7 @@ impl Storage {
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, ci.copy_count DESC, ci.created_at DESC
                  LIMIT 200"
             } else {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
@@ -864,6 +869,7 @@ impl Storage {
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1
+                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, ci.copy_count DESC, ci.created_at DESC
                  LIMIT 200"
             };
 
@@ -887,12 +893,14 @@ impl Storage {
                  FROM clip_items
                  WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
                    AND clip_type = ?2
+                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
             } else {
                 "SELECT id, content, clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items
                  WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
+                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
             };
 
@@ -926,6 +934,7 @@ impl Storage {
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -938,6 +947,7 @@ impl Storage {
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -964,6 +974,7 @@ impl Storage {
                      FROM clip_items
                      WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -974,6 +985,7 @@ impl Storage {
                             created_at, image_path, char_count, paste_count, copy_count
                      FROM clip_items
                      WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\'
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -1016,6 +1028,7 @@ impl Storage {
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, ci.copy_count DESC, ci.created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -1028,6 +1041,7 @@ impl Storage {
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, ci.copy_count DESC, ci.created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -1055,6 +1069,7 @@ impl Storage {
                      FROM clip_items
                      WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -1065,6 +1080,7 @@ impl Storage {
                             created_at, image_path, char_count, paste_count, copy_count
                      FROM clip_items
                      WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -1581,15 +1597,11 @@ mod migration_tests {
 
         let items = storage.get_items(10, 0, None);
         assert_eq!(items.len(), 2);
-        assert!(
-            items
-                .iter()
-                .any(|item| item.content == "pinned" && item.is_pinned)
-        );
-        assert!(
-            items
-                .iter()
-                .any(|item| item.content == "two" && !item.is_pinned)
-        );
+        assert!(items
+            .iter()
+            .any(|item| item.content == "pinned" && item.is_pinned));
+        assert!(items
+            .iter()
+            .any(|item| item.content == "two" && !item.is_pinned));
     }
 }

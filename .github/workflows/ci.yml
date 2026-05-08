@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+
+      - name: Install Rust target
+        run: rustup target add aarch64-apple-darwin
+
+      - name: Rust tests
+        run: |
+          RUSTC="$(rustup which rustc)" rustup run stable cargo test --manifest-path rust/Cargo.toml --lib
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: macOS arm64 build
+        run: |
+          xcodebuild \
+            -project Clipin.xcodeproj \
+            -scheme Clipin \
+            -configuration Debug \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Swift unit tests
+        run: |
+          xcodebuild \
+            -project Clipin.xcodeproj \
+            -scheme Clipin \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            CODE_SIGNING_ALLOWED=NO \
+            test

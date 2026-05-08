@@ -9,6 +9,7 @@ Clipin.xcodeproj/
 *.xcuserdata
 DerivedData/
 .derived-data/
+com.apple.DeveloperTools/
 
 # macOS
 .DS_Store

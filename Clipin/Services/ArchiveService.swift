@@ -2,13 +2,13 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
-struct ArchiveExportResult {
+struct ArchiveExportResult: Sendable {
     let url: URL
     let exportedCount: Int
     let skippedCount: Int
 }
 
-struct ArchiveImportResult {
+struct ArchiveImportResult: Sendable {
     let url: URL
     let importedCount: Int
     let skippedCount: Int
@@ -26,8 +26,10 @@ enum ArchiveError: LocalizedError {
 }
 
 enum ArchiveService {
+    private static let archivePageSize: Int32 = 500
+
     @MainActor
-    static func exportArchive(core: ClipinCore) throws -> ArchiveExportResult {
+    static func exportArchive(core: ClipinCore) async throws -> ArchiveExportResult {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
@@ -37,11 +39,11 @@ enum ArchiveService {
             throw ArchiveError.cancelled
         }
 
-        return try writeArchive(to: url, core: core)
+        return try await writeArchive(to: url, core: core)
     }
 
     @MainActor
-    static func importArchive(core: ClipinCore) throws -> ArchiveImportResult {
+    static func importArchive(core: ClipinCore) async throws -> ArchiveImportResult {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.json]
         panel.canChooseDirectories = false
@@ -52,98 +54,117 @@ enum ArchiveService {
             throw ArchiveError.cancelled
         }
 
-        let data = try Data(contentsOf: url)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let archive = try decoder.decode(ClipboardArchive.self, from: data)
-
-        let imageDirURL = URL(fileURLWithPath: core.imageDir(), isDirectory: true)
-        try FileManager.default.createDirectory(at: imageDirURL, withIntermediateDirectories: true)
-
-        var importedCount = 0
-        var skippedCount = 0
-
-        for item in archive.items {
-            let clipType = runtimeType(for: item.clipType)
-
-            let imagePath: String?
-            if clipType == .image {
-                guard let imageDataBase64 = item.imageDataBase64,
-                      let imageData = Data(base64Encoded: imageDataBase64) else {
-                    skippedCount += 1
-                    continue
-                }
-
-                let destinationURL = imageDirURL.appendingPathComponent(UUID().uuidString + ".png")
-                try imageData.write(to: destinationURL, options: .atomic)
-                imagePath = destinationURL.path
-            } else {
-                imagePath = nil
-            }
-
-            _ = try core.importItem(
-                content: item.content,
-                clipType: clipType,
-                sourceApp: item.sourceApp,
-                sourceName: item.sourceName,
-                imagePath: imagePath,
-                isPinned: item.isPinned,
-                createdAt: item.createdAt
-            )
-            importedCount += 1
-        }
-
-        return ArchiveImportResult(
-            url: url,
-            importedCount: importedCount,
-            skippedCount: skippedCount
-        )
+        return try await importArchive(from: url, core: core)
     }
 
-    /// 将全部条目写入指定 URL，不弹出文件面板，供自动备份复用。
-    @MainActor
-    static func writeArchive(to url: URL, core: ClipinCore) throws -> ArchiveExportResult {
-        let items = core.getItems(limit: Int32.max, offset: 0, typeFilter: nil)
-        var exportedItems: [ArchiveItem] = []
-        var skippedCount = 0
+    /// 导入指定 URL，不弹出文件面板。重活在后台执行，避免阻塞设置窗口。
+    static func importArchive(from url: URL, core: ClipinCore) async throws -> ArchiveImportResult {
+        try await Task.detached(priority: .utility) {
+            let data = try Data(contentsOf: url)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let archive = try decoder.decode(ClipboardArchive.self, from: data)
 
-        for item in items {
-            if item.clipType == .image {
-                guard let imagePath = item.imagePath,
-                      let imageData = try? Data(contentsOf: URL(fileURLWithPath: imagePath)) else {
-                    skippedCount += 1
-                    continue
+            let imageDirURL = URL(fileURLWithPath: core.imageDir(), isDirectory: true)
+            try FileManager.default.createDirectory(at: imageDirURL, withIntermediateDirectories: true)
+
+            var importedCount = 0
+            var skippedCount = 0
+
+            for item in archive.items {
+                try Task.checkCancellation()
+                let clipType = runtimeType(for: item.clipType)
+
+                let imagePath: String?
+                if clipType == .image {
+                    guard let imageDataBase64 = item.imageDataBase64,
+                          let imageData = Data(base64Encoded: imageDataBase64) else {
+                        skippedCount += 1
+                        continue
+                    }
+
+                    let destinationURL = imageDirURL.appendingPathComponent(UUID().uuidString + ".png")
+                    try imageData.write(to: destinationURL, options: .atomic)
+                    imagePath = destinationURL.path
+                } else {
+                    imagePath = nil
                 }
-                exportedItems.append(ArchiveItem(
+
+                _ = try core.importItem(
                     content: item.content,
-                    clipType: archiveType(for: item.clipType),
+                    clipType: clipType,
                     sourceApp: item.sourceApp,
                     sourceName: item.sourceName,
+                    imagePath: imagePath,
                     isPinned: item.isPinned,
-                    createdAt: item.createdAt,
-                    imageDataBase64: imageData.base64EncodedString()
-                ))
-                continue
+                    createdAt: item.createdAt
+                )
+                importedCount += 1
             }
-            exportedItems.append(ArchiveItem(
-                content: item.content,
-                clipType: archiveType(for: item.clipType),
-                sourceApp: item.sourceApp,
-                sourceName: item.sourceName,
-                isPinned: item.isPinned,
-                createdAt: item.createdAt,
-                imageDataBase64: nil
-            ))
-        }
 
-        let archive = ClipboardArchive(schemaVersion: 1, exportedAt: Date(), items: exportedItems)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(archive)
-        try data.write(to: url, options: .atomic)
+            return ArchiveImportResult(
+                url: url,
+                importedCount: importedCount,
+                skippedCount: skippedCount
+            )
+        }.value
+    }
 
-        return ArchiveExportResult(url: url, exportedCount: exportedItems.count, skippedCount: skippedCount)
+    /// 将全部条目写入指定 URL，不弹出文件面板，供自动备份复用。重活在后台执行。
+    static func writeArchive(to url: URL, core: ClipinCore) async throws -> ArchiveExportResult {
+        try await Task.detached(priority: .utility) {
+            var exportedItems: [ArchiveItem] = []
+            var skippedCount = 0
+            var offset: Int32 = 0
+
+            while true {
+                try Task.checkCancellation()
+                let items = core.getItems(limit: archivePageSize, offset: offset, typeFilter: nil)
+                guard !items.isEmpty else { break }
+
+                for item in items {
+                    try Task.checkCancellation()
+                    if item.clipType == .image {
+                        guard let imagePath = item.imagePath,
+                              let imageData = try? Data(contentsOf: URL(fileURLWithPath: imagePath)) else {
+                            skippedCount += 1
+                            continue
+                        }
+                        exportedItems.append(ArchiveItem(
+                            content: item.content,
+                            clipType: archiveType(for: item.clipType),
+                            sourceApp: item.sourceApp,
+                            sourceName: item.sourceName,
+                            isPinned: item.isPinned,
+                            createdAt: item.createdAt,
+                            imageDataBase64: imageData.base64EncodedString()
+                        ))
+                        continue
+                    }
+                    exportedItems.append(ArchiveItem(
+                        content: item.content,
+                        clipType: archiveType(for: item.clipType),
+                        sourceApp: item.sourceApp,
+                        sourceName: item.sourceName,
+                        isPinned: item.isPinned,
+                        createdAt: item.createdAt,
+                        imageDataBase64: nil
+                    ))
+                }
+
+                if items.count < Int(archivePageSize) { break }
+                offset += archivePageSize
+            }
+
+            let archive = ClipboardArchive(schemaVersion: 1, exportedAt: Date(), items: exportedItems)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            let data = try encoder.encode(archive)
+            try data.write(to: url, options: .atomic)
+
+            return ArchiveExportResult(url: url, exportedCount: exportedItems.count, skippedCount: skippedCount)
+        }.value
     }
 
     private static func suggestedFilename() -> String {
@@ -171,13 +192,13 @@ enum ArchiveService {
     }
 }
 
-private struct ClipboardArchive: Codable {
+private struct ClipboardArchive: Codable, Sendable {
     let schemaVersion: Int
     let exportedAt: Date
     let items: [ArchiveItem]
 }
 
-private struct ArchiveItem: Codable {
+private struct ArchiveItem: Codable, Sendable {
     let content: String
     let clipType: ArchiveClipType
     let sourceApp: String?
@@ -187,7 +208,7 @@ private struct ArchiveItem: Codable {
     let imageDataBase64: String?
 }
 
-private enum ArchiveClipType: String, Codable {
+private enum ArchiveClipType: String, Codable, Sendable {
     case text
     case image
     case file

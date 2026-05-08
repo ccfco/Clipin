@@ -17,6 +17,7 @@ final class AutoBackupService: ObservableObject {
     private var timer: Timer?
     private var changeObserver: Any?
     private var debounceTask: Task<Void, Never>?
+    private var backupTask: Task<Void, Never>?
 
     // lastBackupAt 持久化到 UserDefaults，App 重启后能判断是否逾期
     private static let lastBackupKey = "autoBackup.lastBackupAt"
@@ -48,6 +49,8 @@ final class AutoBackupService: ObservableObject {
         }
         debounceTask?.cancel()
         debounceTask = nil
+        backupTask?.cancel()
+        backupTask = nil
 
         guard settings.autoBackupEnabled,
               let folderPath = settings.autoBackupFolderPath else { return }
@@ -105,13 +108,21 @@ final class AutoBackupService: ObservableObject {
 
     private func performBackup(folderURL: URL) {
         let fileURL = folderURL.appendingPathComponent(Self.backupFilename)
-        do {
-            _ = try ArchiveService.writeArchive(to: fileURL, core: core)
-            lastBackupAt = Date()
-            lastBackupError = nil
-            UserDefaults.standard.set(lastBackupAt, forKey: Self.lastBackupKey)
-        } catch {
-            lastBackupError = error.localizedDescription
+        let core = self.core
+        backupTask?.cancel()
+        backupTask = Task { [weak self] in
+            do {
+                _ = try await ArchiveService.writeArchive(to: fileURL, core: core)
+                guard !Task.isCancelled else { return }
+                let completedAt = Date()
+                self?.lastBackupAt = completedAt
+                self?.lastBackupError = nil
+                UserDefaults.standard.set(completedAt, forKey: Self.lastBackupKey)
+            } catch is CancellationError {
+                return
+            } catch {
+                self?.lastBackupError = error.localizedDescription
+            }
         }
     }
 
