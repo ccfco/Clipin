@@ -553,6 +553,7 @@ private struct ItemListView: View {
         .animation(ClipinMotion.selection, value: isSelected)
         .animation(ClipinMotion.feedback, value: isHovered)
         .contentShape(Rectangle())
+        .onTapGesture(count: 2) { onActivate(item) }
         .onTapGesture { selection.wrappedValue = item.id }
         .onHover { hovered in hoveredID = hovered ? item.id : nil }
         .contextMenu {
