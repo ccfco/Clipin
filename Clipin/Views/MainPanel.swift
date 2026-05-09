@@ -43,7 +43,15 @@ struct MainPanel: View {
                 .transition(.opacity)
             }
         }
+        .overlay(alignment: .bottom) {
+            if let notice = viewModel.launcherNotice {
+                launcherNoticeBanner(notice)
+                    .padding(.bottom, ClipinChrome.footerMinHeight + ClipinChrome.shellGap * 3)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .animation(ClipinMotion.panel, value: viewModel.isContinuousPasteEnabled)
+        .animation(ClipinMotion.commandReveal, value: viewModel.launcherNotice?.id)
         .overlay(alignment: .bottomTrailing) {
             if viewModel.isShowingActions {
                 ActionPalette(
@@ -144,6 +152,7 @@ struct MainPanel: View {
             },
             onPin: { viewModel.togglePin(id: $0.id) },
             onDelete: { viewModel.deleteItem(id: $0.id) },
+            onClearFilters: { _ = viewModel.clearActiveQueryAndFilters() },
             onLoadMore: { viewModel.loadMoreItems() }
         )
     }
@@ -193,20 +202,23 @@ struct MainPanel: View {
                 Spacer()
             }
 
+            if viewModel.isContinuousPasteEnabled {
+                continuousPastePill
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+
             commandCluster {
                 Button { viewModel.toggleActionsPalette() } label: {
                     keyBadge(label: "Actions", key: "⌘K")
                 }
                 .buttonStyle(.plain)
 
-                Button { viewModel.toggleContinuousPaste() } label: {
-                    keyBadge(
-                        label: "Continuous Paste",
-                        key: "⌘⇧L",
-                        emphasized: viewModel.isContinuousPasteEnabled
-                    )
+                if !viewModel.isContinuousPasteEnabled {
+                    Button { viewModel.toggleContinuousPaste() } label: {
+                        keyBadge(label: "Continuous Paste", key: "⌘⇧L")
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
                 Button { viewModel.openSettings() } label: {
                     Image(systemName: "gearshape")
@@ -215,6 +227,8 @@ struct MainPanel: View {
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.borderless)
+                .help(NSLocalizedString("Settings", comment: ""))
+                .accessibilityLabel(Text("Settings"))
             }
             .padding(.leading, 10)
         }
@@ -233,6 +247,45 @@ struct MainPanel: View {
         .padding(.top, ClipinChrome.shellGap)
         .padding(.bottom, ClipinChrome.shellGap)
         .animation(ClipinMotion.focusShift, value: sceneState)
+    }
+
+    private var continuousPastePill: some View {
+        Button { viewModel.toggleContinuousPaste() } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "repeat.circle.fill")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(glass.emphasisInk)
+
+                Text(viewModel.targetAppName.map {
+                    String(format: NSLocalizedString("To %@", comment: ""), $0)
+                } ?? NSLocalizedString("Choose target app", comment: ""))
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(glass.emphasisInk)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: 128, alignment: .leading)
+
+                ClipinKeycap(
+                    key: "Esc",
+                    foreground: glass.emphasisInk.opacity(0.82),
+                    background: glass.controlFill
+                )
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
+                    .fill(hierarchy.selection.fill)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
+                            .strokeBorder(hierarchy.selection.stroke, lineWidth: 0.5)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .help(NSLocalizedString("Press Esc to exit Continuous Paste.", comment: ""))
+        .accessibilityLabel(Text("Continuous Paste"))
+        .accessibilityHint(Text("Press Esc to exit Continuous Paste."))
     }
 
     private func commandCluster<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -312,6 +365,73 @@ struct MainPanel: View {
                 )
         )
     }
+
+    private func launcherNoticeBanner(_ notice: LauncherNotice) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: noticeIcon(for: notice.style))
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(noticeTint(for: notice.style))
+
+            Text(notice.text)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(hierarchy.support.subduedInk)
+                .lineLimit(2)
+
+            if let actionTitle = notice.actionTitle {
+                Button(actionTitle) {
+                    viewModel.performNoticeAction()
+                }
+                .font(.system(size: 11.5, weight: .semibold))
+                .buttonStyle(.borderless)
+            }
+
+            Button {
+                viewModel.dismissNotice()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(hierarchy.support.smallLabelInk)
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.borderless)
+            .help(NSLocalizedString("Dismiss", comment: ""))
+            .accessibilityLabel(Text("Dismiss"))
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 9)
+        .frame(maxWidth: 430)
+        .background(
+            ClipinSurfaceBackground(
+                role: .floating,
+                cornerRadius: ClipinChrome.searchCornerRadius,
+                glass: glass
+            )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                .strokeBorder(noticeTint(for: notice.style).opacity(0.22), lineWidth: 0.6)
+        )
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.10), radius: 14, y: 6)
+    }
+
+    private func noticeIcon(for style: LauncherNoticeStyle) -> String {
+        switch style {
+        case .info: return "info.circle.fill"
+        case .success: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error: return "xmark.octagon.fill"
+        }
+    }
+
+    private func noticeTint(for style: LauncherNoticeStyle) -> Color {
+        switch style {
+        case .info: return glass.emphasisInk
+        case .success: return .green
+        case .warning: return .orange
+        case .error: return .red
+        }
+    }
 }
 
 private struct PrimaryFooterButtonStyle: ButtonStyle {
@@ -338,6 +458,7 @@ private struct ItemListView: View {
     let onActivate: (ClipListItem) -> Void
     let onPin: (ClipListItem) -> Void
     let onDelete: (ClipListItem) -> Void
+    let onClearFilters: () -> Void
     let onLoadMore: () -> Void
 
     @State private var hoveredID: String?
@@ -473,6 +594,16 @@ private struct ItemListView: View {
                     .foregroundStyle(hierarchy.support.subduedInk)
             }
             .padding(.top, 4)
+
+            if hasActiveFilter {
+                Button("Clear Search & Filters") {
+                    onClearFilters()
+                }
+                .font(.system(size: 11.5, weight: .medium))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

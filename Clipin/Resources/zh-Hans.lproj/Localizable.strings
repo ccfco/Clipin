@@ -81,6 +81,10 @@
 "Try a different search term, or press Command-K for actions." = "换个关键词试试，或按 ⌘K 打开动作面板。";
 "Copy something and it will appear here. Command-K still opens actions." = "复制内容后将在此显示。⌘K 仍可打开动作面板。";
 "Actions & Settings" = "动作与设置";
+"To %@" = "到 %@";
+"Choose target app" = "选择目标应用";
+"Press Esc to exit Continuous Paste." = "按 Esc 退出连续粘贴。";
+"Dismiss" = "关闭";
 
 /* ActionPalette */
 "Esc" = "Esc";
@@ -316,6 +320,10 @@
 "Backup status" = "备份状态";
 "No backup yet" = "尚未备份";
 "Backup Now" = "立即备份";
+"Cleaning…" = "正在清理…";
+"Exporting…" = "正在导出…";
+"Importing…" = "正在导入…";
+"Backing Up…" = "正在备份…";
 "Shortcut reset to %@." = "快捷键已重置为 %@。";
 "Backup failed: %@" = "备份失败：%@";
 "Last backup: %@" = "上次备份：%@";
@@ -336,3 +344,21 @@
 "Turn this on in System Settings" = "在系统设置中开启此权限";
 "Clipin stays local and can record history without this access, but automatic paste needs Accessibility permission." = "即使没有这项权限，Clipin 仍然只在本地运行并可记录历史；但自动粘贴仍需要辅助功能权限。";
 "Clipin will restart automatically to apply the permission." = "Clipin 将自动重启以应用这项权限。";
+
+/* Launcher feedback */
+"Opening URL." = "正在打开链接。";
+"Could not open this URL." = "无法打开这个链接。";
+"No copied files could be found." = "未找到已复制的文件。";
+"Some files could not be found." = "部分文件未找到。";
+"Revealed in Finder." = "已在 Finder 中显示。";
+"Continuous Paste is on. Press Esc to exit." = "连续粘贴已开启，按 Esc 退出。";
+"Continuous Paste is off." = "连续粘贴已关闭。";
+"Pinned." = "已固定。";
+"Unpinned." = "已取消固定。";
+"Item no longer exists." = "这条记录已不存在。";
+"Item deleted." = "已删除记录。";
+"Undo" = "撤销";
+"Deletion undone." = "已撤销删除。";
+"Could not write this item to the clipboard." = "无法将这条记录写入剪贴板。";
+"Accessibility permission is required to paste automatically." = "自动粘贴需要辅助功能权限。";
+"Copied to clipboard." = "已复制到剪贴板。";

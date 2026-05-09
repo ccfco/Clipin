@@ -82,6 +82,12 @@ private struct SettingsNotice {
     let isError: Bool
 }
 
+private enum SettingsOperation: Equatable {
+    case cleanup
+    case exportArchive
+    case importArchive
+}
+
 
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
@@ -96,6 +102,7 @@ struct SettingsView: View {
     @State private var now: Date = .now
     @State private var tickTimer: Timer?
     @State private var hoveredTab: SettingsTab?
+    @State private var activeOperation: SettingsOperation?
 
     private var glass: ClipinGlassPalette {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
@@ -525,6 +532,8 @@ struct SettingsView: View {
                         "Run Cleanup Now",
                         description: "Apply the current retention rules immediately and remove outdated unpinned items.",
                         buttonTitle: "Run Cleanup Now",
+                        busyTitle: "Cleaning…",
+                        isBusy: activeOperation == .cleanup,
                         action: runCleanup
                     )
                 }
@@ -541,6 +550,8 @@ struct SettingsView: View {
                     "Export clipboard history",
                     description: "Create a JSON snapshot of your current history so it can be archived or moved elsewhere.",
                     buttonTitle: "Export JSON…",
+                    busyTitle: "Exporting…",
+                    isBusy: activeOperation == .exportArchive,
                     action: exportArchive
                 )
 
@@ -550,6 +561,8 @@ struct SettingsView: View {
                     "Import from an existing export",
                     description: "Bring items back from a previous JSON export. Existing items stay in place and duplicates are skipped.",
                     buttonTitle: "Import JSON…",
+                    busyTitle: "Importing…",
+                    isBusy: activeOperation == .importArchive,
                     action: importArchive
                 )
             }
@@ -634,9 +647,17 @@ struct SettingsView: View {
                                     Spacer()
 
                                     if settings.autoBackupFolderPath != nil {
-                                        Button("Backup Now") { autoBackup.backupNow() }
+                                        Button {
+                                            autoBackup.backupNow()
+                                        } label: {
+                                            progressButtonLabel(
+                                                title: autoBackup.isBackingUp ? "Backing Up…" : "Backup Now",
+                                                isBusy: autoBackup.isBackingUp
+                                            )
+                                        }
                                             .buttonStyle(.bordered)
                                             .controlSize(.small)
+                                            .disabled(autoBackup.isBackingUp)
                                     }
                                 }
                             }
@@ -877,12 +898,16 @@ struct SettingsView: View {
         _ title: LocalizedStringKey,
         description: LocalizedStringKey,
         buttonTitle: LocalizedStringKey,
+        busyTitle: LocalizedStringKey? = nil,
+        isBusy: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         actionRow(
             title: title,
             descriptionView: Text(description),
             buttonTitle: buttonTitle,
+            busyTitle: busyTitle,
+            isBusy: isBusy,
             action: action
         )
     }
@@ -891,12 +916,16 @@ struct SettingsView: View {
         _ title: LocalizedStringKey,
         description: String,
         buttonTitle: LocalizedStringKey,
+        busyTitle: LocalizedStringKey? = nil,
+        isBusy: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         actionRow(
             title: title,
             descriptionView: Text(description),
             buttonTitle: buttonTitle,
+            busyTitle: busyTitle,
+            isBusy: isBusy,
             action: action
         )
     }
@@ -905,6 +934,8 @@ struct SettingsView: View {
         title: LocalizedStringKey,
         descriptionView: Description,
         buttonTitle: LocalizedStringKey,
+        busyTitle: LocalizedStringKey? = nil,
+        isBusy: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         HStack(alignment: .top, spacing: 18) {
@@ -918,8 +949,25 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button(buttonTitle, action: action)
+            Button(action: action) {
+                progressButtonLabel(
+                    title: isBusy ? (busyTitle ?? buttonTitle) : buttonTitle,
+                    isBusy: isBusy
+                )
+            }
                 .buttonStyle(.bordered)
+                .disabled(isBusy || activeOperation != nil)
+        }
+    }
+
+    private func progressButtonLabel(title: LocalizedStringKey, isBusy: Bool) -> some View {
+        HStack(spacing: 6) {
+            if isBusy {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.72)
+            }
+            Text(title)
         }
     }
 
@@ -1001,7 +1049,10 @@ struct SettingsView: View {
     // MARK: - Actions
 
     private func runCleanup() {
-        Task {
+        guard activeOperation == nil else { return }
+        activeOperation = .cleanup
+        Task { @MainActor in
+            defer { activeOperation = nil }
             do {
                 let result = try await CleanupService(core: core, settings: settings).runNow()
                 NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
@@ -1024,7 +1075,10 @@ struct SettingsView: View {
     }
 
     private func exportArchive() {
-        Task {
+        guard activeOperation == nil else { return }
+        activeOperation = .exportArchive
+        Task { @MainActor in
+            defer { activeOperation = nil }
             do {
                 let result = try await ArchiveService.exportArchive(core: core)
                 showNotice(
@@ -1043,7 +1097,10 @@ struct SettingsView: View {
     }
 
     private func importArchive() {
-        Task {
+        guard activeOperation == nil else { return }
+        activeOperation = .importArchive
+        Task { @MainActor in
+            defer { activeOperation = nil }
             do {
                 let result = try await ArchiveService.importArchive(core: core)
                 let cleanup = try await CleanupService(core: core, settings: settings).runNow()

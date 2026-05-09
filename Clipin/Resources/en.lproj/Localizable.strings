@@ -81,6 +81,10 @@
 "Try a different search term, or press Command-K for actions." = "Try a different search term, or press Command-K for actions.";
 "Copy something and it will appear here. Command-K still opens actions." = "Copy something and it will appear here. Command-K still opens actions.";
 "Actions & Settings" = "Actions & Settings";
+"To %@" = "To %@";
+"Choose target app" = "Choose target app";
+"Press Esc to exit Continuous Paste." = "Press Esc to exit Continuous Paste.";
+"Dismiss" = "Dismiss";
 
 /* ActionPalette */
 "Esc" = "Esc";
@@ -316,6 +320,10 @@
 "Backup status" = "Backup status";
 "No backup yet" = "No backup yet";
 "Backup Now" = "Backup Now";
+"Cleaning…" = "Cleaning…";
+"Exporting…" = "Exporting…";
+"Importing…" = "Importing…";
+"Backing Up…" = "Backing Up…";
 "Shortcut reset to %@." = "Shortcut reset to %@.";
 "Backup failed: %@" = "Backup failed: %@";
 "Last backup: %@" = "Last backup: %@";
@@ -336,3 +344,21 @@
 "Turn this on in System Settings" = "Turn this on in System Settings";
 "Clipin stays local and can record history without this access, but automatic paste needs Accessibility permission." = "Clipin stays local and can record history without this access, but automatic paste needs Accessibility permission.";
 "Clipin will restart automatically to apply the permission." = "Clipin will restart automatically to apply the permission.";
+
+/* Launcher feedback */
+"Opening URL." = "Opening URL.";
+"Could not open this URL." = "Could not open this URL.";
+"No copied files could be found." = "No copied files could be found.";
+"Some files could not be found." = "Some files could not be found.";
+"Revealed in Finder." = "Revealed in Finder.";
+"Continuous Paste is on. Press Esc to exit." = "Continuous Paste is on. Press Esc to exit.";
+"Continuous Paste is off." = "Continuous Paste is off.";
+"Pinned." = "Pinned.";
+"Unpinned." = "Unpinned.";
+"Item no longer exists." = "Item no longer exists.";
+"Item deleted." = "Item deleted.";
+"Undo" = "Undo";
+"Deletion undone." = "Deletion undone.";
+"Could not write this item to the clipboard." = "Could not write this item to the clipboard.";
+"Accessibility permission is required to paste automatically." = "Accessibility permission is required to paste automatically.";
+"Copied to clipboard." = "Copied to clipboard.";

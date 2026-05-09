@@ -10,6 +10,7 @@ final class AutoBackupService: ObservableObject {
 
     @Published private(set) var lastBackupAt: Date?
     @Published private(set) var lastBackupError: String?
+    @Published private(set) var isBackingUp = false
 
     private let core: ClipinCore
     private let settings: SettingsStore
@@ -18,6 +19,7 @@ final class AutoBackupService: ObservableObject {
     private var changeObserver: Any?
     private var debounceTask: Task<Void, Never>?
     private var backupTask: Task<Void, Never>?
+    private var backupGeneration = UUID()
 
     // lastBackupAt 持久化到 UserDefaults，App 重启后能判断是否逾期
     private static let lastBackupKey = "autoBackup.lastBackupAt"
@@ -51,6 +53,7 @@ final class AutoBackupService: ObservableObject {
         debounceTask = nil
         backupTask?.cancel()
         backupTask = nil
+        isBackingUp = false
 
         guard settings.autoBackupEnabled,
               let folderPath = settings.autoBackupFolderPath else { return }
@@ -110,17 +113,27 @@ final class AutoBackupService: ObservableObject {
         let fileURL = folderURL.appendingPathComponent(Self.backupFilename)
         let core = self.core
         backupTask?.cancel()
+        let generation = UUID()
+        backupGeneration = generation
+        isBackingUp = true
+        lastBackupError = nil
         backupTask = Task { [weak self] in
             do {
                 _ = try await ArchiveService.writeArchive(to: fileURL, core: core)
                 guard !Task.isCancelled else { return }
                 let completedAt = Date()
+                guard self?.backupGeneration == generation else { return }
+                self?.isBackingUp = false
                 self?.lastBackupAt = completedAt
                 self?.lastBackupError = nil
                 UserDefaults.standard.set(completedAt, forKey: Self.lastBackupKey)
             } catch is CancellationError {
+                guard self?.backupGeneration == generation else { return }
+                self?.isBackingUp = false
                 return
             } catch {
+                guard self?.backupGeneration == generation else { return }
+                self?.isBackingUp = false
                 self?.lastBackupError = error.localizedDescription
             }
         }

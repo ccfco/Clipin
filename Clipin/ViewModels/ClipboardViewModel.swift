@@ -9,6 +9,20 @@ struct ClipSection: Identifiable {
     var id: String { title }
 }
 
+enum LauncherNoticeStyle {
+    case info
+    case success
+    case warning
+    case error
+}
+
+struct LauncherNotice: Identifiable {
+    let id = UUID()
+    let text: String
+    let style: LauncherNoticeStyle
+    let actionTitle: String?
+}
+
 @MainActor
 final class ClipboardViewModel: ObservableObject {
     @Published var selectedItem: ClipItem?
@@ -21,11 +35,12 @@ final class ClipboardViewModel: ObservableObject {
     @Published var selectedActionIndex = 0
     @Published private(set) var paletteActions: [PaletteAction] = []
     @Published var isContinuousPasteEnabled: Bool = false
+    @Published private(set) var launcherNotice: LauncherNotice?
 
     func navigatePalette(delta: Int) {
         let count = paletteActions.count
         guard count > 0 else { return }
-        selectedActionIndex = max(0, min(count - 1, selectedActionIndex + delta))
+        selectedActionIndex = (selectedActionIndex + delta + count) % count
     }
 
     func executeSelectedPaletteAction() {
@@ -79,6 +94,15 @@ final class ClipboardViewModel: ObservableObject {
     private var loadItemTask: Task<Void, Never>?
     private var skipNextDebouncedLoad = false
     private var sessionBaseBrowseMode: LauncherBrowseMode
+    private var noticeTask: Task<Void, Never>?
+    private var noticeAction: (() -> Void)?
+
+    private struct PendingDeletion {
+        let id: String
+    }
+
+    private var pendingDeletion: PendingDeletion?
+    private var pendingDeletionTask: Task<Void, Never>?
 
     // MARK: - Pagination
     private static let pageSize = 50
@@ -245,15 +269,26 @@ final class ClipboardViewModel: ObservableObject {
         guard let item = currentSelectedItem() else { return }
         switch item.clipType {
         case .url:
-            if let url = URL(string: item.content) {
-                NSWorkspace.shared.open(url)
+            if let url = URL(string: item.content), NSWorkspace.shared.open(url) {
+                showNotice(NSLocalizedString("Opening URL.", comment: ""), style: .success)
+            } else {
+                showNotice(NSLocalizedString("Could not open this URL.", comment: ""), style: .error)
             }
         case .file:
-            let urls = FileClipboardContent.paths(from: item.content)
+            let paths = FileClipboardContent.paths(from: item.content)
+            let urls = paths
                 .map(URL.init(fileURLWithPath:))
                 .filter { FileManager.default.fileExists(atPath: $0.path) }
-            guard !urls.isEmpty else { return }
+            guard !urls.isEmpty else {
+                showNotice(NSLocalizedString("No copied files could be found.", comment: ""), style: .error)
+                return
+            }
             NSWorkspace.shared.activateFileViewerSelecting(urls)
+            if urls.count < paths.count {
+                showNotice(NSLocalizedString("Some files could not be found.", comment: ""), style: .warning)
+            } else {
+                showNotice(NSLocalizedString("Revealed in Finder.", comment: ""), style: .success)
+            }
         default:
             break
         }
@@ -270,7 +305,15 @@ final class ClipboardViewModel: ObservableObject {
 
     func openSettings() { onOpenSettingsRequested?() }
 
-    func toggleContinuousPaste() { isContinuousPasteEnabled.toggle() }
+    func toggleContinuousPaste() {
+        isContinuousPasteEnabled.toggle()
+        showNotice(
+            isContinuousPasteEnabled
+                ? NSLocalizedString("Continuous Paste is on. Press Esc to exit.", comment: "")
+                : NSLocalizedString("Continuous Paste is off.", comment: ""),
+            style: isContinuousPasteEnabled ? .success : .info
+        )
+    }
 
     func setBrowseModeByIndex(_ index: Int) {
         switch index {
@@ -318,12 +361,19 @@ final class ClipboardViewModel: ObservableObject {
 
     func togglePinSelected() {
         guard let selectedItemID else { return }
-        _ = try? core.togglePin(id: selectedItemID)
-        loadItems()
+        togglePin(id: selectedItemID)
     }
 
     func togglePin(id: String) {
-        _ = try? core.togglePin(id: id)
+        do {
+            let isPinned = try core.togglePin(id: id)
+            showNotice(
+                isPinned ? NSLocalizedString("Pinned.", comment: "") : NSLocalizedString("Unpinned.", comment: ""),
+                style: .success
+            )
+        } catch {
+            showNotice(error.localizedDescription, style: .error)
+        }
         loadItems()
     }
 
@@ -337,6 +387,14 @@ final class ClipboardViewModel: ObservableObject {
             hideActionsPalette()
         }
 
+        commitPendingDeletionBeforeReplacing(with: id)
+
+        guard (try? core.getItem(id: id)) != nil else {
+            showNotice(NSLocalizedString("Item no longer exists.", comment: ""), style: .error)
+            loadItems()
+            return
+        }
+
         // 删除前记住相邻项，删除后自动选中
         var nextSelectionID: String?
         if selectedItemID == id, let idx = flatOrder.firstIndex(where: { $0.id == id }) {
@@ -347,13 +405,63 @@ final class ClipboardViewModel: ObservableObject {
             }
         }
 
-        try? core.deleteItem(id: id)
-
         if selectedItemID == id {
             selectedItemID = nextSelectionID
             selectedItem = nil
         }
+        pendingDeletion = PendingDeletion(id: id)
         loadItems()
+
+        showNotice(
+            NSLocalizedString("Item deleted.", comment: ""),
+            style: .warning,
+            actionTitle: NSLocalizedString("Undo", comment: ""),
+            duration: .seconds(7)
+        ) { [weak self] in
+            self?.undoPendingDeletion(id: id)
+        }
+
+        pendingDeletionTask?.cancel()
+        pendingDeletionTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .seconds(7)) } catch { return }
+            self?.commitPendingDeletion(id: id)
+        }
+    }
+
+    func finalizePendingDeletion() {
+        guard let id = pendingDeletion?.id else { return }
+        pendingDeletionTask?.cancel()
+        commitPendingDeletion(id: id)
+    }
+
+    func showNotice(
+        _ text: String,
+        style: LauncherNoticeStyle = .info,
+        actionTitle: String? = nil,
+        duration: Duration = .seconds(3),
+        action: (() -> Void)? = nil
+    ) {
+        launcherNotice = LauncherNotice(text: text, style: style, actionTitle: actionTitle)
+        noticeAction = action
+        noticeTask?.cancel()
+        noticeTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: duration) } catch { return }
+            guard !Task.isCancelled else { return }
+            self?.dismissNotice()
+        }
+    }
+
+    func performNoticeAction() {
+        let action = noticeAction
+        dismissNotice()
+        action?()
+    }
+
+    func dismissNotice() {
+        noticeTask?.cancel()
+        noticeTask = nil
+        noticeAction = nil
+        launcherNotice = nil
     }
 
     var selectedListItem: ClipListItem? {
@@ -480,16 +588,19 @@ final class ClipboardViewModel: ObservableObject {
 
     /// 搜索永远返回全局结果；浏览态才由 pinned 展示策略决定。
     private func visibleItems(from fetchedItems: [ClipListItem]) -> [ClipListItem] {
+        let filtered: [ClipListItem]
         if !searchQuery.isEmpty {
-            return fetchedItems
+            filtered = fetchedItems
+        } else if browseMode.isPinnedOnly {
+            filtered = fetchedItems.filter(\.isPinned)
+        } else if settings.pinnedItemsPresentation == .pinnedOnlyView {
+            filtered = fetchedItems.filter { !$0.isPinned }
+        } else {
+            filtered = fetchedItems
         }
-        if browseMode.isPinnedOnly {
-            return fetchedItems.filter(\.isPinned)
-        }
-        if settings.pinnedItemsPresentation == .pinnedOnlyView {
-            return fetchedItems.filter { !$0.isPinned }
-        }
-        return fetchedItems
+
+        guard let pendingDeletion else { return filtered }
+        return filtered.filter { $0.id != pendingDeletion.id }
     }
 
     private var effectiveTypeFilter: ClipType? {
@@ -536,6 +647,35 @@ final class ClipboardViewModel: ObservableObject {
         searchQuery.isEmpty
             && !browseMode.isPinnedOnly
             && settings.pinnedItemsPresentation == .pinnedOnlyView
+    }
+
+    private func commitPendingDeletionBeforeReplacing(with id: String) {
+        guard let pendingID = pendingDeletion?.id, pendingID != id else { return }
+        pendingDeletionTask?.cancel()
+        commitPendingDeletion(id: pendingID)
+    }
+
+    private func commitPendingDeletion(id: String) {
+        guard pendingDeletion?.id == id else { return }
+        pendingDeletion = nil
+        pendingDeletionTask = nil
+        do {
+            try core.deleteItem(id: id)
+            NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
+        } catch {
+            showNotice(error.localizedDescription, style: .error)
+        }
+        loadItems()
+    }
+
+    private func undoPendingDeletion(id: String) {
+        guard pendingDeletion?.id == id else { return }
+        pendingDeletionTask?.cancel()
+        pendingDeletion = nil
+        pendingDeletionTask = nil
+        loadItems()
+        selectItem(id: id)
+        showNotice(NSLocalizedString("Deletion undone.", comment: ""), style: .success)
     }
 
     private static func makeDateSections(from items: [ClipListItem]) -> [ClipSection] {

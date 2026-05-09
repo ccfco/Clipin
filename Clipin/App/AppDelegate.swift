@@ -751,6 +751,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        viewModel?.finalizePendingDeletion()
         backfillTask?.cancel()
         stopActiveSpaceObserver()
     }
@@ -1240,6 +1241,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         monitor?.pause()
         guard PasteService.writeToClipboard(item) else {
             monitor?.resume()
+            viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
         }
         do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
@@ -1250,6 +1252,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         monitor?.pause()
         guard PasteService.writeAsPlainText(item) else {
             monitor?.resume()
+            viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
         }
         do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
@@ -1275,6 +1278,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard permission.isAccessibilityGranted else {
             monitor?.resume()
+            viewModel?.showNotice(NSLocalizedString("Accessibility permission is required to paste automatically.", comment: ""), style: .warning)
             showPermissionWindowIfNeeded(permission, activateApp: true)
             return
         }
@@ -1311,9 +1315,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         monitor?.pause()
         guard PasteService.writeToClipboard(item) else {
             monitor?.resume()
+            viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
         }
         let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false
+        if continuousPasteEnabled {
+            viewModel?.showNotice(NSLocalizedString("Copied to clipboard.", comment: ""), style: .success)
+        }
         if !continuousPasteEnabled { hidePanel() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             self?.monitor?.resume()
