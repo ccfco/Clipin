@@ -165,6 +165,8 @@ struct ActionPalette: View {
             Label {
                 Text(action.localizedTitle)
                     .font(.system(size: 15, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             } icon: {
                 Image(systemName: action.systemImage)
                     .font(.system(size: 15, weight: .semibold))

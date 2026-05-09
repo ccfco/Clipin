@@ -57,6 +57,59 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertEqual(core.getItems(limit: 10, offset: 0, typeFilter: nil).count, 0)
     }
 
+    func testQuickPasteTouchesItemSoItBecomesRecent() throws {
+        let core = try makeCore()
+        let older = try core.importItem(
+            content: "older",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 1_000
+        )
+        let newer = try core.importItem(
+            content: "newer",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 2_000
+        )
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.loadItems(selectLatest: true)
+
+        XCTAssertEqual(viewModel.shortcutOrder.map(\.id), [newer.id, older.id])
+
+        var pastedID: String?
+        viewModel.onPasteRequested = { pastedID = $0.id }
+        viewModel.pasteItemAt(index: 1)
+
+        XCTAssertEqual(pastedID, older.id)
+        XCTAssertEqual(core.getItems(limit: 10, offset: 0, typeFilter: nil).first?.id, older.id)
+    }
+
+    func testSilentReloadCanPreserveActionPalette() throws {
+        let core = try makeCore()
+        _ = try core.saveItem(
+            content: "keep actions open",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil
+        )
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.loadItems(selectLatest: true)
+        viewModel.showActionsPalette()
+
+        XCTAssertTrue(viewModel.isShowingActions)
+
+        viewModel.loadItems(hidesActions: false)
+
+        XCTAssertTrue(viewModel.isShowingActions)
+    }
+
     private func makeCore() throws -> ClipinCore {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinViewModelTests-\(UUID().uuidString)", isDirectory: true)

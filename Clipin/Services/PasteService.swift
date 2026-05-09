@@ -12,28 +12,28 @@ enum PasteService {
     @discardableResult
     static func writeToClipboard(_ item: ClipItem) -> Bool {
         let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
 
         switch item.clipType {
         case .text, .url:
-            pasteboard.setString(item.content, forType: .string)
-            if item.clipType == .url {
-                pasteboard.setString(item.content, forType: .URL)
-            }
-            return true
+            pasteboard.clearContents()
+            let didWriteString = pasteboard.setString(item.content, forType: .string)
+            let didWriteURL = item.clipType == .url
+                ? pasteboard.setString(item.content, forType: .URL)
+                : true
+            return didWriteString && didWriteURL
 
         case .image:
             guard let path = item.imagePath,
                   let image = NSImage(contentsOfFile: path) else { return false }
-            pasteboard.writeObjects([image])
-            return true
+            pasteboard.clearContents()
+            return pasteboard.writeObjects([image])
 
         case .file:
             let paths = FileClipboardContent.paths(from: item.content)
             let urls = paths.map { URL(fileURLWithPath: $0) as NSURL }
             guard !urls.isEmpty else { return false }
-            pasteboard.writeObjects(urls)
-            return true
+            pasteboard.clearContents()
+            return pasteboard.writeObjects(urls)
         }
     }
 
@@ -41,22 +41,21 @@ enum PasteService {
     @discardableResult
     static func writeAsPlainText(_ item: ClipItem) -> Bool {
         let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
+        let text: String
 
         switch item.clipType {
         case .text, .url:
-            pasteboard.setString(item.content, forType: .string)
-            return true
+            text = item.content
         case .image:
             guard let path = item.imagePath else { return false }
-            pasteboard.setString(path, forType: .string)
-            return true
+            text = path
         case .file:
-            let text = FileClipboardContent.paths(from: item.content).joined(separator: "\n")
-            guard !text.isEmpty else { return false }
-            pasteboard.setString(text, forType: .string)
-            return true
+            text = FileClipboardContent.paths(from: item.content).joined(separator: "\n")
         }
+
+        guard !text.isEmpty else { return false }
+        pasteboard.clearContents()
+        return pasteboard.setString(text, forType: .string)
     }
 
     /// 已知终端仿真器的 bundle ID 集合（用于图片粘贴时自动切换到 Ctrl+V）

@@ -140,7 +140,7 @@ final class ClipboardViewModel: ObservableObject {
         ocrSubscription = NotificationCenter.default
             .publisher(for: .clipboardItemOcrUpdated)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.loadItems() }
+            .sink { [weak self] _ in self?.loadItems(hidesActions: false) }
         settingsSubscription = settings.$pinnedItemsPresentation
             .dropFirst()
             .receive(on: RunLoop.main)
@@ -149,8 +149,9 @@ final class ClipboardViewModel: ObservableObject {
 
     // MARK: - Load
 
-    func loadItems(selectLatest: Bool = false) {
-        if isShowingActions {
+    /// 重新加载列表。后台 OCR 这类静默刷新会保留当前动作面板，避免用户正在选命令时被打断。
+    func loadItems(selectLatest: Bool = false, hidesActions: Bool = true) {
+        if hidesActions, isShowingActions {
             hideActionsPalette()
         }
 
@@ -240,6 +241,7 @@ final class ClipboardViewModel: ObservableObject {
         guard index >= 0, index < shortcutOrder.count else { return }
         let id = shortcutOrder[index].id
         guard let item = try? core.getItem(id: id) else { return }
+        try? core.touchItem(id: id)
         onPasteRequested?(item)
     }
 
