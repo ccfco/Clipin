@@ -329,6 +329,7 @@
 "Imported %d items from %@." = "已从 %@ 导入 %d 项。";
 "Cleanup removed %d older items." = "清理阶段额外移除了 %d 项较旧内容。";
 "Skipped %d items with missing image data." = "已跳过 %d 项缺少图片数据的内容。";
+"Skipped %d duplicate items." = "已跳过 %d 项重复内容。";
 "Choose Backup Folder" = "选择备份文件夹";
 "Choose a folder for the clipin-backup.json file." = "为 clipin-backup.json 选择一个文件夹。";
 "Cannot create iCloud Drive folder: %@" = "无法创建 iCloud Drive 文件夹：%@";

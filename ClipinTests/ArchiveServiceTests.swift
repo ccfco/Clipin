@@ -38,6 +38,49 @@ final class ArchiveServiceTests: XCTestCase {
         }
     }
 
+    func testImportArchiveSkipsDuplicateItemsAndPreservesExistingUsage() async throws {
+        let (core, rootURL) = try makeCore()
+        let existing = try core.saveItem(
+            content: "same item",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil
+        )
+        try core.incrementPasteCount(id: existing.id)
+
+        let archiveURL = rootURL.appendingPathComponent("duplicate.json")
+        let archiveJSON = """
+        {
+          "schemaVersion": 1,
+          "exportedAt": "2026-05-09T00:00:00Z",
+          "items": [
+            {
+              "content": "same item",
+              "clipType": "text",
+              "sourceApp": "com.example.old",
+              "sourceName": "Old App",
+              "isPinned": true,
+              "createdAt": 1000,
+              "imageDataBase64": null
+            }
+          ]
+        }
+        """
+        try archiveJSON.data(using: .utf8)!.write(to: archiveURL)
+
+        let result = try await ArchiveService.importArchive(from: archiveURL, core: core)
+        let items = core.getItems(limit: 10, offset: 0, typeFilter: nil)
+
+        XCTAssertEqual(result.importedCount, 0)
+        XCTAssertEqual(result.skippedDuplicateCount, 1)
+        XCTAssertEqual(result.skippedMissingImageCount, 0)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].id, existing.id)
+        XCTAssertEqual(items[0].pasteCount, 1)
+        XCTAssertFalse(items[0].isPinned)
+    }
+
     private func makeCore() throws -> (ClipinCore, URL) {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinTests-\(UUID().uuidString)", isDirectory: true)

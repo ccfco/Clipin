@@ -183,7 +183,7 @@ final class ClipboardViewModel: ObservableObject {
 
     /// 滚到底时加载下一页，追加到 items 并重建 sections（不重置选中状态）
     func loadMoreItems() {
-        guard hasMore, searchQuery.isEmpty, !browseMode.isPinnedOnly else { return }
+        guard hasMore, searchQuery.isEmpty else { return }
         let page = fetchBrowsePage(offset: totalLoadedFromDB, typeFilter: effectiveTypeFilter)
         guard !page.items.isEmpty || page.hasMore else {
             hasMore = false
@@ -601,35 +601,36 @@ final class ClipboardViewModel: ObservableObject {
     /// 当普通浏览选择“仅在 pinned 视图显示”时，分页要以“可见项页”而不是“原始 SQL 页”为准，
     /// 否则第一页可能被隐藏的 pinned 条目吃满，列表会错误显示为空。
     private func fetchBrowsePage(offset: Int, typeFilter: ClipType?) -> (items: [ClipListItem], rawCount: Int, hasMore: Bool) {
-        var pageItems: [ClipListItem] = []
-        var rawOffset = offset
-        var rawCount = 0
-        var hasMore = false
-
-        repeat {
-            let chunk = core.getListItems(
+        let chunk: [ClipListItem]
+        if browseMode.isPinnedOnly {
+            chunk = core.getPinnedListItems(
                 limit: Int32(Self.pageSize),
-                offset: Int32(rawOffset),
+                offset: Int32(offset),
                 typeFilter: typeFilter
             )
-            guard !chunk.isEmpty else {
-                hasMore = false
-                break
-            }
+        } else if usesUnpinnedBrowseQuery {
+            chunk = core.getUnpinnedListItems(
+                limit: Int32(Self.pageSize),
+                offset: Int32(offset),
+                typeFilter: typeFilter
+            )
+        } else {
+            chunk = core.getListItems(
+                limit: Int32(Self.pageSize),
+                offset: Int32(offset),
+                typeFilter: typeFilter
+            )
+        }
 
-            rawOffset += chunk.count
-            rawCount += chunk.count
-            pageItems.append(contentsOf: visibleItems(from: chunk))
-            hasMore = chunk.count == Self.pageSize
-        } while requiresVisiblePageBackfill && pageItems.count < Self.pageSize && hasMore
-
-        return (Array(pageItems.prefix(Self.pageSize)), rawCount, hasMore)
+        return (
+            items: visibleItems(from: chunk),
+            rawCount: chunk.count,
+            hasMore: chunk.count == Self.pageSize
+        )
     }
 
-    private var requiresVisiblePageBackfill: Bool {
-        searchQuery.isEmpty
-            && !browseMode.isPinnedOnly
-            && settings.pinnedItemsPresentation == .pinnedOnlyView
+    private var usesUnpinnedBrowseQuery: Bool {
+        settings.pinnedItemsPresentation == .pinnedOnlyView
     }
 
     private func commitPendingDeletionBeforeReplacing(with id: String) {

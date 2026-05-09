@@ -110,6 +110,77 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.isShowingActions)
     }
 
+    func testPinnedOnlyPresentationLoadsHiddenRegularItemsWithoutSkippingOverflow() throws {
+        let previousPresentation = SettingsStore.shared.pinnedItemsPresentation
+        SettingsStore.shared.pinnedItemsPresentation = .pinnedOnlyView
+        defer { SettingsStore.shared.pinnedItemsPresentation = previousPresentation }
+
+        let core = try makeCore()
+        for index in 0..<51 {
+            _ = try core.importItem(
+                content: "pinned-\(index)",
+                clipType: .text,
+                sourceApp: nil,
+                sourceName: nil,
+                imagePath: nil,
+                isPinned: true,
+                createdAt: Int64(2_000 + index)
+            )
+        }
+        for index in 0..<60 {
+            _ = try core.importItem(
+                content: "regular-\(index)",
+                clipType: .text,
+                sourceApp: nil,
+                sourceName: nil,
+                imagePath: nil,
+                isPinned: false,
+                createdAt: Int64(1_000 + index)
+            )
+        }
+
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.loadItems(selectLatest: true)
+
+        XCTAssertEqual(visibleContents(in: viewModel).count, 50)
+        XCTAssertTrue(viewModel.hasMore)
+
+        viewModel.loadMoreItems()
+
+        let visible = visibleContents(in: viewModel)
+        XCTAssertEqual(visible.count, 60)
+        XCTAssertEqual(Set(visible).count, 60)
+        XCTAssertTrue(visible.allSatisfy { $0.hasPrefix("regular-") })
+        XCTAssertFalse(viewModel.hasMore)
+    }
+
+    func testPinnedBrowseModeCanLoadMoreThanFirstPage() throws {
+        let core = try makeCore()
+        for index in 0..<60 {
+            _ = try core.importItem(
+                content: "pinned-\(index)",
+                clipType: .text,
+                sourceApp: nil,
+                sourceName: nil,
+                imagePath: nil,
+                isPinned: true,
+                createdAt: Int64(1_000 + index)
+            )
+        }
+
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.browseMode = .pinned
+        viewModel.loadItems(selectLatest: true)
+
+        XCTAssertEqual(visibleContents(in: viewModel).count, 50)
+        XCTAssertTrue(viewModel.hasMore)
+
+        viewModel.loadMoreItems()
+
+        XCTAssertEqual(visibleContents(in: viewModel).count, 60)
+        XCTAssertFalse(viewModel.hasMore)
+    }
+
     private func makeCore() throws -> ClipinCore {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinViewModelTests-\(UUID().uuidString)", isDirectory: true)
@@ -121,5 +192,9 @@ final class ClipboardViewModelTests: XCTestCase {
             dbPath: rootURL.appendingPathComponent("test.db").path,
             imageDir: imageURL.path
         )
+    }
+
+    private func visibleContents(in viewModel: ClipboardViewModel) -> [String] {
+        viewModel.sections.flatMap(\.items).map(\.preview)
     }
 }

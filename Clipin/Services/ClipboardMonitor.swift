@@ -247,6 +247,7 @@ final class ClipboardMonitor: ObservableObject {
 
     @MainActor
     private func notifyNewItem() {
+        NotificationCenter.default.post(name: .clipHistoryItemSaved, object: nil)
         onNewItem?()
     }
 }

@@ -14,9 +14,10 @@ final class AutoBackupService: ObservableObject {
 
     private let core: ClipinCore
     private let settings: SettingsStore
+    private let changeDebounceDelay: Duration
     private var cancellables = Set<AnyCancellable>()
     private var timer: Timer?
-    private var changeObserver: Any?
+    private var changeObservers: [NSObjectProtocol] = []
     private var debounceTask: Task<Void, Never>?
     private var backupTask: Task<Void, Never>?
     private var backupGeneration = UUID()
@@ -24,9 +25,14 @@ final class AutoBackupService: ObservableObject {
     // lastBackupAt 持久化到 UserDefaults，App 重启后能判断是否逾期
     private static let lastBackupKey = "autoBackup.lastBackupAt"
 
-    init(core: ClipinCore, settings: SettingsStore) {
+    init(
+        core: ClipinCore,
+        settings: SettingsStore,
+        changeDebounceDelay: Duration = .seconds(10)
+    ) {
         self.core = core
         self.settings = settings
+        self.changeDebounceDelay = changeDebounceDelay
         self.lastBackupAt = UserDefaults.standard.object(forKey: Self.lastBackupKey) as? Date
 
         // 任意备份相关设置变化时重新配置
@@ -45,10 +51,10 @@ final class AutoBackupService: ObservableObject {
     private func reconfigure() {
         timer?.invalidate()
         timer = nil
-        if let observer = changeObserver {
+        for observer in changeObservers {
             NotificationCenter.default.removeObserver(observer)
-            changeObserver = nil
         }
+        changeObservers.removeAll()
         debounceTask?.cancel()
         debounceTask = nil
         backupTask?.cancel()
@@ -64,13 +70,15 @@ final class AutoBackupService: ObservableObject {
         case .onChange:
             // 启用/配置后立即备份一次，用户能立刻在文件夹里看到结果
             performBackup(folderURL: folderURL)
-            // 用 Swift Concurrency 而非 GCD queue，与项目其他异步模式保持一致
-            changeObserver = NotificationCenter.default.addObserver(
-                forName: .clipHistoryDidChange,
-                object: nil,
-                queue: nil
-            ) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.scheduleDebounced(folderURL: folderURL) }
+            // 手动导入/清理等批量变化走 didChange；剪贴板新增走 itemSaved，避免为了备份强迫主面板重复 reload。
+            changeObservers = [.clipHistoryDidChange, .clipHistoryItemSaved].map { name in
+                NotificationCenter.default.addObserver(
+                    forName: name,
+                    object: nil,
+                    queue: nil
+                ) { [weak self] _ in
+                    Task { @MainActor [weak self] in self?.scheduleDebounced(folderURL: folderURL) }
+                }
             }
 
         case .daily, .weekly, .monthly:
@@ -104,8 +112,9 @@ final class AutoBackupService: ObservableObject {
     private func scheduleDebounced(folderURL: URL) {
         debounceTask?.cancel()
         debounceTask = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(10)) } catch { return }
-            self?.performBackup(folderURL: folderURL)
+            guard let self else { return }
+            do { try await Task.sleep(for: self.changeDebounceDelay) } catch { return }
+            self.performBackup(folderURL: folderURL)
         }
     }
 

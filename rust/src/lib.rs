@@ -65,6 +65,28 @@ impl ClipinCore {
             .get_list_items(limit, offset, type_filter.as_ref())
     }
 
+    /// 获取只包含 pinned 的轻量列表项，避免前端过滤污染分页 offset
+    pub fn get_pinned_list_items(
+        &self,
+        limit: i32,
+        offset: i32,
+        type_filter: Option<ClipType>,
+    ) -> Vec<ClipListItem> {
+        self.storage
+            .get_pinned_list_items(limit, offset, type_filter.as_ref())
+    }
+
+    /// 获取只包含未 pinned 的轻量列表项，避免 pinned-only 展示策略下第一页被隐藏项吃满
+    pub fn get_unpinned_list_items(
+        &self,
+        limit: i32,
+        offset: i32,
+        type_filter: Option<ClipType>,
+    ) -> Vec<ClipListItem> {
+        self.storage
+            .get_unpinned_list_items(limit, offset, type_filter.as_ref())
+    }
+
     /// 搜索历史记录
     pub fn search(&self, query: String, type_filter: Option<ClipType>) -> Vec<ClipItem> {
         self.storage.search(&query, type_filter.as_ref())
@@ -111,6 +133,28 @@ impl ClipinCore {
         created_at: i64,
     ) -> Result<ClipItem, ClipinError> {
         self.storage.import_item(
+            &content,
+            &clip_type,
+            source_app.as_deref(),
+            source_name.as_deref(),
+            image_path.as_deref(),
+            is_pinned,
+            created_at,
+        )
+    }
+
+    /// 导入一条记录；若同内容已存在则跳过，不重置现有条目的使用信号
+    pub fn import_item_if_missing(
+        &self,
+        content: String,
+        clip_type: ClipType,
+        source_app: Option<String>,
+        source_name: Option<String>,
+        image_path: Option<String>,
+        is_pinned: bool,
+        created_at: i64,
+    ) -> Result<bool, ClipinError> {
+        self.storage.import_item_if_missing(
             &content,
             &clip_type,
             source_app.as_deref(),
@@ -588,6 +632,34 @@ mod tests {
 
         let items = core.get_items(10, 0, Some(ClipType::Image));
         assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn test_import_item_if_missing_skips_duplicate_without_resetting_usage() {
+        let core = setup_core();
+        let existing = core
+            .save_item("same".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.increment_paste_count(existing.id.clone()).unwrap();
+
+        let imported = core
+            .import_item_if_missing(
+                "same".into(),
+                ClipType::Text,
+                Some("com.example.archive".into()),
+                Some("Archive".into()),
+                None,
+                true,
+                1_000,
+            )
+            .unwrap();
+
+        let items = core.get_items(10, 0, None);
+        assert!(!imported);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, existing.id);
+        assert_eq!(items[0].paste_count, 1);
+        assert!(!items[0].is_pinned);
     }
 
     #[test]

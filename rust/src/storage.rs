@@ -1,6 +1,6 @@
 use crate::models::*;
 use pinyin::ToPinyin;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, fs, io::ErrorKind, sync::Mutex};
 use uuid::Uuid;
@@ -353,6 +353,32 @@ impl Storage {
             conn.execute_batch("PRAGMA user_version = 7;")?;
         }
 
+        // v8: 浏览分页组合索引 + 收窄 FTS UPDATE 触发器。
+        // paste_count / created_at / is_pinned 这类排序信号更新不应重写 FTS 索引。
+        if from_version < 8 {
+            let conn = self.conn.lock().unwrap();
+            conn.execute_batch(
+                "
+                CREATE INDEX IF NOT EXISTS idx_pinned_created_at
+                    ON clip_items(is_pinned DESC, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_type_pinned_created_at
+                    ON clip_items(clip_type, is_pinned DESC, created_at DESC);
+
+                DROP TRIGGER IF EXISTS clip_items_au;
+                CREATE TRIGGER clip_items_au
+                AFTER UPDATE OF content, source_name, ocr_text, pinyin_flat, pinyin_initials
+                ON clip_items BEGIN
+                    INSERT INTO clip_fts(clip_fts,rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
+                    VALUES('delete',old.rowid,old.content,old.source_name,old.ocr_text,old.pinyin_flat,old.pinyin_initials);
+                    INSERT INTO clip_fts(rowid,content,source_name,ocr_text,pinyin_flat,pinyin_initials)
+                    VALUES(new.rowid,new.content,new.source_name,new.ocr_text,new.pinyin_flat,new.pinyin_initials);
+                END;
+
+                PRAGMA user_version = 8;
+                ",
+            )?;
+        }
+
         Ok(())
     }
 
@@ -431,6 +457,14 @@ impl Storage {
         )?;
         let rows = stmt.query_map(params![hash], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    fn hash_exists(conn: &Connection, hash: &str) -> Result<bool, ClipinError> {
+        Ok(conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM clip_items WHERE hash = ?1)",
+            params![hash],
+            |row| row.get(0),
+        )?)
     }
 
     fn load_image_paths_for_item(conn: &Connection, id: &str) -> Result<Vec<String>, ClipinError> {
@@ -655,39 +689,108 @@ impl Storage {
         offset: i32,
         type_filter: Option<&ClipType>,
     ) -> Vec<ClipListItem> {
+        self.get_list_items_with_pinned_filter(limit, offset, type_filter, None)
+    }
+
+    pub fn get_pinned_list_items(
+        &self,
+        limit: i32,
+        offset: i32,
+        type_filter: Option<&ClipType>,
+    ) -> Vec<ClipListItem> {
+        self.get_list_items_with_pinned_filter(limit, offset, type_filter, Some(true))
+    }
+
+    pub fn get_unpinned_list_items(
+        &self,
+        limit: i32,
+        offset: i32,
+        type_filter: Option<&ClipType>,
+    ) -> Vec<ClipListItem> {
+        self.get_list_items_with_pinned_filter(limit, offset, type_filter, Some(false))
+    }
+
+    fn get_list_items_with_pinned_filter(
+        &self,
+        limit: i32,
+        offset: i32,
+        type_filter: Option<&ClipType>,
+        pinned_filter: Option<bool>,
+    ) -> Vec<ClipListItem> {
         let conn = self.conn.lock().unwrap();
         let sql;
 
-        let result = if let Some(t) = type_filter {
-            let filter_val = t.as_str().to_string();
-            sql = format!(
-                "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                        clip_type, source_app, source_name, is_pinned,
-                        created_at, image_path, char_count, paste_count, copy_count
-                 FROM clip_items
-                 WHERE clip_type = ?1
-                 ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT ?2 OFFSET ?3",
-                p = Self::LIST_PREVIEW_CHARS
-            );
-            conn.prepare(&sql).and_then(|mut stmt| {
-                stmt.query_map(params![filter_val, limit, offset], Self::row_to_list_item)
+        let result = match (type_filter, pinned_filter) {
+            (Some(t), Some(pinned)) => {
+                let filter_val = t.as_str().to_string();
+                let pinned_val = if pinned { 1 } else { 0 };
+                sql = format!(
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count, paste_count, copy_count
+                     FROM clip_items
+                     WHERE clip_type = ?1 AND is_pinned = ?2
+                     ORDER BY is_pinned DESC, created_at DESC
+                     LIMIT ?3 OFFSET ?4",
+                    p = Self::LIST_PREVIEW_CHARS
+                );
+                conn.prepare(&sql).and_then(|mut stmt| {
+                    stmt.query_map(
+                        params![filter_val, pinned_val, limit, offset],
+                        Self::row_to_list_item,
+                    )
                     .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            })
-        } else {
-            sql = format!(
-                "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                        clip_type, source_app, source_name, is_pinned,
-                        created_at, image_path, char_count, paste_count, copy_count
-                 FROM clip_items
-                 ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT ?1 OFFSET ?2",
-                p = Self::LIST_PREVIEW_CHARS
-            );
-            conn.prepare(&sql).and_then(|mut stmt| {
-                stmt.query_map(params![limit, offset], Self::row_to_list_item)
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            })
+                })
+            }
+            (Some(t), None) => {
+                let filter_val = t.as_str().to_string();
+                sql = format!(
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count, paste_count, copy_count
+                     FROM clip_items
+                     WHERE clip_type = ?1
+                     ORDER BY is_pinned DESC, created_at DESC
+                     LIMIT ?2 OFFSET ?3",
+                    p = Self::LIST_PREVIEW_CHARS
+                );
+                conn.prepare(&sql).and_then(|mut stmt| {
+                    stmt.query_map(params![filter_val, limit, offset], Self::row_to_list_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            }
+            (None, Some(pinned)) => {
+                let pinned_val = if pinned { 1 } else { 0 };
+                sql = format!(
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count, paste_count, copy_count
+                     FROM clip_items
+                     WHERE is_pinned = ?1
+                     ORDER BY is_pinned DESC, created_at DESC
+                     LIMIT ?2 OFFSET ?3",
+                    p = Self::LIST_PREVIEW_CHARS
+                );
+                conn.prepare(&sql).and_then(|mut stmt| {
+                    stmt.query_map(params![pinned_val, limit, offset], Self::row_to_list_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            }
+            (None, None) => {
+                sql = format!(
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
+                            clip_type, source_app, source_name, is_pinned,
+                            created_at, image_path, char_count, paste_count, copy_count
+                     FROM clip_items
+                     ORDER BY is_pinned DESC, created_at DESC
+                     LIMIT ?1 OFFSET ?2",
+                    p = Self::LIST_PREVIEW_CHARS
+                );
+                conn.prepare(&sql).and_then(|mut stmt| {
+                    stmt.query_map(params![limit, offset], Self::row_to_list_item)
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+            }
         };
 
         result.unwrap_or_default()
@@ -1288,6 +1391,49 @@ impl Storage {
         })
     }
 
+    /// 导入一条记录；若同 hash 已存在则跳过，保留现有条目的使用信号和 pin 状态。
+    pub fn import_item_if_missing(
+        &self,
+        content: &str,
+        clip_type: &ClipType,
+        source_app: Option<&str>,
+        source_name: Option<&str>,
+        image_path: Option<&str>,
+        is_pinned: bool,
+        created_at: i64,
+    ) -> Result<bool, ClipinError> {
+        let hash = Self::hash_for_item(content, clip_type, image_path)?;
+        let id = Uuid::new_v4().to_string();
+        let char_count = content.chars().count() as i32;
+        let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
+        let conn = self.conn.lock().unwrap();
+
+        if Self::hash_exists(&conn, &hash)? {
+            return Ok(false);
+        }
+
+        conn.execute(
+            "INSERT INTO clip_items
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?7,?11,?12)",
+            params![
+                id,
+                content,
+                clip_type.as_str(),
+                source_app,
+                source_name,
+                is_pinned as i32,
+                created_at,
+                image_path,
+                char_count,
+                hash,
+                pinyin_flat,
+                pinyin_initials,
+            ],
+        )?;
+        Ok(true)
+    }
+
     pub fn clear_unpinned_before(&self, timestamp: i64) -> Result<i32, ClipinError> {
         let conn = self.conn.lock().unwrap();
         let image_paths = Self::load_image_paths_before(&conn, timestamp)?;
@@ -1465,7 +1611,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 7, "新建数据库应为 v7");
+        assert_eq!(storage.schema_version(), 8, "新建数据库应为 v8");
     }
 
     #[test]
@@ -1484,7 +1630,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 7, "旧数据库应 migrate 到 v7");
+        assert_eq!(storage.schema_version(), 8, "旧数据库应 migrate 到 v8");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -1511,7 +1657,66 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 7);
+        assert_eq!(s2.schema_version(), 8);
+    }
+
+    #[test]
+    fn test_v8_adds_browse_indexes_and_narrows_fts_update_trigger() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+
+        let storage = Storage::new(&db_path, &img_dir).unwrap();
+        let conn = storage.conn.lock().unwrap();
+
+        let browse_index_count: i32 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master
+                 WHERE type='index'
+                   AND name IN ('idx_pinned_created_at', 'idx_type_pinned_created_at')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(browse_index_count, 2);
+
+        let trigger_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='clip_items_au'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(trigger_sql.contains(
+            "AFTER UPDATE OF content, source_name, ocr_text, pinyin_flat, pinyin_initials"
+        ));
+    }
+
+    #[test]
+    fn test_non_fts_updates_do_not_rewrite_fts_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+
+        let storage = Storage::new(&db_path, &img_dir).unwrap();
+        let item = storage
+            .save_item("hello", &ClipType::Text, None, None, None)
+            .unwrap();
+
+        let before = storage.conn.lock().unwrap().total_changes();
+        storage.increment_paste_count(&item.id).unwrap();
+        let after_paste_count = storage.conn.lock().unwrap().total_changes();
+        assert_eq!(after_paste_count - before, 1);
+
+        storage.touch_item(&item.id).unwrap();
+        let after_touch = storage.conn.lock().unwrap().total_changes();
+        assert_eq!(after_touch - after_paste_count, 1);
+
+        storage.toggle_pin(&item.id).unwrap();
+        let after_pin = storage.conn.lock().unwrap().total_changes();
+        assert_eq!(after_pin - after_touch, 1);
     }
 
     #[test]
@@ -1611,11 +1816,15 @@ mod migration_tests {
 
         let items = storage.get_items(10, 0, None);
         assert_eq!(items.len(), 2);
-        assert!(items
-            .iter()
-            .any(|item| item.content == "pinned" && item.is_pinned));
-        assert!(items
-            .iter()
-            .any(|item| item.content == "two" && !item.is_pinned));
+        assert!(
+            items
+                .iter()
+                .any(|item| item.content == "pinned" && item.is_pinned)
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| item.content == "two" && !item.is_pinned)
+        );
     }
 }

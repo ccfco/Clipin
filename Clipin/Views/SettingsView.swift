@@ -1086,7 +1086,7 @@ struct SettingsView: View {
                         "Exported %d items to %@.",
                         result.exportedCount,
                         result.url.lastPathComponent
-                    ) + skippedSuffix(result.skippedCount)
+                    ) + exportSkippedSuffix(result.skippedCount)
                 )
             } catch ArchiveError.cancelled {
                 return
@@ -1113,7 +1113,10 @@ struct SettingsView: View {
                         "Imported %d items from %@.",
                         result.importedCount,
                         result.url.lastPathComponent
-                    ) + skippedSuffix(result.skippedCount) + cleanupSuffix
+                    ) + importSkippedSuffix(
+                        missingImageCount: result.skippedMissingImageCount,
+                        duplicateCount: result.skippedDuplicateCount
+                    ) + cleanupSuffix
                 )
             } catch ArchiveError.cancelled {
                 return
@@ -1123,10 +1126,21 @@ struct SettingsView: View {
         }
     }
 
-    private func skippedSuffix(_ skippedCount: Int) -> String {
+    private func exportSkippedSuffix(_ skippedCount: Int) -> String {
         skippedCount > 0
             ? " " + localized("Skipped %d items with missing image data.", skippedCount)
             : ""
+    }
+
+    private func importSkippedSuffix(missingImageCount: Int, duplicateCount: Int) -> String {
+        var parts: [String] = []
+        if missingImageCount > 0 {
+            parts.append(localized("Skipped %d items with missing image data.", missingImageCount))
+        }
+        if duplicateCount > 0 {
+            parts.append(localized("Skipped %d duplicate items.", duplicateCount))
+        }
+        return parts.isEmpty ? "" : " " + parts.joined(separator: " ")
     }
 
     private func chooseBackupFolder() {

@@ -11,7 +11,12 @@ struct ArchiveExportResult: Sendable {
 struct ArchiveImportResult: Sendable {
     let url: URL
     let importedCount: Int
-    let skippedCount: Int
+    let skippedMissingImageCount: Int
+    let skippedDuplicateCount: Int
+
+    var skippedCount: Int {
+        skippedMissingImageCount + skippedDuplicateCount
+    }
 }
 
 enum ArchiveError: LocalizedError {
@@ -67,7 +72,8 @@ enum ArchiveService {
             try FileManager.default.createDirectory(at: imageDirURL, withIntermediateDirectories: true)
 
             var importedCount = 0
-            var skippedCount = 0
+            var skippedMissingImageCount = 0
+            var skippedDuplicateCount = 0
 
             for item in archive.items {
                 try Task.checkCancellation()
@@ -77,7 +83,7 @@ enum ArchiveService {
                 if clipType == .image {
                     guard let imageDataBase64 = item.imageDataBase64,
                           let imageData = Data(base64Encoded: imageDataBase64) else {
-                        skippedCount += 1
+                        skippedMissingImageCount += 1
                         continue
                     }
 
@@ -88,22 +94,39 @@ enum ArchiveService {
                     imagePath = nil
                 }
 
-                _ = try core.importItem(
-                    content: item.content,
-                    clipType: clipType,
-                    sourceApp: item.sourceApp,
-                    sourceName: item.sourceName,
-                    imagePath: imagePath,
-                    isPinned: item.isPinned,
-                    createdAt: item.createdAt
-                )
-                importedCount += 1
+                let didImport: Bool
+                do {
+                    didImport = try core.importItemIfMissing(
+                        content: item.content,
+                        clipType: clipType,
+                        sourceApp: item.sourceApp,
+                        sourceName: item.sourceName,
+                        imagePath: imagePath,
+                        isPinned: item.isPinned,
+                        createdAt: item.createdAt
+                    )
+                } catch {
+                    if let imagePath {
+                        try? FileManager.default.removeItem(atPath: imagePath)
+                    }
+                    throw error
+                }
+
+                if didImport {
+                    importedCount += 1
+                } else {
+                    skippedDuplicateCount += 1
+                    if let imagePath {
+                        try? FileManager.default.removeItem(atPath: imagePath)
+                    }
+                }
             }
 
             return ArchiveImportResult(
                 url: url,
                 importedCount: importedCount,
-                skippedCount: skippedCount
+                skippedMissingImageCount: skippedMissingImageCount,
+                skippedDuplicateCount: skippedDuplicateCount
             )
         }.value
     }

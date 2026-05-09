@@ -329,6 +329,7 @@
 "Imported %d items from %@." = "Imported %d items from %@.";
 "Cleanup removed %d older items." = "Cleanup removed %d older items.";
 "Skipped %d items with missing image data." = "Skipped %d items with missing image data.";
+"Skipped %d duplicate items." = "Skipped %d duplicate items.";
 "Choose Backup Folder" = "Choose Backup Folder";
 "Choose a folder for the clipin-backup.json file." = "Choose a folder for the clipin-backup.json file.";
 "Cannot create iCloud Drive folder: %@" = "Cannot create iCloud Drive folder: %@";
