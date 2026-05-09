@@ -663,6 +663,47 @@ mod tests {
     }
 
     #[test]
+    fn test_import_item_if_missing_repairs_duplicate_image_with_missing_file() {
+        let (core, img_dir) = setup_core_with_image_dir();
+        let old_path = write_image(&img_dir, "missing.png", b"repair-image");
+        let existing = core
+            .import_item(
+                "image".into(),
+                ClipType::Image,
+                None,
+                None,
+                Some(old_path.clone()),
+                false,
+                1_000,
+            )
+            .unwrap();
+        core.increment_paste_count(existing.id.clone()).unwrap();
+        fs::remove_file(&old_path).unwrap();
+
+        let restored_path = write_image(&img_dir, "restored.png", b"repair-image");
+        let repaired = core
+            .import_item_if_missing(
+                "image".into(),
+                ClipType::Image,
+                Some("com.example.archive".into()),
+                Some("Archive".into()),
+                Some(restored_path.clone()),
+                true,
+                2_000,
+            )
+            .unwrap();
+
+        let items = core.get_items(10, 0, Some(ClipType::Image));
+        assert!(repaired);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, existing.id);
+        assert_eq!(items[0].paste_count, 1);
+        assert!(!items[0].is_pinned);
+        assert_eq!(items[0].image_path.as_deref(), Some(restored_path.as_str()));
+        assert!(PathBuf::from(restored_path).exists());
+    }
+
+    #[test]
     fn test_delete_item_removes_image_file() {
         let (core, img_dir) = setup_core_with_image_dir();
         let image_path = write_image(&img_dir, "delete-me.png", b"delete-me");

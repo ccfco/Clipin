@@ -326,7 +326,7 @@
 "Nothing needed cleanup. Your history already fits the current policy." = "无需清理，当前历史记录已经符合现有策略。";
 "Removed %d items (%d by age, %d by count)." = "已移除 %d 项（按时间清理 %d 项，按数量清理 %d 项）。";
 "Exported %d items to %@." = "已导出 %d 项到 %@。";
-"Imported %d items from %@." = "已从 %@ 导入 %d 项。";
+"Imported %d items from %@." = "已从 %2$@ 导入 %1$d 项。";
 "Cleanup removed %d older items." = "清理阶段额外移除了 %d 项较旧内容。";
 "Skipped %d items with missing image data." = "已跳过 %d 项缺少图片数据的内容。";
 "Skipped %d duplicate items." = "已跳过 %d 项重复内容。";

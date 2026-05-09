@@ -2,7 +2,7 @@ use crate::models::*;
 use pinyin::ToPinyin;
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha256};
-use std::{collections::HashSet, fs, io::ErrorKind, sync::Mutex};
+use std::{collections::HashSet, fs, io::ErrorKind, path::Path, sync::Mutex};
 use uuid::Uuid;
 
 /// 把文本中的 CJK 字符转为拼音（无声调）：
@@ -459,12 +459,17 @@ impl Storage {
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
     }
 
-    fn hash_exists(conn: &Connection, hash: &str) -> Result<bool, ClipinError> {
-        Ok(conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM clip_items WHERE hash = ?1)",
+    fn load_item_id_for_hash(conn: &Connection, hash: &str) -> Result<Option<String>, ClipinError> {
+        conn.query_row(
+            "SELECT id FROM clip_items WHERE hash = ?1 ORDER BY created_at DESC LIMIT 1",
             params![hash],
             |row| row.get(0),
-        )?)
+        )
+        .map(Some)
+        .or_else(|err| match err {
+            rusqlite::Error::QueryReturnedNoRows => Ok(None),
+            other => Err(other.into()),
+        })
     }
 
     fn load_image_paths_for_item(conn: &Connection, id: &str) -> Result<Vec<String>, ClipinError> {
@@ -1408,7 +1413,23 @@ impl Storage {
         let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
         let conn = self.conn.lock().unwrap();
 
-        if Self::hash_exists(&conn, &hash)? {
+        if let Some(existing_id) = Self::load_item_id_for_hash(&conn, &hash)? {
+            if clip_type == &ClipType::Image {
+                if let Some(restored_path) = image_path {
+                    let old_image_paths = Self::load_image_paths_for_hash(&conn, &hash)?;
+                    let has_existing_image_file =
+                        old_image_paths.iter().any(|path| Path::new(path).exists());
+
+                    if !has_existing_image_file {
+                        conn.execute(
+                            "UPDATE clip_items SET image_path = ?1 WHERE id = ?2",
+                            params![restored_path, existing_id],
+                        )?;
+                        Self::remove_image_files(old_image_paths, Some(restored_path));
+                        return Ok(true);
+                    }
+                }
+            }
             return Ok(false);
         }
 

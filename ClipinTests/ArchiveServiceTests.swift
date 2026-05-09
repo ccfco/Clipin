@@ -81,6 +81,57 @@ final class ArchiveServiceTests: XCTestCase {
         XCTAssertFalse(items[0].isPinned)
     }
 
+    func testImportArchiveRepairsDuplicateImageWhenExistingFileIsMissing() async throws {
+        let (core, rootURL) = try makeCore()
+        let oldImageURL = rootURL.appendingPathComponent("old-image.png")
+        let imageData = Data("repair-image".utf8)
+        try imageData.write(to: oldImageURL)
+        let existing = try core.importItem(
+            content: "image",
+            clipType: .image,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: oldImageURL.path,
+            isPinned: false,
+            createdAt: 1_000
+        )
+        try core.incrementPasteCount(id: existing.id)
+        try FileManager.default.removeItem(at: oldImageURL)
+
+        let archiveURL = rootURL.appendingPathComponent("repair-image.json")
+        let archiveJSON = """
+        {
+          "schemaVersion": 1,
+          "exportedAt": "2026-05-09T00:00:00Z",
+          "items": [
+            {
+              "content": "image",
+              "clipType": "image",
+              "sourceApp": "com.example.old",
+              "sourceName": "Old App",
+              "isPinned": true,
+              "createdAt": 2000,
+              "imageDataBase64": "\(imageData.base64EncodedString())"
+            }
+          ]
+        }
+        """
+        try archiveJSON.data(using: .utf8)!.write(to: archiveURL)
+
+        let result = try await ArchiveService.importArchive(from: archiveURL, core: core)
+        let items = core.getItems(limit: 10, offset: 0, typeFilter: .image)
+
+        XCTAssertEqual(result.importedCount, 1)
+        XCTAssertEqual(result.skippedDuplicateCount, 0)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].id, existing.id)
+        XCTAssertEqual(items[0].pasteCount, 1)
+        XCTAssertFalse(items[0].isPinned)
+        let repairedPath = try XCTUnwrap(items[0].imagePath)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repairedPath))
+        XCTAssertNotEqual(repairedPath, oldImageURL.path)
+    }
+
     private func makeCore() throws -> (ClipinCore, URL) {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinTests-\(UUID().uuidString)", isDirectory: true)
