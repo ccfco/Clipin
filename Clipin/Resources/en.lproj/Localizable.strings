@@ -81,8 +81,6 @@
 "Try a different search term, or press Command-K for actions." = "Try a different search term, or press Command-K for actions.";
 "Copy something and it will appear here. Command-K still opens actions." = "Copy something and it will appear here. Command-K still opens actions.";
 "Actions & Settings" = "Actions & Settings";
-"To %@" = "To %@";
-"Choose target app" = "Choose target app";
 "Press Esc to exit Continuous Paste." = "Press Esc to exit Continuous Paste.";
 "Dismiss" = "Dismiss";
 
@@ -106,8 +104,6 @@
 "Yesterday" = "Yesterday";
 
 /* ClipboardViewModel - labels */
-"Top 9" = "Top 9";
-"Quick Paste" = "Quick Paste";
 "Open" = "Open";
 "Open URL" = "Open URL";
 "Reveal in Finder" = "Reveal in Finder";

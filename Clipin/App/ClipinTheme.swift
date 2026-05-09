@@ -221,6 +221,8 @@ struct ClipinKeycap: View {
         Text(key)
             .font(.system(size: 10.5, weight: .medium, design: .rounded))
             .foregroundStyle(foreground)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(

@@ -469,25 +469,6 @@ final class ClipboardViewModel: ObservableObject {
         return items.first(where: { $0.id == selectedItemID })
     }
 
-    var selectedQuickPasteNumber: Int? {
-        guard let selectedItemID else { return nil }
-        guard let index = shortcutOrder.firstIndex(where: { $0.id == selectedItemID }), index < 9 else { return nil }
-        return index + 1
-    }
-
-    var selectedQuickPasteLabel: String {
-        selectedQuickPasteNumber == nil
-            ? NSLocalizedString("Top 9", comment: "")
-            : NSLocalizedString("Quick Paste", comment: "")
-    }
-
-    var selectedQuickPasteKey: String {
-        if let number = selectedQuickPasteNumber {
-            return "⌘\(number)"
-        }
-        return "⌘1-9"
-    }
-
     /// 列表是否为空（用于空状态提示）
     var isEmpty: Bool { flatOrder.isEmpty }
 

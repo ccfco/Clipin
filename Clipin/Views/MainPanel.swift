@@ -171,11 +171,6 @@ struct MainPanel: View {
                 commandCluster {
                     keyBadge(label: "Plain Text", key: "⇧↵")
 
-                    keyBadge(
-                        label: viewModel.selectedQuickPasteLabel,
-                        key: viewModel.selectedQuickPasteKey
-                    )
-
                     if viewModel.canOpenSelectedItem {
                         keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
                     }
@@ -256,14 +251,11 @@ struct MainPanel: View {
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(glass.emphasisInk)
 
-                Text(viewModel.targetAppName.map {
-                    String(format: NSLocalizedString("To %@", comment: ""), $0)
-                } ?? NSLocalizedString("Choose target app", comment: ""))
+                Text("Continuous Paste")
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(glass.emphasisInk)
                     .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: 128, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
 
                 ClipinKeycap(
                     key: "Esc",
@@ -348,6 +340,8 @@ struct MainPanel: View {
             Text(LocalizedStringKey(label))
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(emphasized ? glass.emphasisInk : hierarchy.support.subduedInk)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             ClipinKeycap(
                 key: key,
                 foreground: emphasized ? glass.emphasisInk.opacity(0.82) : hierarchy.support.smallLabelInk,

@@ -81,8 +81,6 @@
 "Try a different search term, or press Command-K for actions." = "换个关键词试试，或按 ⌘K 打开动作面板。";
 "Copy something and it will appear here. Command-K still opens actions." = "复制内容后将在此显示。⌘K 仍可打开动作面板。";
 "Actions & Settings" = "动作与设置";
-"To %@" = "到 %@";
-"Choose target app" = "选择目标应用";
 "Press Esc to exit Continuous Paste." = "按 Esc 退出连续粘贴。";
 "Dismiss" = "关闭";
 
@@ -106,8 +104,6 @@
 "Yesterday" = "昨天";
 
 /* ClipboardViewModel - labels */
-"Top 9" = "前 9 项";
-"Quick Paste" = "快速粘贴";
 "Open" = "打开";
 "Open URL" = "打开链接";
 "Reveal in Finder" = "在 Finder 中显示";
