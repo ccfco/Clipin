@@ -33,82 +33,40 @@ func detectHexColor(in text: String) -> Color? {
     }
 }
 
-/// bundle identifier → app icon 缓存
-private let appIconCache = AppIconCache()
+private struct ClipThumbnailImage: View {
+    let path: String
+    let isSelected: Bool
+    let glass: ClipinGlassPalette
+    let hierarchy: ClipinPanelHierarchy
+    @State private var thumbnail: CGImage?
 
-/// 图片缩略图缓存
-private let thumbnailCache = ThumbnailCache()
-
-private final class AppIconCache: @unchecked Sendable {
-    private static let maxSize = 100
-    private var cache: [String: NSImage] = [:]
-    private var keys: [String] = []   // 尾部 = 最近使用
-    private let lock = NSLock()
-
-    func icon(for bundleId: String) -> NSImage? {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached = cache[bundleId] {
-            touch(bundleId)
-            return cached
+    var body: some View {
+        Group {
+            if let thumbnail {
+                Image(decorative: thumbnail, scale: 1, orientation: .up)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Image(systemName: "photo")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isSelected ? hierarchy.selection.ink : hierarchy.support.subduedInk)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(isSelected ? hierarchy.selection.badgeFill : glass.keycapTint)
+                    )
+            }
         }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else { return nil }
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
-        insert(key: bundleId, value: icon)
-        return icon
-    }
-
-    private func touch(_ key: String) {
-        keys.removeAll { $0 == key }
-        keys.append(key)
-    }
-
-    private func insert(key: String, value: NSImage) {
-        if cache.count >= Self.maxSize, let lru = keys.first {
-            cache.removeValue(forKey: lru)
-            keys.removeFirst()
+        .frame(width: 24, height: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .task(id: path) {
+            thumbnail = ClipImageThumbnailCache.shared.cachedThumbnail(for: path)
+            if thumbnail == nil {
+                let generatedThumbnail = await ClipImageThumbnailCache.shared.thumbnail(for: path)
+                guard !Task.isCancelled else { return }
+                thumbnail = generatedThumbnail
+            }
         }
-        cache[key] = value
-        keys.append(key)
-    }
-}
-
-private final class ThumbnailCache: @unchecked Sendable {
-    private static let maxSize = 100
-    private var cache: [String: NSImage] = [:]
-    private var keys: [String] = []
-    private let lock = NSLock()
-
-    func thumbnail(for path: String) -> NSImage? {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached = cache[path] {
-            touch(path)
-            return cached
-        }
-        guard let image = NSImage(contentsOfFile: path) else { return nil }
-        let thumbSize: CGFloat = 56
-        let thumb = NSImage(size: NSSize(width: thumbSize, height: thumbSize))
-        thumb.lockFocus()
-        image.draw(in: NSRect(x: 0, y: 0, width: thumbSize, height: thumbSize),
-                   from: .zero, operation: .copy, fraction: 1.0)
-        thumb.unlockFocus()
-        insert(key: path, value: thumb)
-        return thumb
-    }
-
-    private func touch(_ key: String) {
-        keys.removeAll { $0 == key }
-        keys.append(key)
-    }
-
-    private func insert(key: String, value: NSImage) {
-        if cache.count >= Self.maxSize, let lru = keys.first {
-            cache.removeValue(forKey: lru)
-            keys.removeFirst()
-        }
-        cache[key] = value
-        keys.append(key)
     }
 }
 
@@ -153,12 +111,13 @@ struct ClipItemRow: View {
     @ViewBuilder
     private var typeIndicator: some View {
         if item.clipType == .image, let path = item.imagePath,
-           let nsImage = thumbnailCache.thumbnail(for: path) {
-            Image(nsImage: nsImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 24, height: 24)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+           !path.isEmpty {
+            ClipThumbnailImage(
+                path: path,
+                isSelected: isSelected,
+                glass: glass,
+                hierarchy: hierarchy
+            )
         } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
             ZStack {
                 RoundedRectangle(cornerRadius: 5, style: .continuous).fill(color)

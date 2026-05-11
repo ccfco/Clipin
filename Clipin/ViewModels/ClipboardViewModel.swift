@@ -36,6 +36,7 @@ final class ClipboardViewModel: ObservableObject {
     @Published private(set) var paletteActions: [PaletteAction] = []
     @Published var isContinuousPasteEnabled: Bool = false
     @Published private(set) var launcherNotice: LauncherNotice?
+    @Published private(set) var isPreparingPreview = false
 
     func navigatePalette(delta: Int) {
         let count = paletteActions.count
@@ -106,6 +107,7 @@ final class ClipboardViewModel: ObservableObject {
     private var sessionBaseBrowseMode: LauncherBrowseMode
     private var noticeTask: Task<Void, Never>?
     private var noticeAction: (() -> Void)?
+    private var previewTask: Task<Void, Never>?
 
     private struct PendingDeletion {
         let id: String
@@ -116,6 +118,7 @@ final class ClipboardViewModel: ObservableObject {
 
     // MARK: - Pagination
     private static let pageSize = 50
+    private static let previewNeighborItemLimit = 80
     /// 当前已从 DB 加载的条目总数（用于 offset 计算）
     private var totalLoadedFromDB = 0
     /// 是否还有更多可加载的条目（非 pinned 浏览模式、非搜索时有效）
@@ -209,6 +212,9 @@ final class ClipboardViewModel: ObservableObject {
 
     func selectItem(id: String?) {
         loadItemTask?.cancel()
+        previewTask?.cancel()
+        previewTask = nil
+        isPreparingPreview = false
         selectedItemID = id
         guard let id else {
             selectedItem = nil
@@ -308,9 +314,44 @@ final class ClipboardViewModel: ObservableObject {
 
     @discardableResult
     func previewSelected() -> Bool {
-        guard let session = currentPreviewSession() else { return false }
-        QuickLookPreviewService.shared.present(session: session)
+        guard canPreviewSelectedItem, let selectedItemID else { return false }
+        previewTask?.cancel()
+
+        let selectedSnapshot = selectedItem
+        let itemsSnapshot = flatOrder
+        let core = self.core
+        let neighborItemLimit = Self.previewNeighborItemLimit
+        isPreparingPreview = true
+        previewTask = Task { @MainActor [weak self] in
+            let session = await Task.detached(priority: .userInitiated) {
+                ClipPreviewResolver.resolveSession(
+                    items: itemsSnapshot,
+                    selectedItemID: selectedItemID,
+                    neighborItemLimit: neighborItemLimit
+                ) { id in
+                    if selectedSnapshot?.id == id {
+                        return selectedSnapshot
+                    }
+                    return try? core.getItem(id: id)
+                }
+            }.value
+
+            guard !Task.isCancelled, let self, self.selectedItemID == selectedItemID else { return }
+            self.previewTask = nil
+            self.isPreparingPreview = false
+            guard let session else {
+                self.showNotice(NSLocalizedString("Could not preview this item.", comment: ""), style: .error)
+                return
+            }
+            QuickLookPreviewService.shared.present(session: session)
+        }
         return true
+    }
+
+    func cancelPreviewPreparation() {
+        previewTask?.cancel()
+        previewTask = nil
+        isPreparingPreview = false
     }
 
     func close() { onCloseRequested?() }
@@ -325,17 +366,6 @@ final class ClipboardViewModel: ObservableObject {
                 : NSLocalizedString("Continuous Paste is off.", comment: ""),
             style: isContinuousPasteEnabled ? .success : .info
         )
-    }
-
-    func setBrowseModeByIndex(_ index: Int) {
-        switch index {
-        case 0: browseMode = .pinned
-        case 1: browseMode = .text
-        case 2: browseMode = .image
-        case 3: browseMode = .file
-        case 4: browseMode = .url
-        default: break
-        }
     }
 
     /// Tab 键循环：全部 ↔ 📌 ↔ 文本 ↔ 图片 ↔ 文件 ↔ 链接
@@ -541,19 +571,6 @@ final class ClipboardViewModel: ObservableObject {
     private func currentPreviewEntries() -> [ClipPreviewEntry]? {
         guard let item = currentSelectedItem() else { return nil }
         return ClipPreviewResolver.resolve(item: item)
-    }
-
-    private func currentPreviewSession() -> ClipPreviewSession? {
-        let selectedSnapshot = selectedItem
-        return ClipPreviewResolver.resolveSession(
-            items: flatOrder,
-            selectedItemID: selectedItemID
-        ) { [core] id in
-            if selectedSnapshot?.id == id {
-                return selectedSnapshot
-            }
-            return try? core.getItem(id: id)
-        }
     }
 
     private static let dateFormatter: DateFormatter = {

@@ -185,7 +185,7 @@ struct MainPanel: View {
 
                     if viewModel.canPreviewSelectedItem {
                         Button { _ = viewModel.previewSelected() } label: {
-                            keyBadge(label: "Preview", key: "Space")
+                            keyBadge(label: viewModel.isPreparingPreview ? "Preparing…" : "Preview", key: "Space")
                         }
                         .buttonStyle(.plain)
                         .help(NSLocalizedString("Preview", comment: ""))

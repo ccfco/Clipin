@@ -87,6 +87,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var backfillTask: Task<Void, Never>?
     private var updateReminderSubscription: AnyCancellable?
     private var updateBadgeSubscription: AnyCancellable?
+    private var isRestoringFailedShortcut = false
 
     private enum PanelPositionKeys {
         static let originX = "panel.savedOriginX"
@@ -352,7 +353,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] shortcut in
-                self?.hotKey.start(with: shortcut)
+                self?.registerGlobalShortcut(shortcut)
             }
             .store(in: &cancellables)
 
@@ -441,6 +442,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
     }
 
+    private func registerGlobalShortcut(_ shortcut: HotKeyShortcut) {
+        guard !isRestoringFailedShortcut else { return }
+        if hotKey.activeShortcut == shortcut {
+            return
+        }
+
+        switch hotKey.start(with: shortcut) {
+        case .registered:
+            settings.clearShortcutRegistrationNote()
+        case let .failed(status):
+            let restored = hotKey.activeShortcut ?? .default
+            settings.reportShortcutRegistrationFailure(
+                requested: shortcut,
+                restored: restored,
+                status: status
+            )
+            guard settings.shortcut != restored else { return }
+            isRestoringFailedShortcut = true
+            settings.shortcut = restored
+            isRestoringFailedShortcut = false
+        }
+    }
+
     // MARK: - Show / Hide
 
     @objc func togglePanel() {
@@ -521,6 +545,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let panel else { return }
         viewModel?.isContinuousPasteEnabled = false
         viewModel?.hideActionsPalette()
+        viewModel?.cancelPreviewPreparation()
         QuickLookPreviewService.shared.dismiss()
         suppressResignKey = false
         stopClickOutsideMonitor()
@@ -937,9 +962,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             }
             if flags == .option {
-                let optMapping: [UInt16: Int] = [18: 0, 19: 1, 20: 2, 21: 3, 23: 4]
-                if let index = optMapping[event.keyCode] {
-                    vm.setBrowseModeByIndex(index)
+                let modeMapping: [UInt16: LauncherBrowseMode] = [
+                    29: .all,    // 0
+                    18: .pinned, // 1
+                    19: .text,   // 2
+                    20: .image,  // 3
+                    21: .file,   // 4
+                    23: .url,    // 5
+                ]
+                if let mode = modeMapping[event.keyCode] {
+                    vm.browseMode = mode
                     return nil
                 }
             }

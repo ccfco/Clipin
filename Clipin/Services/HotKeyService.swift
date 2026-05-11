@@ -1,6 +1,34 @@
 import AppKit
 import Carbon.HIToolbox
 
+enum HotKeyRegistrationResult: Equatable {
+    case registered
+    case failed(OSStatus)
+}
+
+protocol HotKeyRegistration: AnyObject {
+    func unregister()
+}
+
+protocol HotKeyEventListener: AnyObject {
+    func stop()
+}
+
+enum HotKeyBackendRegistrationResult {
+    case registered(HotKeyRegistration)
+    case failure(OSStatus)
+}
+
+enum HotKeyBackendListenerResult {
+    case listening(HotKeyEventListener)
+    case failure(OSStatus)
+}
+
+protocol HotKeyBackend {
+    func startListening(onFire: @escaping (UInt32) -> Void) -> HotKeyBackendListenerResult
+    func register(shortcut: HotKeyShortcut, signature: OSType, id: UInt32) -> HotKeyBackendRegistrationResult
+}
+
 struct HotKeyShortcut: Codable, Equatable {
     var keyCode: UInt32
     var modifierFlagsRaw: UInt
@@ -104,32 +132,142 @@ final class HotKeyService: @unchecked Sendable {
     private static let signature = OSType(0x434C5049)
 
     private let hotKeyID: UInt32
-    private var hotKeyRef: EventHotKeyRef?
-    private var eventHandler: EventHandlerRef?
+    private let backend: HotKeyBackend
+    private var registration: HotKeyRegistration?
+    private var listener: HotKeyEventListener?
+    private var registrationGeneration: UInt32 = 0
+    private var activeRegistrationID: UInt32?
+    private(set) var activeShortcut: HotKeyShortcut?
 
     var onToggle: (() -> Void)?
 
     /// - Parameter id: 每个实例必须使用唯一 id（当前仅 1=主面板）
-    init(id: UInt32 = 1) {
+    init(id: UInt32 = 1, backend: HotKeyBackend = CarbonHotKeyBackend()) {
         self.hotKeyID = id
+        self.backend = backend
     }
 
-    func start(with shortcut: HotKeyShortcut) {
-        installHandlerIfNeeded()
-        register(shortcut)
+    @discardableResult
+    func start(with shortcut: HotKeyShortcut) -> HotKeyRegistrationResult {
+        if listener == nil {
+            switch backend.startListening(onFire: { [weak self] id in
+                self?.handleHotKeyEvent(id: id)
+            }) {
+            case let .listening(listener):
+                self.listener = listener
+            case let .failure(status):
+                print("⚠️ Failed to install hotkey handler id=\(hotKeyID): \(status)")
+                return .failed(status)
+            }
+        }
+
+        let candidateID = nextRegistrationID()
+        switch backend.register(shortcut: shortcut, signature: Self.signature, id: candidateID) {
+        case let .registered(newRegistration):
+            let previousRegistration = registration
+            registration = newRegistration
+            activeShortcut = shortcut
+            activeRegistrationID = candidateID
+            previousRegistration?.unregister()
+            return .registered
+        case let .failure(status):
+            print("⚠️ Failed to register hotkey id=\(hotKeyID): \(status)")
+            return .failed(status)
+        }
     }
 
-    private func installHandlerIfNeeded() {
-        guard eventHandler == nil else { return }
+    private func nextRegistrationID() -> UInt32 {
+        registrationGeneration = registrationGeneration &+ 1
+        return (hotKeyID << 16) &+ registrationGeneration
+    }
 
-        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+    private func handleHotKeyEvent(id: UInt32) {
+        guard id == activeRegistrationID else { return }
+        if Thread.isMainThread {
+            onToggle?()
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.onToggle?()
+            }
+        }
+    }
 
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
+    func stop() {
+        registration?.unregister()
+        registration = nil
+        activeRegistrationID = nil
+        activeShortcut = nil
+        listener?.stop()
+        listener = nil
+    }
+
+    deinit {
+        stop()
+    }
+}
+
+private final class CarbonHotKeyCallbackBox {
+    let onFire: (UInt32) -> Void
+
+    init(onFire: @escaping (UInt32) -> Void) {
+        self.onFire = onFire
+    }
+}
+
+private final class CarbonHotKeyEventListener: HotKeyEventListener {
+    private var handler: EventHandlerRef?
+    private let callbackBox: CarbonHotKeyCallbackBox
+
+    init(handler: EventHandlerRef, callbackBox: CarbonHotKeyCallbackBox) {
+        self.handler = handler
+        self.callbackBox = callbackBox
+    }
+
+    func stop() {
+        if let handler {
+            RemoveEventHandler(handler)
+            self.handler = nil
+        }
+        _ = callbackBox
+    }
+
+    deinit {
+        stop()
+    }
+}
+
+private final class CarbonHotKeyRegistration: HotKeyRegistration {
+    private var ref: EventHotKeyRef?
+
+    init(ref: EventHotKeyRef) {
+        self.ref = ref
+    }
+
+    func unregister() {
+        if let ref {
+            UnregisterEventHotKey(ref)
+            self.ref = nil
+        }
+    }
+
+    deinit {
+        unregister()
+    }
+}
+
+private struct CarbonHotKeyBackend: HotKeyBackend {
+    func startListening(onFire: @escaping (UInt32) -> Void) -> HotKeyBackendListenerResult {
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        var eventHandler: EventHandlerRef?
+        let callbackBox = CarbonHotKeyCallbackBox(onFire: onFire)
+
+        let status = InstallEventHandler(GetApplicationEventTarget(), { _, event, userData -> OSStatus in
             guard let userData, let event else { return OSStatus(eventNotHandledErr) }
-            let service = Unmanaged<HotKeyService>.fromOpaque(userData).takeUnretainedValue()
+            let box = Unmanaged<CarbonHotKeyCallbackBox>.fromOpaque(userData).takeUnretainedValue()
 
-            // 读出实际触发的 EventHotKeyID，只响应属于自己 id 的事件
             var firedID = EventHotKeyID()
             let paramStatus = GetEventParameter(
                 event,
@@ -140,24 +278,23 @@ final class HotKeyService: @unchecked Sendable {
                 nil,
                 &firedID
             )
-            guard paramStatus == noErr, firedID.id == service.hotKeyID else {
+            guard paramStatus == noErr else {
                 return OSStatus(eventNotHandledErr)
             }
 
-            DispatchQueue.main.async {
-                service.onToggle?()
-            }
+            box.onFire(firedID.id)
             return noErr
-        }, 1, &eventType, selfPtr, &eventHandler)
+        }, 1, &eventType, Unmanaged.passUnretained(callbackBox).toOpaque(), &eventHandler)
+
+        guard status == noErr, let eventHandler else {
+            return .failure(status)
+        }
+        return .listening(CarbonHotKeyEventListener(handler: eventHandler, callbackBox: callbackBox))
     }
 
-    private func register(_ shortcut: HotKeyShortcut) {
-        if let ref = hotKeyRef {
-            UnregisterEventHotKey(ref)
-            hotKeyRef = nil
-        }
-
-        let carbonID = EventHotKeyID(signature: HotKeyService.signature, id: hotKeyID)
+    func register(shortcut: HotKeyShortcut, signature: OSType, id: UInt32) -> HotKeyBackendRegistrationResult {
+        let carbonID = EventHotKeyID(signature: signature, id: id)
+        var hotKeyRef: EventHotKeyRef?
         let status = RegisterEventHotKey(
             shortcut.keyCode,
             shortcut.carbonModifiers,
@@ -167,23 +304,9 @@ final class HotKeyService: @unchecked Sendable {
             &hotKeyRef
         )
 
-        if status != noErr {
-            print("⚠️ Failed to register hotkey id=\(hotKeyID): \(status)")
+        guard status == noErr, let hotKeyRef else {
+            return .failure(status)
         }
-    }
-
-    func stop() {
-        if let ref = hotKeyRef {
-            UnregisterEventHotKey(ref)
-            hotKeyRef = nil
-        }
-        if let handler = eventHandler {
-            RemoveEventHandler(handler)
-            eventHandler = nil
-        }
-    }
-
-    deinit {
-        stop()
+        return .registered(CarbonHotKeyRegistration(ref: hotKeyRef))
     }
 }

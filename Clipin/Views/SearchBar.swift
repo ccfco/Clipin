@@ -272,17 +272,19 @@ struct SearchBar: View {
 
     private var filterPills: some View {
         HStack(spacing: 3) {
+            pill(label: "All", mode: .all, shortcut: "⌥0")
             pinnedPill
-            pill(label: "Text",   filter: .text,  shortcut: "⌥2")
-            pill(label: "Images", filter: .image, shortcut: "⌥3")
-            pill(label: "Files",  filter: .file,  shortcut: "⌥4")
-            pill(label: "URLs",   filter: .url,   shortcut: "⌥5")
+            pill(label: "Text",   mode: .text,  shortcut: "⌥2")
+            pill(label: "Images", mode: .image, shortcut: "⌥3")
+            pill(label: "Files",  mode: .file,  shortcut: "⌥4")
+            pill(label: "URLs",   mode: .url,   shortcut: "⌥5")
         }
     }
 
     /// 固定视图专用 pill，与类型 pills 互斥激活
     private var pinnedPill: some View {
-        let isActive = browseMode == .pinned
+        let displayedMode = LauncherSearchScope.displayedMode(query: query, browseMode: browseMode)
+        let isActive = displayedMode == .pinned
         return Button {
             browseMode = .pinned
         } label: {
@@ -312,12 +314,12 @@ struct SearchBar: View {
         .animation(ClipinMotion.feedback, value: isActive)
     }
 
-    private func pill(label: LocalizedStringKey, filter: ClipType?, shortcut: String) -> some View {
-        let mappedMode = LauncherBrowseMode(typeFilter: filter)
-        let isActive = browseMode == mappedMode
+    private func pill(label: LocalizedStringKey, mode: LauncherBrowseMode, shortcut: String) -> some View {
+        let displayedMode = LauncherSearchScope.displayedMode(query: query, browseMode: browseMode)
+        let isActive = displayedMode == mode
 
         return Button {
-            browseMode = mappedMode
+            browseMode = mode
         } label: {
             HStack(spacing: 2) {
                 Text(label)

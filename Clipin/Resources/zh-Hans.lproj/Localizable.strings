@@ -256,6 +256,7 @@
 "Reset Onboarding State" = "重置上手引导状态";
 "Search…  · Tab" = "搜索…  · Tab";
 "Preview" = "预览";
+"Preparing…" = "准备中…";
 "OCR" = "文字识别";
 "OCR text" = "识别文字";
 "Selection" = "已选内容";
@@ -321,6 +322,7 @@
 "Importing…" = "正在导入…";
 "Backing Up…" = "正在备份…";
 "Shortcut reset to %@." = "快捷键已重置为 %@。";
+"Shortcut %@ could not be registered, so %@ is still active. macOS status: %d." = "无法注册快捷键 %@，%@ 仍保持可用。macOS 状态码：%d。";
 "Backup failed: %@" = "备份失败：%@";
 "Last backup: %@" = "上次备份：%@";
 "Nothing needed cleanup. Your history already fits the current policy." = "无需清理，当前历史记录已经符合现有策略。";
@@ -357,5 +359,6 @@
 "Undo" = "撤销";
 "Deletion undone." = "已撤销删除。";
 "Could not write this item to the clipboard." = "无法将这条记录写入剪贴板。";
+"Could not preview this item." = "无法预览这条记录。";
 "Accessibility permission is required to paste automatically." = "自动粘贴需要辅助功能权限。";
 "Copied to clipboard." = "已复制到剪贴板。";

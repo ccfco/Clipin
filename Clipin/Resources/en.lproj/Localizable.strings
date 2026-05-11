@@ -256,6 +256,7 @@
 "Reset Onboarding State" = "Reset Onboarding State";
 "Search…  · Tab" = "Search…  · Tab";
 "Preview" = "Preview";
+"Preparing…" = "Preparing…";
 "OCR" = "OCR";
 "OCR text" = "OCR text";
 "Selection" = "Selection";
@@ -321,6 +322,7 @@
 "Importing…" = "Importing…";
 "Backing Up…" = "Backing Up…";
 "Shortcut reset to %@." = "Shortcut reset to %@.";
+"Shortcut %@ could not be registered, so %@ is still active. macOS status: %d." = "Shortcut %@ could not be registered, so %@ is still active. macOS status: %d.";
 "Backup failed: %@" = "Backup failed: %@";
 "Last backup: %@" = "Last backup: %@";
 "Nothing needed cleanup. Your history already fits the current policy." = "Nothing needed cleanup. Your history already fits the current policy.";
@@ -357,5 +359,6 @@
 "Undo" = "Undo";
 "Deletion undone." = "Deletion undone.";
 "Could not write this item to the clipboard." = "Could not write this item to the clipboard.";
+"Could not preview this item." = "Could not preview this item.";
 "Accessibility permission is required to paste automatically." = "Accessibility permission is required to paste automatically.";
 "Copied to clipboard." = "Copied to clipboard.";

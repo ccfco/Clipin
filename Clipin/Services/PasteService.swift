@@ -30,8 +30,11 @@ enum PasteService {
 
         case .file:
             let paths = FileClipboardContent.paths(from: item.content)
-            let urls = paths.map { URL(fileURLWithPath: $0) as NSURL }
-            guard !urls.isEmpty else { return false }
+            let urls = paths
+                .map(URL.init(fileURLWithPath:))
+                .filter { FileManager.default.fileExists(atPath: $0.path) }
+                .map { $0 as NSURL }
+            guard !urls.isEmpty, urls.count == paths.count else { return false }
             pasteboard.clearContents()
             return pasteboard.writeObjects(urls)
         }

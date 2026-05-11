@@ -332,6 +332,13 @@ struct SettingsView: View {
                         Text("Click the field and press the new shortcut. At least one modifier key is required.")
                             .font(.system(size: 11))
                             .foregroundStyle(hierarchy.support.subduedInk)
+
+                        if let note = settings.shortcutRegistrationNote {
+                            Label(note, systemImage: "exclamationmark.triangle.fill")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
 
                     groupDivider

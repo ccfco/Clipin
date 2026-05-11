@@ -37,14 +37,27 @@ enum ClipPreviewResolver {
     static func resolveSession(
         items: [ClipListItem],
         selectedItemID: String?,
+        neighborItemLimit: Int? = nil,
         loadItem: (String) -> ClipItem?
     ) -> ClipPreviewSession? {
         guard let selectedItemID else { return nil }
+        guard let selectedItemIndex = items.firstIndex(where: { $0.id == selectedItemID }) else {
+            return nil
+        }
+
+        let candidateItems: ArraySlice<ClipListItem>
+        if let neighborItemLimit {
+            let lowerBound = max(items.startIndex, selectedItemIndex - max(0, neighborItemLimit))
+            let upperBound = min(items.index(before: items.endIndex), selectedItemIndex + max(0, neighborItemLimit))
+            candidateItems = items[lowerBound...upperBound]
+        } else {
+            candidateItems = items[items.startIndex..<items.endIndex]
+        }
 
         var entries: [ClipPreviewEntry] = []
         var selectedIndex: Int?
 
-        for item in items {
+        for item in candidateItems {
             let itemEntries = resolve(listItem: item, loadItem: loadItem)
             if selectedIndex == nil, item.id == selectedItemID, !itemEntries.isEmpty {
                 selectedIndex = entries.count
