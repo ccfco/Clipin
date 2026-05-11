@@ -15,6 +15,7 @@ struct PaletteAction: Identifiable {
     var localizedTitle: LocalizedStringKey { .init(title) }
     let systemImage: String
     let badge: String
+    let shortcut: PaletteActionShortcut?
     let section: PaletteActionSection
     let isDestructive: Bool
     let restoresSearchFocus: Bool
@@ -23,7 +24,8 @@ struct PaletteAction: Identifiable {
     init(
         _ title: String,
         systemImage: String,
-        badge: String,
+        badge: String? = nil,
+        shortcut: PaletteActionShortcut? = nil,
         section: PaletteActionSection = .secondary,
         isDestructive: Bool = false,
         restoresSearchFocus: Bool = true,
@@ -31,7 +33,8 @@ struct PaletteAction: Identifiable {
     ) {
         self.title = title
         self.systemImage = systemImage
-        self.badge = badge
+        self.badge = badge ?? shortcut?.badge ?? ""
+        self.shortcut = shortcut
         self.section = section
         self.isDestructive = isDestructive
         self.restoresSearchFocus = restoresSearchFocus
@@ -243,28 +246,26 @@ struct ActionPaletteBuilder {
                 viewModel.pasteSelected()
             })
 
-            if selected.clipType == .text || selected.clipType == .url {
-                list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", badge: "⇧↵", section: .primary) {
-                    viewModel.pastePlainSelected()
-                })
-            }
+            list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", shortcut: .pastePlain, section: .primary) {
+                viewModel.pastePlainSelected()
+            })
 
             if viewModel.canPreviewSelectedItem {
-                list.append(PaletteAction("Preview", systemImage: "eye", badge: "Space", section: .primary, restoresSearchFocus: false) {
+                list.append(PaletteAction("Preview", systemImage: "eye", shortcut: .preview, section: .primary, restoresSearchFocus: false) {
                     _ = viewModel.previewSelected()
                 })
             }
 
-            list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", badge: "⌘C", section: .primary) {
+            list.append(PaletteAction("Copy to Clipboard", systemImage: "doc.on.doc", shortcut: .copy, section: .primary) {
                 viewModel.copySelected()
             })
 
-            list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", badge: "⌘⇧P") {
+            list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", shortcut: .togglePin) {
                 viewModel.togglePinSelected()
             })
 
             if viewModel.canOpenSelectedItem {
-                list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, badge: "⌘O", restoresSearchFocus: false) {
+                list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, shortcut: .open, restoresSearchFocus: false) {
                     viewModel.openSelected()
                 })
             }
@@ -279,17 +280,17 @@ struct ActionPaletteBuilder {
         list.append(PaletteAction(
             viewModel.isContinuousPasteEnabled ? "Disable Continuous Paste" : "Enable Continuous Paste",
             systemImage: viewModel.isContinuousPasteEnabled ? "repeat.circle.fill" : "repeat.circle",
-            badge: "⌘⇧L"
+            shortcut: .toggleContinuousPaste
         ) {
             viewModel.toggleContinuousPaste()
         })
 
-        list.append(PaletteAction("Open Settings", systemImage: "gearshape", badge: "⌘,", restoresSearchFocus: false) {
+        list.append(PaletteAction("Open Settings", systemImage: "gearshape", shortcut: .settings, restoresSearchFocus: false) {
             viewModel.openSettings()
         })
 
         if viewModel.selectedListItem != nil {
-            list.append(PaletteAction("Delete", systemImage: "trash", badge: "⌘⌫", section: .destructive, isDestructive: true) {
+            list.append(PaletteAction("Delete", systemImage: "trash", shortcut: .delete, section: .destructive, isDestructive: true) {
                 viewModel.deleteSelected()
             })
         }

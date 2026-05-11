@@ -60,6 +60,16 @@ final class ClipboardViewModel: ObservableObject {
         }
     }
 
+    @discardableResult
+    func executePaletteShortcut(_ shortcut: PaletteActionShortcut) -> Bool {
+        guard isShowingActions,
+              let index = paletteActions.firstIndex(where: { $0.shortcut == shortcut }) else {
+            return false
+        }
+        executePaletteAction(at: index)
+        return true
+    }
+
     func toggleActionsPalette() {
         isShowingActions ? hideActionsPalette(restoreFocus: true) : showActionsPalette()
     }

@@ -169,14 +169,26 @@ struct MainPanel: View {
                 .buttonStyle(PrimaryFooterButtonStyle())
 
                 commandCluster {
-                    keyBadge(label: "Plain Text", key: "⇧↵")
+                    Button { viewModel.pastePlainSelected() } label: {
+                        keyBadge(label: "Plain Text", key: "⇧↵")
+                    }
+                    .buttonStyle(.plain)
+                    .help(NSLocalizedString("Paste as Plain Text", comment: ""))
 
                     if viewModel.canOpenSelectedItem {
-                        keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
+                        Button { viewModel.openSelected() } label: {
+                            keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
+                        }
+                        .buttonStyle(.plain)
+                        .help(viewModel.selectedOpenLabel)
                     }
 
                     if viewModel.canPreviewSelectedItem {
-                        keyBadge(label: "Preview", key: "Space")
+                        Button { _ = viewModel.previewSelected() } label: {
+                            keyBadge(label: "Preview", key: "Space")
+                        }
+                        .buttonStyle(.plain)
+                        .help(NSLocalizedString("Preview", comment: ""))
                     }
                 }
                 .padding(.leading, 8)
@@ -500,6 +512,7 @@ private struct ItemListView: View {
                 .padding(.vertical, 6)
             }
             .onChange(of: selection.wrappedValue) { _, newID in
+                hoveredID = nil
                 guard let newID else { return }
                 withAnimation(ClipinMotion.selection) {
                     proxy.scrollTo(newID, anchor: .center)
@@ -543,7 +556,8 @@ private struct ItemListView: View {
                 selectionFill: hierarchy.selection.fill,
                 selectionStroke: hierarchy.selection.stroke,
                 hoverFill: glass.hoverFill,
-                hoverStroke: glass.hoverStroke
+                hoverStroke: glass.hoverStroke,
+                showsSelectionAccent: true
             )
         )
         .padding(.horizontal, ClipinChrome.listRowOuterInset)

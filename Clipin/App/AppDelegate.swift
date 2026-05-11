@@ -819,6 +819,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handlePaletteKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {
+        if let shortcut = PaletteActionShortcut.matching(keyCode: event.keyCode, flags: flags),
+           vm.executePaletteShortcut(shortcut) {
+            return nil
+        }
+
         switch event.keyCode {
         case 0x7E:
             vm.navigatePalette(delta: -1)
@@ -894,6 +899,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             vm.togglePinSelected()
             return nil
         case 0x33 where flags == .command:
+            if LauncherKeyRouting.shouldPreserveTextEditing(
+                keyCode: event.keyCode,
+                flags: flags,
+                firstResponderIsTextView: self.panel?.firstResponder is NSTextView
+            ) {
+                return event
+            }
             vm.deleteSelected()
             return nil
         case 0x1F where flags == .command:

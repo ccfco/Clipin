@@ -465,27 +465,38 @@ struct ClipinSelectableRowBackground: View {
     let selectionStroke: Color
     let hoverFill: Color
     let hoverStroke: Color
+    var showsSelectionAccent: Bool = false
 
     var body: some View {
-        RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
-            .fill(
-                isSelected
-                    ? selectionFill
-                    : isHovered
-                        ? hoverFill
-                        : Color.clear
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
-                    .strokeBorder(
-                        isSelected
-                            ? selectionStroke
-                            : isHovered
-                                ? hoverStroke
-                                : Color.clear,
-                        lineWidth: 0.5
-                    )
-            )
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+                .fill(
+                    isSelected
+                        ? selectionFill
+                        : isHovered
+                            ? hoverFill
+                            : Color.clear
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+                        .strokeBorder(
+                            isSelected
+                                ? selectionStroke
+                                : isHovered
+                                    ? hoverStroke
+                                    : Color.clear,
+                            lineWidth: 0.5
+                        )
+                )
+
+            if isSelected && showsSelectionAccent {
+                Capsule(style: .continuous)
+                    .fill(selectionStroke)
+                    .frame(width: 3)
+                    .padding(.vertical, 10)
+                    .padding(.leading, 7)
+            }
+        }
     }
 }
 
