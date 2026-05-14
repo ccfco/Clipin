@@ -195,11 +195,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func openSettings() {
-        openSettingsWindow()
-    }
-
-    func openSettingsFromCommand() {
+    @objc func openSettings() {
         openSettingsWindow()
     }
 
@@ -632,14 +628,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         savedPanelOrigin = NSPoint(x: x, y: y)
     }
 
+    /// 连续粘贴回焦的前置条件：面板可见、连续粘贴开启、设置/权限/Quick Look 都不在抢焦点。
+    /// resignKey 入口和 150ms 后的延迟入口都用这个判断，避免重复条件漂移。
+    private var canRestoreContinuousPasteFocus: Bool {
+        !suppressResignKey
+            && !QuickLookPreviewService.shared.isPresenting
+            && viewModel?.isContinuousPasteEnabled == true
+            && settingsWindow?.isVisible != true
+            && permissionWindow?.isVisible != true
+    }
+
     /// 连续粘贴模式下面板失去 key window 时，短暂延迟后自动夺回焦点。
     /// 延迟是为了让用户的鼠标点击先完成（目标输入框获得焦点、frontmostApplication 更新）。
     private func handlePanelResignKey() {
-        guard !suppressResignKey,
-              !QuickLookPreviewService.shared.isPresenting,
-              viewModel?.isContinuousPasteEnabled == true,
-              settingsWindow?.isVisible != true,
-              permissionWindow?.isVisible != true else { return }
+        guard canRestoreContinuousPasteFocus else { return }
         scheduleContinuousPasteFocusRestore(after: 0.15)
     }
 
@@ -648,11 +650,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func scheduleContinuousPasteFocusRestore(after delay: TimeInterval) {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self,
-                  !self.suppressResignKey,
-                  !QuickLookPreviewService.shared.isPresenting,
-                  self.viewModel?.isContinuousPasteEnabled == true,
-                  self.settingsWindow?.isVisible != true,
-                  self.permissionWindow?.isVisible != true,
+                  self.canRestoreContinuousPasteFocus,
                   let panel = self.panel,
                   panel.isVisible else { return }
             panel.makeKeyAndOrderFront(nil)
@@ -815,19 +813,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleOnboardingKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, flow: OnboardingFlow) -> NSEvent? {
         // 注意：方向键的 modifierFlags 里始终包含 .function/.numericPad，不能用全局 flags.isEmpty guard
         switch event.keyCode {
-        case 0x7B, 0x7E:   // ← ↑ 回上一步
+        case KeyCode.arrowLeft, KeyCode.arrowUp:
             flow.goBack()
             return nil
-        case 0x7C, 0x7D:   // → ↓ 进下一步（只在前两步生效）
+        case KeyCode.arrowRight, KeyCode.arrowDown:
             if flow.step == .welcome || flow.step == .workflow {
                 flow.move(1)
                 return nil
             }
             return event
-        case 0x24 where flags.isEmpty:   // Return（不含修饰键）
+        case KeyCode.returnKey where flags.isEmpty:
             flow.activatePrimary()
             return nil
-        case 0x35:          // Esc 回上一步
+        case KeyCode.escape:
             flow.goBack()
             return nil
         default:
@@ -837,9 +835,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleSettingsKeyEvent(_ event: NSEvent, navigation: SettingsNavigationModel) -> NSEvent? {
         switch event.keyCode {
-        case 0x7E: navigation.selectPrev(); return nil
-        case 0x7D: navigation.selectNext(); return nil
-        default:   return event
+        case KeyCode.arrowUp:   navigation.selectPrev(); return nil
+        case KeyCode.arrowDown: navigation.selectNext(); return nil
+        default:                return event
         }
     }
 
@@ -850,22 +848,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         switch event.keyCode {
-        case 0x7E:
+        case KeyCode.arrowUp:
             vm.navigatePalette(delta: -1)
             return nil
-        case 0x7D:
+        case KeyCode.arrowDown:
             vm.navigatePalette(delta: 1)
             return nil
-        case 0x24 where flags.isEmpty:
+        case KeyCode.returnKey where flags.isEmpty:
             vm.executeSelectedPaletteAction()
             return nil
-        case 0x28 where flags == .command:
+        case KeyCode.letterK where flags == .command:
             vm.hideActionsPalette(restoreFocus: true)
             return nil
-        case 0x35:
+        case KeyCode.escape:
             vm.hideActionsPalette(restoreFocus: true)
             return nil
-        case 0x30, 0x33:
+        case KeyCode.tab, KeyCode.delete:
             return nil
         default:
             return nil
@@ -885,7 +883,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func handlePanelKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {
         if isIMEComposingInPanel() {
             switch event.keyCode {
-            case 0x30, 0x7E, 0x7D, 0x24, 0x31, 0x35:
+            case KeyCode.tab, KeyCode.arrowUp, KeyCode.arrowDown,
+                 KeyCode.returnKey, KeyCode.space, KeyCode.escape:
                 return event
             default:
                 break
@@ -893,37 +892,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         switch event.keyCode {
-        case 0x30 where flags.isEmpty:
+        case KeyCode.tab where flags.isEmpty:
             vm.cycleBrowseMode()
             return nil
-        case 0x30 where flags == .shift:
+        case KeyCode.tab where flags == .shift:
             vm.cycleBrowseMode(reverse: true)
             return nil
-        case 0x7E:
+        case KeyCode.arrowUp:
             vm.selectPrev()
             return nil
-        case 0x7D:
+        case KeyCode.arrowDown:
             vm.selectNext()
             return nil
-        case 0x24 where flags.isEmpty:
+        case KeyCode.returnKey where flags.isEmpty:
             vm.pasteSelected()
             return nil
-        case 0x31 where flags.isEmpty:
+        case KeyCode.space where flags.isEmpty:
             // 其余情况 Space 是 launcher 保留键，有可预览项则预览，否则吞掉
             if vm.canPreviewSelectedItem {
                 _ = vm.previewSelected()
             }
             return nil
-        case 0x24 where flags == .shift:
+        case KeyCode.returnKey where flags == .shift:
             vm.pastePlainSelected()
             return nil
-        case 0x35:
+        case KeyCode.escape:
             handleEscape(for: vm)
             return nil
-        case 0x23 where flags == [.command, .shift]:
+        case KeyCode.letterP where flags == [.command, .shift]:
             vm.togglePinSelected()
             return nil
-        case 0x33 where flags == .command:
+        case KeyCode.delete where flags == .command:
             if LauncherKeyRouting.shouldPreserveTextEditing(
                 keyCode: event.keyCode,
                 flags: flags,
@@ -933,24 +932,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             vm.deleteSelected()
             return nil
-        case 0x1F where flags == .command:
+        case KeyCode.letterO where flags == .command:
             vm.openSelected()
             return nil
-        case 0x08 where flags == .command:
+        case KeyCode.letterC where flags == .command:
             if let responder = self.panel?.firstResponder as? NSTextView,
                responder.selectedRange().length > 0 {
                 return event
             }
             vm.copySelected()
             return nil
-        case 0x28 where flags == .command:
+        case KeyCode.letterK where flags == .command:
             vm.toggleActionsPalette()
             return nil
-        case 0x2B where flags == .command:
+        case KeyCode.comma where flags == .command:
             if !vm.isContinuousPasteEnabled { self.hidePanel() }
             self.openSettingsWindow()
             return nil
-        case 0x25 where flags == [.command, .shift]:
+        case KeyCode.letterL where flags == [.command, .shift]:
             vm.toggleContinuousPaste()
             return nil
         default:
@@ -963,12 +962,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if flags == .option {
                 let modeMapping: [UInt16: LauncherBrowseMode] = [
-                    29: .all,    // 0
-                    18: .pinned, // 1
-                    19: .text,   // 2
-                    20: .image,  // 3
-                    21: .file,   // 4
-                    23: .url,    // 5
+                    KeyCode.digit0: .all,
+                    KeyCode.digit1: .pinned,
+                    KeyCode.digit2: .text,
+                    KeyCode.digit3: .image,
+                    KeyCode.digit4: .file,
+                    KeyCode.digit5: .url,
                 ]
                 if let mode = modeMapping[event.keyCode] {
                     vm.browseMode = mode
@@ -1026,7 +1025,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     updateReminder: updateReminder,
                     autoBackup: autoBackupService,
                     navigation: settingsNavigation,
-                    core: appState.core
+                    core: appState.core,
+                    cleanupService: cleanupService
                 )
             )
             settingsWindow = newWindow

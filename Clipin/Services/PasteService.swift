@@ -2,12 +2,6 @@ import AppKit
 
 /// 模拟粘贴 — 写回剪贴板 + CGEvent 模拟 Cmd+V
 enum PasteService {
-    /// 将 ClipItem 写回剪贴板并模拟粘贴
-    static func paste(_ item: ClipItem) {
-        writeToClipboard(item)
-        simulatePaste()
-    }
-
     /// 将 ClipItem 写回剪贴板，成功返回 true
     @discardableResult
     static func writeToClipboard(_ item: ClipItem) -> Bool {
@@ -84,9 +78,9 @@ enum PasteService {
         let source = CGEventSource(stateID: .hidSystemState)
         let flags: CGEventFlags = useCtrlV ? .maskControl : .maskCommand
 
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)  // V key
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: KeyCode.letterV, keyDown: true)
         keyDown?.flags = flags
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: KeyCode.letterV, keyDown: false)
         keyUp?.flags = flags
 
         if let pid = pid {

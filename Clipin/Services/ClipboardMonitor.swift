@@ -2,9 +2,17 @@ import AppKit
 import ImageIO
 import UniformTypeIdentifiers
 
-/// 剪贴板监控 — 每 0.5s 检查 NSPasteboard.changeCount
+/// 剪贴板监控 — 每 `pollingInterval` 秒检查 NSPasteboard.changeCount
 @MainActor
 final class ClipboardMonitor: ObservableObject {
+    /// 轮询间隔（秒）。500ms 是 Raycast / Paste / Maccy 等同类工具的常见取舍：
+    /// 更短会增加唤醒频率和电量消耗，更长会让"刚复制立即唤起"产生肉眼可感的延迟。
+    private static let pollingInterval: TimeInterval = 0.5
+
+    /// 单条文本最大字节数（2MB）。超过时跳过持久化：
+    /// 大文本通常是终端 dump、整本 Markdown 等，存进数据库会让 FTS 重建变慢且占用磁盘。
+    private static let maxTextBytes = 2 * 1024 * 1024
+
     private enum PasteboardMetadata {
         static let sourceBundleID = NSPasteboard.PasteboardType("org.nspasteboard.source")
         static let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
@@ -39,7 +47,7 @@ final class ClipboardMonitor: ObservableObject {
 
     func start() {
         guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: Self.pollingInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.checkClipboard()
             }
@@ -90,6 +98,11 @@ final class ClipboardMonitor: ObservableObject {
         } else if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
             persist(.image(imageData, sourceApp, sourceName))
         } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            // 超大文本（终端 dump、整本电子书等）跳过：FTS 重建会卡，磁盘也会被吃光
+            if text.utf8.count > Self.maxTextBytes {
+                print("ℹ️ Skipped clipboard text larger than \(Self.maxTextBytes) bytes")
+                return
+            }
             persist(.text(text, sourceApp, sourceName))
         }
     }

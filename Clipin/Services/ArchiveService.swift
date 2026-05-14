@@ -132,7 +132,9 @@ enum ArchiveService {
     }
 
     /// 将全部条目写入指定 URL，不弹出文件面板，供自动备份复用。
-    /// 归档重活在结构化后台子任务里执行，取消会传到真正写文件前。
+    /// 用 `withThrowingTaskGroup` 而不是 `Task.detached`：前者把调用方的 cancellation 沿结构化并发链
+    /// 传到子任务，让 `writeArchiveSnapshot` 内部多处 `Task.checkCancellation()` 能真正生效；
+    /// 后者会切断 cancellation 链路。
     static func writeArchive(to url: URL, core: ClipinCore) async throws -> ArchiveExportResult {
         try Task.checkCancellation()
         return try await withThrowingTaskGroup(of: ArchiveExportResult.self) { group in

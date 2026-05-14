@@ -23,7 +23,7 @@ struct ClipinApp: App {
             }
             CommandGroup(replacing: .appSettings) {
                 Button("Settings...") {
-                    appDelegate.openSettingsFromCommand()
+                    appDelegate.openSettings()
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }

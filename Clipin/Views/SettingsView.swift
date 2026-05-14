@@ -95,6 +95,7 @@ struct SettingsView: View {
     @ObservedObject var autoBackup: AutoBackupService
     @ObservedObject var navigation: SettingsNavigationModel
     let core: ClipinCore
+    let cleanupService: CleanupService
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var notice: SettingsNotice?
@@ -475,11 +476,11 @@ struct SettingsView: View {
 
     // MARK: - Retention
 
-    private static let retentionOptions: [(label: String, days: Int)] = [
+    private static let retentionOptions: [(label: LocalizedStringKey, days: Int)] = [
         ("7 days", 7), ("30 days", 30), ("90 days", 90),
         ("1 year", 365), ("3 years", 1095), ("Forever", 0),
     ]
-    private static let maxItemsOptions: [(label: String, count: Int)] = [
+    private static let maxItemsOptions: [(label: LocalizedStringKey, count: Int)] = [
         ("500", 500), ("1K", 1_000), ("5K", 5_000),
         ("10K", 10_000), ("50K", 50_000), ("Unlimited", 0),
     ]
@@ -512,7 +513,7 @@ struct SettingsView: View {
                     settingFieldRow("Keep unpinned history for", description: "Pinned items are always preserved.") {
                         Picker("", selection: normalizedRetentionDays) {
                             ForEach(Self.retentionOptions, id: \.days) { option in
-                                Text(LocalizedStringKey(option.label)).tag(option.days)
+                                Text(option.label).tag(option.days)
                             }
                         }
                         .labelsHidden()
@@ -525,7 +526,7 @@ struct SettingsView: View {
                     settingFieldRow("Max unpinned items", description: "Oldest unpinned items are trimmed first when the limit is reached.") {
                         Picker("", selection: normalizedMaxItems) {
                             ForEach(Self.maxItemsOptions, id: \.count) { option in
-                                Text(LocalizedStringKey(option.label)).tag(option.count)
+                                Text(option.label).tag(option.count)
                             }
                         }
                         .labelsHidden()
@@ -909,16 +910,13 @@ struct SettingsView: View {
         isBusy: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        actionRow(
-            title: title,
-            descriptionView: Text(description),
-            buttonTitle: buttonTitle,
-            busyTitle: busyTitle,
-            isBusy: isBusy,
-            action: action
-        )
+        actionRow(title: title, descriptionText: Text(description),
+                  buttonTitle: buttonTitle, busyTitle: busyTitle,
+                  isBusy: isBusy, action: action)
     }
 
+    /// 用于已经经过 `String(format:)` 等运行时拼装的描述（如带版本号的更新状态）。
+    /// 不能继续用 `LocalizedStringKey` 入参，因为 SwiftUI 会再做一次 strings 表查询。
     private func actionRow(
         _ title: LocalizedStringKey,
         description: String,
@@ -927,22 +925,17 @@ struct SettingsView: View {
         isBusy: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        actionRow(
-            title: title,
-            descriptionView: Text(description),
-            buttonTitle: buttonTitle,
-            busyTitle: busyTitle,
-            isBusy: isBusy,
-            action: action
-        )
+        actionRow(title: title, descriptionText: Text(description),
+                  buttonTitle: buttonTitle, busyTitle: busyTitle,
+                  isBusy: isBusy, action: action)
     }
 
-    private func actionRow<Description: View>(
+    private func actionRow(
         title: LocalizedStringKey,
-        descriptionView: Description,
+        descriptionText: Text,
         buttonTitle: LocalizedStringKey,
-        busyTitle: LocalizedStringKey? = nil,
-        isBusy: Bool = false,
+        busyTitle: LocalizedStringKey?,
+        isBusy: Bool,
         action: @escaping () -> Void
     ) -> some View {
         HStack(alignment: .top, spacing: 18) {
@@ -950,7 +943,7 @@ struct SettingsView: View {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
 
-                descriptionView
+                descriptionText
                     .font(.system(size: 11))
                     .foregroundStyle(hierarchy.support.subduedInk)
             }
@@ -978,7 +971,7 @@ struct SettingsView: View {
         }
     }
 
-    private func infoCallout(icon: String, tint: Color, title: String, message: String) -> some View {
+    private func infoCallout(icon: String, tint: Color, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
@@ -987,10 +980,10 @@ struct SettingsView: View {
                 .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(LocalizedStringKey(title))
+                Text(title)
                     .font(.system(size: 13, weight: .medium))
 
-                Text(LocalizedStringKey(message))
+                Text(message)
                     .font(.system(size: 11))
                     .foregroundStyle(hierarchy.support.subduedInk)
             }
@@ -1061,7 +1054,7 @@ struct SettingsView: View {
         Task { @MainActor in
             defer { activeOperation = nil }
             do {
-                let result = try await CleanupService(core: core, settings: settings).runNow()
+                let result = try await cleanupService.runNow()
                 NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
                 if result.totalRemoved == 0 {
                     showNotice(NSLocalizedString("Nothing needed cleanup. Your history already fits the current policy.", comment: ""))
@@ -1110,7 +1103,7 @@ struct SettingsView: View {
             defer { activeOperation = nil }
             do {
                 let result = try await ArchiveService.importArchive(core: core)
-                let cleanup = try await CleanupService(core: core, settings: settings).runNow()
+                let cleanup = try await cleanupService.runNow()
                 NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
                 let cleanupSuffix = cleanup.totalRemoved > 0
                     ? " " + localized("Cleanup removed %d older items.", cleanup.totalRemoved)
