@@ -9,9 +9,10 @@ final class ClipboardMonitor: ObservableObject {
     /// 更短会增加唤醒频率和电量消耗，更长会让"刚复制立即唤起"产生肉眼可感的延迟。
     private static let pollingInterval: TimeInterval = 0.5
 
-    /// 单条文本最大字节数（2MB）。超过时跳过持久化：
-    /// 大文本通常是终端 dump、整本 Markdown 等，存进数据库会让 FTS 重建变慢且占用磁盘。
-    private static let maxTextBytes = 2 * 1024 * 1024
+    /// 单条文本最大字节数（10MB）。超过时跳过持久化：
+    /// 大文本通常是终端 dump、整本 PDF 文本提取等极端场景；10MB 能覆盖绝大多数"我真想保存"的长文本，
+    /// 同时防止个别极端条目把 DB 撑大、拖慢 FTS 重建。
+    private static let maxTextBytes = 10 * 1024 * 1024
 
     private enum PasteboardMetadata {
         static let sourceBundleID = NSPasteboard.PasteboardType("org.nspasteboard.source")
