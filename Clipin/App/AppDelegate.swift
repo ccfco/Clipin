@@ -437,6 +437,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
             panel.standardWindowButton(button)?.isHidden = true
         }
+        // 窗口圆角必须和 SwiftUI 内容 shellCornerRadius 一致，
+        // 否则系统 frame 的默认圆角和内容错位，叠出粗线。
+        panel.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
@@ -1146,6 +1149,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isMovableByWindowBackground = true
             newWindow.hasShadow = true
             newWindow.isReleasedWhenClosed = false
+            // 隐藏交通灯，避免和 .fullSizeContentView 内容重叠
+            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+                newWindow.standardWindowButton(button)?.isHidden = true
+            }
+            // 通过 KVC 设置窗口圆角，让系统 frame 的裁切和 SwiftUI 内容的 shellCornerRadius 对齐
+            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
             newWindow.contentView = ClipinWindowHostingView(
                 rootView: SettingsView(
                     settings: settings,
@@ -1312,7 +1321,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isMovableByWindowBackground = true
             newWindow.isReleasedWhenClosed = false
             newWindow.hasShadow = true
-            // 不设 .floating，让 System Settings 等系统窗口可以自然覆盖在上方
+            // 隐藏交通灯
+            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+                newWindow.standardWindowButton(button)?.isHidden = true
+            }
+            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
             newWindow.delegate = self
             newWindow.contentView = ClipinWindowHostingView(
                 rootView: OnboardingView(permission: permission, flow: flow)
@@ -1384,6 +1397,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isOpaque = false
             newWindow.isMovableByWindowBackground = true
             newWindow.hasShadow = true
+            // 隐藏交通灯
+            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+                newWindow.standardWindowButton(button)?.isHidden = true
+            }
+            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
             newWindow.delegate = self
             newWindow.center()
             // 不设 .floating，让 System Settings 可以自然覆盖在权限窗口上方

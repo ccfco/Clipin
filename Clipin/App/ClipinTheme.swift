@@ -655,11 +655,10 @@ extension ClipinGlassPalette {
         switch (theme, isDark) {
         case (.native, false):
             return Self(
-                // 降低 shellTint 覆盖率，让 thickMaterial 固有色透出，整体更轻盈
-                shellTintTop: Color(nsColor: .windowBackgroundColor).opacity(0.44),
-                shellTintBottom: Color(nsColor: .windowBackgroundColor).opacity(0.26),
-                shellHighlight: Color.white.opacity(0.028),
-                shellWash: Color.white.opacity(0.014),
+                shellTintTop: Color(nsColor: .windowBackgroundColor).opacity(0.92),
+                shellTintBottom: Color(nsColor: .windowBackgroundColor).opacity(0.88),
+                shellHighlight: Color.white.opacity(0.06),
+                shellWash: Color.white.opacity(0.02),
                 chromeTint: Color.clear,
                 sidebarTint: Color(nsColor: .windowBackgroundColor).opacity(0.38),
                 detailTint: Color(nsColor: .windowBackgroundColor).opacity(0.30),
@@ -677,10 +676,10 @@ extension ClipinGlassPalette {
             )
         case (.native, true):
             return Self(
-                shellTintTop: Color.clear,
-                shellTintBottom: Color.clear,
-                shellHighlight: Color.white.opacity(0.08),
-                shellWash: Color.white.opacity(0.05),
+                shellTintTop: Color(nsColor: .windowBackgroundColor).opacity(0.95),
+                shellTintBottom: Color(nsColor: .windowBackgroundColor).opacity(0.92),
+                shellHighlight: Color.white.opacity(0.05),
+                shellWash: Color.white.opacity(0.03),
                 chromeTint: Color.clear,
                 sidebarTint: Color.white.opacity(0.015),
                 detailTint: Color.white.opacity(0.03),
@@ -698,10 +697,10 @@ extension ClipinGlassPalette {
             )
         case (.mist, false):
             return Self(
-                shellTintTop: Color(red: 0.93, green: 0.95, blue: 1.0, opacity: 0.52),
-                shellTintBottom: Color(red: 0.89, green: 0.91, blue: 0.99, opacity: 0.30),
-                shellHighlight: Color.white.opacity(0.42),
-                shellWash: Color.white.opacity(0.18),
+                shellTintTop: Color(red: 0.93, green: 0.95, blue: 1.0, opacity: 0.90),
+                shellTintBottom: Color(red: 0.89, green: 0.91, blue: 0.99, opacity: 0.85),
+                shellHighlight: Color.white.opacity(0.30),
+                shellWash: Color.white.opacity(0.10),
                 chromeTint: Color(red: 0.95, green: 0.97, blue: 1.0, opacity: 0.28),
                 sidebarTint: Color(red: 0.89, green: 0.91, blue: 0.99, opacity: 0.24),
                 detailTint: Color.white.opacity(0.34),
@@ -719,10 +718,10 @@ extension ClipinGlassPalette {
             )
         case (.mist, true):
             return Self(
-                shellTintTop: Color(red: 0.23, green: 0.21, blue: 0.33, opacity: 0.36),
-                shellTintBottom: Color(red: 0.12, green: 0.13, blue: 0.18, opacity: 0.30),
-                shellHighlight: Color.white.opacity(0.14),
-                shellWash: Color.white.opacity(0.08),
+                shellTintTop: Color(red: 0.23, green: 0.21, blue: 0.33, opacity: 0.92),
+                shellTintBottom: Color(red: 0.12, green: 0.13, blue: 0.18, opacity: 0.88),
+                shellHighlight: Color.white.opacity(0.08),
+                shellWash: Color.white.opacity(0.04),
                 chromeTint: Color(red: 0.14, green: 0.16, blue: 0.23, opacity: 0.24),
                 sidebarTint: Color(red: 0.20, green: 0.20, blue: 0.28, opacity: 0.22),
                 detailTint: Color(red: 0.18, green: 0.19, blue: 0.27, opacity: 0.30),
@@ -740,10 +739,10 @@ extension ClipinGlassPalette {
             )
         case (.graphite, false):
             return Self(
-                shellTintTop: Color(red: 0.95, green: 0.96, blue: 0.98, opacity: 0.48),
-                shellTintBottom: Color(red: 0.90, green: 0.92, blue: 0.95, opacity: 0.28),
-                shellHighlight: Color.white.opacity(0.38),
-                shellWash: Color.white.opacity(0.16),
+                shellTintTop: Color(red: 0.95, green: 0.96, blue: 0.98, opacity: 0.90),
+                shellTintBottom: Color(red: 0.90, green: 0.92, blue: 0.95, opacity: 0.86),
+                shellHighlight: Color.white.opacity(0.26),
+                shellWash: Color.white.opacity(0.08),
                 chromeTint: Color.white.opacity(0.24),
                 sidebarTint: Color(red: 0.91, green: 0.92, blue: 0.95, opacity: 0.20),
                 detailTint: Color.white.opacity(0.30),
@@ -761,10 +760,10 @@ extension ClipinGlassPalette {
             )
         case (.graphite, true):
             return Self(
-                shellTintTop: Color(red: 0.20, green: 0.21, blue: 0.24, opacity: 0.34),
-                shellTintBottom: Color(red: 0.10, green: 0.11, blue: 0.13, opacity: 0.28),
-                shellHighlight: Color.white.opacity(0.12),
-                shellWash: Color.white.opacity(0.07),
+                shellTintTop: Color(red: 0.20, green: 0.21, blue: 0.24, opacity: 0.92),
+                shellTintBottom: Color(red: 0.10, green: 0.11, blue: 0.13, opacity: 0.88),
+                shellHighlight: Color.white.opacity(0.08),
+                shellWash: Color.white.opacity(0.04),
                 chromeTint: Color.white.opacity(0.06),
                 sidebarTint: Color.white.opacity(0.05),
                 detailTint: Color.white.opacity(0.08),
@@ -782,10 +781,10 @@ extension ClipinGlassPalette {
             )
         case (.sunrise, false):
             return Self(
-                shellTintTop: Color(red: 1.0, green: 0.95, blue: 0.90, opacity: 0.46),
-                shellTintBottom: Color(red: 0.99, green: 0.90, blue: 0.84, opacity: 0.28),
-                shellHighlight: Color.white.opacity(0.38),
-                shellWash: Color.white.opacity(0.16),
+                shellTintTop: Color(red: 1.0, green: 0.95, blue: 0.90, opacity: 0.90),
+                shellTintBottom: Color(red: 0.99, green: 0.90, blue: 0.84, opacity: 0.86),
+                shellHighlight: Color.white.opacity(0.26),
+                shellWash: Color.white.opacity(0.08),
                 chromeTint: Color(red: 1.0, green: 0.95, blue: 0.90, opacity: 0.20),
                 sidebarTint: Color(red: 0.99, green: 0.92, blue: 0.86, opacity: 0.22),
                 detailTint: Color.white.opacity(0.32),
@@ -804,10 +803,10 @@ extension ClipinGlassPalette {
             )
         case (.sunrise, true):
             return Self(
-                shellTintTop: Color(red: 0.33, green: 0.24, blue: 0.18, opacity: 0.34),
-                shellTintBottom: Color(red: 0.17, green: 0.13, blue: 0.11, opacity: 0.30),
-                shellHighlight: Color.white.opacity(0.12),
-                shellWash: Color.white.opacity(0.07),
+                shellTintTop: Color(red: 0.33, green: 0.24, blue: 0.18, opacity: 0.92),
+                shellTintBottom: Color(red: 0.17, green: 0.13, blue: 0.11, opacity: 0.88),
+                shellHighlight: Color.white.opacity(0.08),
+                shellWash: Color.white.opacity(0.04),
                 chromeTint: Color(red: 0.30, green: 0.20, blue: 0.16, opacity: 0.18),
                 sidebarTint: Color(red: 0.28, green: 0.20, blue: 0.16, opacity: 0.18),
                 detailTint: Color(red: 0.26, green: 0.19, blue: 0.14, opacity: 0.22),
