@@ -39,6 +39,38 @@ impl ClipinCore {
         )
     }
 
+    /// 保存剪贴板记录并写入 representations。当 representations 为空时等价于 save_item。
+    pub fn save_item_with_representations(
+        &self,
+        content: String,
+        clip_type: ClipType,
+        source_app: Option<String>,
+        source_name: Option<String>,
+        image_path: Option<String>,
+        representations: Vec<ClipRepresentation>,
+    ) -> Result<ClipItem, ClipinError> {
+        let item = self.storage.save_item(
+            &content,
+            &clip_type,
+            source_app.as_deref(),
+            source_name.as_deref(),
+            image_path.as_deref(),
+        )?;
+        if !representations.is_empty() {
+            self.storage
+                .insert_representations(&item.id, &representations)?;
+        }
+        Ok(item)
+    }
+
+    /// 读取一条条目的所有 representations
+    pub fn get_representations(
+        &self,
+        id: String,
+    ) -> Result<Vec<ClipRepresentation>, ClipinError> {
+        self.storage.load_representations(&id)
+    }
+
     /// 获取历史记录（分页，可按类型过滤）
     pub fn get_items(
         &self,
@@ -701,6 +733,29 @@ mod tests {
         assert!(!items[0].is_pinned);
         assert_eq!(items[0].image_path.as_deref(), Some(restored_path.as_str()));
         assert!(PathBuf::from(restored_path).exists());
+    }
+
+    #[test]
+    fn test_save_item_with_representations() {
+        let core = setup_core();
+        let reps = vec![ClipRepresentation {
+            uti: "public.html".into(),
+            data: b"<p>hi</p>".to_vec(),
+        }];
+        let item = core
+            .save_item_with_representations(
+                "hi".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                reps,
+            )
+            .unwrap();
+
+        let loaded = core.get_representations(item.id).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].uti, "public.html");
     }
 
     #[test]
