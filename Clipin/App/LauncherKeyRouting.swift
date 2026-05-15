@@ -12,8 +12,10 @@ enum KeyCode {
     static let tab: UInt16 = 0x30
     static let delete: UInt16 = 0x33
 
+    static let letterH: UInt16 = 0x04
     static let letterC: UInt16 = 0x08
     static let letterV: UInt16 = 0x09
+    static let letterR: UInt16 = 0x0F
     static let letterO: UInt16 = 0x1F
     static let letterP: UInt16 = 0x23
     static let letterL: UInt16 = 0x25
@@ -42,6 +44,8 @@ struct PaletteActionShortcut: Equatable {
     static let toggleContinuousPaste = Self(badge: "⌘⇧L", keyCode: KeyCode.letterL, modifiers: [.command, .shift])
     static let settings = Self(badge: "⌘,", keyCode: KeyCode.comma, modifiers: .command)
     static let delete = Self(badge: "⌘⌫", keyCode: KeyCode.delete, modifiers: .command)
+    static let pasteAsHTML = Self(badge: "⌥H", keyCode: KeyCode.letterH, modifiers: .option)
+    static let pasteAsRTF = Self(badge: "⌥R", keyCode: KeyCode.letterR, modifiers: .option)
 
     static let all: [Self] = [
         .pastePlain,
@@ -52,6 +56,8 @@ struct PaletteActionShortcut: Equatable {
         .toggleContinuousPaste,
         .settings,
         .delete,
+        .pasteAsHTML,
+        .pasteAsRTF,
     ]
 
     static func matching(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Self? {
