@@ -83,7 +83,7 @@ Clipin 当前采集剪贴板时（`Clipin/Services/ClipboardMonitor.swift:92-108
 | **HTML/RTF 进 FTS5** | 否 |
 | **存储** | 副表 `clip_representations(item_id, uti, data BLOB)` + ON DELETE CASCADE |
 | **互通** | Archive v2 公开 JSON 格式 |
-| **规范文档位置** | 独立 GitHub repo（如 `Clipin-archive-format`），不绑定主仓库实现 |
+| **规范文档位置** | 独立 GitHub repo `Clipin-archive-format`，不绑定主仓库实现 |
 | **向后兼容** | v2 Clipin 读 v1 archive（前向兼容）；v1 Clipin 读 v2 archive 不兼容（不做兜底） |
 | **快捷键** | Paste as HTML = `⌥H`；Paste as RTF = `⌥R`；Paste as Plain = `⇧↵`（复用现有） |
 
