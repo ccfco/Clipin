@@ -158,6 +158,14 @@ enum ArchiveService {
 
         for item in items {
             try Task.checkCancellation()
+
+            // 取 representations 用 try?：导出过程中 representations 取失败不应该让整个 archive 失败；
+            // 当成无 representations 处理即可。
+            let coreReps = (try? core.getRepresentations(id: item.id)) ?? []
+            let archiveReps: [ArchiveRepresentation]? = coreReps.isEmpty ? nil : coreReps.map {
+                ArchiveRepresentation(uti: $0.uti, dataBase64: $0.data.base64EncodedString())
+            }
+
             if item.clipType == .image {
                 guard let imagePath = item.imagePath,
                       let imageData = try? Data(contentsOf: URL(fileURLWithPath: imagePath)) else {
@@ -172,7 +180,8 @@ enum ArchiveService {
                     sourceName: item.sourceName,
                     isPinned: item.isPinned,
                     createdAt: item.createdAt,
-                    imageDataBase64: imageData.base64EncodedString()
+                    imageDataBase64: imageData.base64EncodedString(),
+                    representations: archiveReps
                 ))
                 continue
             }
@@ -183,11 +192,18 @@ enum ArchiveService {
                 sourceName: item.sourceName,
                 isPinned: item.isPinned,
                 createdAt: item.createdAt,
-                imageDataBase64: nil
+                imageDataBase64: nil,
+                representations: archiveReps
             ))
         }
 
-        let archive = ClipboardArchive(schemaVersion: 1, exportedAt: Date(), items: exportedItems)
+        let archive = ClipboardArchive(
+            schemaVersion: 2,
+            format: "clipin.clipboard-archive",
+            formatURL: "https://github.com/ccfco/Clipin-archive-format",
+            exportedAt: Date(),
+            items: exportedItems
+        )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
@@ -225,6 +241,10 @@ enum ArchiveService {
 
 private struct ClipboardArchive: Codable, Sendable {
     let schemaVersion: Int
+    /// v2 起："clipin.clipboard-archive"。v1 archive 没有该字段，Optional 保证向后兼容解码。
+    let format: String?
+    /// v2 起：规范 URL。v1 archive 没有该字段，Optional 保证向后兼容解码。
+    let formatURL: String?
     let exportedAt: Date
     let items: [ArchiveItem]
 }
@@ -237,6 +257,13 @@ private struct ArchiveItem: Codable, Sendable {
     let isPinned: Bool
     let createdAt: Int64
     let imageDataBase64: String?
+    /// v2 起：多 UTI representations。v1 archive 没有该字段，Optional 保证向后兼容解码。
+    let representations: [ArchiveRepresentation]?
+}
+
+private struct ArchiveRepresentation: Codable, Sendable {
+    let uti: String
+    let dataBase64: String
 }
 
 private enum ArchiveClipType: String, Codable, Sendable {
