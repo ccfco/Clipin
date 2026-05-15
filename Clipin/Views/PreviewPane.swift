@@ -905,9 +905,9 @@ private actor FaviconCache {
     private var cache: [String: SendableImage] = [:]
     private var pending: [String: Task<SendableImage?, Never>] = [:]
 
-    func icon(for host: String) async -> NSImage? {
-        if let cached = cache[host] { return cached.image }
-        if let task = pending[host] { return await task.value?.image }
+    func icon(for host: String) async -> SendableImage? {
+        if let cached = cache[host] { return cached }
+        if let task = pending[host] { return await task.value }
 
         let task = Task<SendableImage?, Never> {
             guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=128") else {
@@ -927,7 +927,7 @@ private actor FaviconCache {
         if let result {
             cache[host] = result
         }
-        return result?.image
+        return result
     }
 }
 
@@ -959,7 +959,7 @@ private struct FaviconView: View {
         .task(id: host ?? "") {
             image = nil
             guard let host, !host.isEmpty else { return }
-            image = await FaviconCache.shared.icon(for: host)
+            image = await FaviconCache.shared.icon(for: host)?.image
         }
     }
 }
