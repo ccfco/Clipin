@@ -28,8 +28,8 @@ final class ClipboardMonitor: ObservableObject {
     }
 
     private enum ClipboardPayload: Sendable {
-        case text(String, String?, String?)
-        case url(String, String?, String?)
+        case text(String, String?, String?, [ClipboardRepresentation])
+        case url(String, String?, String?, [ClipboardRepresentation])
         case file(String, String?, String?)
         case image(Data, String?, String?)
     }
@@ -95,7 +95,8 @@ final class ClipboardMonitor: ObservableObject {
             let paths = fileURLs.map(\.path)
             persist(.file(FileClipboardContent.encodedContent(from: paths), sourceApp, sourceName))
         } else if let urlString = pasteboard.string(forType: .URL) ?? extractURL(from: pasteboard) {
-            persist(.url(urlString, sourceApp, sourceName))
+            let reps = ClipboardRepresentationExtractor.extract(from: pasteboard, primaryContent: urlString)
+            persist(.url(urlString, sourceApp, sourceName, reps))
         } else if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
             persist(.image(imageData, sourceApp, sourceName))
         } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
@@ -104,7 +105,8 @@ final class ClipboardMonitor: ObservableObject {
                 print("ℹ️ Skipped clipboard text larger than \(Self.maxTextBytes) bytes")
                 return
             }
-            persist(.text(text, sourceApp, sourceName))
+            let reps = ClipboardRepresentationExtractor.extract(from: pasteboard, primaryContent: text)
+            persist(.text(text, sourceApp, sourceName, reps))
         }
     }
 
@@ -114,22 +116,26 @@ final class ClipboardMonitor: ObservableObject {
         Task.detached(priority: .utility) { [weak self] in
             do {
                 switch payload {
-                case let .text(content, sourceApp, sourceName):
-                    _ = try core.saveItem(
+                case let .text(content, sourceApp, sourceName, reps):
+                    let coreReps = reps.map { ClipRepresentation(uti: $0.uti, data: $0.data) }
+                    _ = try core.saveItemWithRepresentations(
                         content: content,
                         clipType: .text,
                         sourceApp: sourceApp,
                         sourceName: sourceName,
-                        imagePath: nil
+                        imagePath: nil,
+                        representations: coreReps
                     )
 
-                case let .url(content, sourceApp, sourceName):
-                    _ = try core.saveItem(
+                case let .url(content, sourceApp, sourceName, reps):
+                    let coreReps = reps.map { ClipRepresentation(uti: $0.uti, data: $0.data) }
+                    _ = try core.saveItemWithRepresentations(
                         content: content,
                         clipType: .url,
                         sourceApp: sourceApp,
                         sourceName: sourceName,
-                        imagePath: nil
+                        imagePath: nil,
+                        representations: coreReps
                     )
 
                 case let .file(path, sourceApp, sourceName):
