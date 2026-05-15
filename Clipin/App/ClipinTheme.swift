@@ -234,8 +234,6 @@ struct ClipinKeycap: View {
 
 struct ClipinShellBackground: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isBreathing = false
 
     let glass: ClipinGlassPalette
     let cornerRadius: CGFloat
@@ -261,78 +259,6 @@ struct ClipinShellBackground: View {
                     endPoint: .bottomTrailing
                 )
             )
-            .overlay(
-                LinearGradient(
-                    colors: [glass.shellWash.opacity(colorScheme == .dark ? 0.82 + (sceneState.ambientStrength * 0.22) : 0.04 + (sceneState.ambientStrength * 0.015)), Color.clear],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .overlay(
-                LinearGradient(
-                    colors: [glass.shellHighlight.opacity((colorScheme == .dark ? 0.84 : 0.06) + (sceneState.ambientStrength * (colorScheme == .dark ? 0.12 : 0.015))), Color.clear],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(alignment: .topLeading) {
-                if colorScheme == .dark {
-                    Circle()
-                        .fill(glass.emphasisStrongFill.opacity(0.12 + (sceneState.ambientStrength * 0.12)))
-                        .frame(width: 260, height: 260)
-                        .blur(radius: 56)
-                        .scaleEffect(reduceMotion ? 1 : (isBreathing ? 1.06 : 0.96))
-                        .offset(
-                            x: reduceMotion ? -84 : (isBreathing ? -72 : -92),
-                            y: reduceMotion ? -108 : (isBreathing ? -96 : -116)
-                        )
-                }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if colorScheme == .dark {
-                    Circle()
-                        .fill(glass.emphasisFill.opacity(0.20 + (sceneState.ambientStrength * 0.14)))
-                        .frame(width: 230, height: 230)
-                        .blur(radius: 48)
-                        .scaleEffect(reduceMotion ? 1 : (isBreathing ? 0.98 : 1.06))
-                        .offset(
-                            x: reduceMotion ? 88 : (isBreathing ? 80 : 96),
-                            y: reduceMotion ? 104 : (isBreathing ? 96 : 110)
-                        )
-                }
-            }
-            // Accent 底部渐变：赋予面板色彩身份感，同时在浅色背景下提供额外对比
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.clear,
-                                Color.accentColor.opacity(colorScheme == .dark ? 0.12 : 0.07)
-                            ],
-                            startPoint: UnitPoint(x: 0.5, y: 0.55),
-                            endPoint: .bottom
-                        )
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.0 : 0.025), lineWidth: 0.25)
-                    .mask(
-                        LinearGradient(
-                            colors: [Color.white, Color.white.opacity(0.035), Color.clear],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            )
-            .onAppear {
-                guard !reduceMotion else { return }
-                isBreathing = false
-                withAnimation(ClipinMotion.ambient.repeatForever(autoreverses: true)) {
-                    isBreathing = true
-                }
-            }
     }
 }
 
