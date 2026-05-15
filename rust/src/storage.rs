@@ -1623,6 +1623,46 @@ impl Storage {
         )?;
         Ok(())
     }
+
+    /// 批量写入某条目的副表 representation；同 (item_id, uti) 已存在则覆盖 data。
+    pub fn insert_representations(
+        &self,
+        item_id: &str,
+        representations: &[ClipRepresentation],
+    ) -> Result<(), ClipinError> {
+        if representations.is_empty() {
+            return Ok(());
+        }
+        let mut conn = self.conn();
+        let tx = conn.transaction()?;
+        for rep in representations {
+            tx.execute(
+                "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
+                params![item_id, rep.uti, rep.data],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// 读取某条目的全部副表 representation，按 uti 字典序返回。
+    pub fn load_representations(&self, item_id: &str) -> Result<Vec<ClipRepresentation>, ClipinError> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT uti, data FROM clip_representations WHERE item_id = ?1 ORDER BY uti",
+        )?;
+        let rows = stmt.query_map(params![item_id], |row| {
+            Ok(ClipRepresentation {
+                uti: row.get(0)?,
+                data: row.get(1)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
 }
 
 impl SearchSortable for ClipItem {
@@ -1921,5 +1961,46 @@ mod migration_tests {
         let conn = storage.conn();
         let fk_enabled: i32 = conn.query_row("PRAGMA foreign_keys", [], |r| r.get(0)).unwrap();
         assert_eq!(fk_enabled, 1, "foreign_keys must be ON for ON DELETE CASCADE");
+    }
+
+    #[test]
+    fn test_insert_and_load_representations() {
+        let tmpfile = tempfile::NamedTempFile::new().unwrap();
+        let tmpdir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(
+            tmpfile.path().to_str().unwrap(),
+            tmpdir.path().to_str().unwrap(),
+        ).unwrap();
+
+        let item = storage.save_item("hi", &ClipType::Text, None, None, None).unwrap();
+        let reps = vec![
+            ClipRepresentation { uti: "public.html".into(), data: b"<p>hi</p>".to_vec() },
+            ClipRepresentation { uti: "public.rtf".into(),  data: b"{\\rtf1 hi}".to_vec() },
+        ];
+        storage.insert_representations(&item.id, &reps).unwrap();
+
+        let loaded = storage.load_representations(&item.id).unwrap();
+        assert_eq!(loaded.len(), 2);
+        assert!(loaded.iter().any(|r| r.uti == "public.html" && r.data == b"<p>hi</p>"));
+    }
+
+    #[test]
+    fn test_delete_item_cascades_representations() {
+        let tmpfile = tempfile::NamedTempFile::new().unwrap();
+        let tmpdir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(
+            tmpfile.path().to_str().unwrap(),
+            tmpdir.path().to_str().unwrap(),
+        ).unwrap();
+
+        let item = storage.save_item("hi", &ClipType::Text, None, None, None).unwrap();
+        storage.insert_representations(&item.id, &[
+            ClipRepresentation { uti: "public.html".into(), data: b"<p>hi</p>".to_vec() },
+        ]).unwrap();
+
+        storage.delete_item(&item.id).unwrap();
+
+        let loaded = storage.load_representations(&item.id).unwrap();
+        assert_eq!(loaded.len(), 0, "ON DELETE CASCADE should have removed representations");
     }
 }
