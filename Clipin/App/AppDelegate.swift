@@ -92,7 +92,7 @@ private final class ClipinPanelChromeView<V: View>: NSView {
         materialView.frame = bounds
         materialView.autoresizingMask = [.width, .height]
         materialView.blendingMode = .behindWindow
-        materialView.material = .popover
+        materialView.material = .contentBackground
         materialView.state = .active
         addSubview(materialView)
     }

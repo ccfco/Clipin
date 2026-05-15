@@ -552,9 +552,9 @@ extension ClipinGlassPalette {
                 tint: isDark ? sidebarTint.opacity(1.0) : Color.accentColor.opacity(0.05),
                 stroke: controlStroke.opacity(isDark ? 0.96 : 1.10),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.015),
-                shadowColor: .black.opacity(isDark ? 0.14 : 0.12),
-                shadowRadius: isDark ? 5 : 16,
-                shadowYOffset: isDark ? 2 : 4
+                shadowColor: .black.opacity(isDark ? 0.28 : 0.20),
+                shadowRadius: isDark ? 8 : 22,
+                shadowYOffset: isDark ? 4 : 6
             )
 
         case .control:
@@ -570,29 +570,29 @@ extension ClipinGlassPalette {
             )
 
         case .strip:
-            // 命令条：accent 同 control，shadow 对称，底部收尾
+            // 命令条：accent 同 control，shadow 加强后浮在 shell 上
             return ClipinSurfaceStyle(
                 material: isDark ? .ultraThinMaterial : .thickMaterial,
                 tint: isDark ? controlFill.opacity(0.92) : Color.accentColor.opacity(0.04),
                 stroke: controlStroke.opacity(isDark ? 0.92 : 1.08),
                 highlight: shellHighlight.opacity(isDark ? 0.08 : 0.010),
-                shadowColor: .black.opacity(isDark ? 0.12 : 0.07),
-                shadowRadius: isDark ? 4 : 12,
-                shadowYOffset: isDark ? 2 : 3
+                shadowColor: .black.opacity(isDark ? 0.20 : 0.10),
+                shadowRadius: isDark ? 6 : 14,
+                shadowYOffset: isDark ? 3 : 4
             )
 
         // ── 内容区：neutral，让内容自己说话 ──
 
         case .column:
-            // 预览右栏：安静 neutral，shadow 很轻
+            // 预览右栏：安静 neutral，shadow 加强后浮在 shell 上
             return ClipinSurfaceStyle(
                 material: isDark ? .regularMaterial : .thickMaterial,
                 tint: detailTint.opacity(isDark ? 1.0 : 0.96),
                 stroke: controlStroke.opacity(isDark ? 1.0 : 1.06),
                 highlight: shellHighlight.opacity(isDark ? 0.10 : 0.014),
-                shadowColor: .black.opacity(isDark ? 0.16 : 0.04),
-                shadowRadius: isDark ? 6 : 10,
-                shadowYOffset: isDark ? 3 : 2
+                shadowColor: .black.opacity(isDark ? 0.26 : 0.12),
+                shadowRadius: isDark ? 8 : 16,
+                shadowYOffset: isDark ? 4 : 4
             )
 
         case .contentStage:
