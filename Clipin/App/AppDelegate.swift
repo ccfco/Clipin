@@ -29,6 +29,95 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     }
 }
 
+/// 主 launcher 的窗口 chrome 必须由 AppKit 负责：NSVisualEffectView 提供原生材质，
+/// 根 CALayer 统一处理圆角裁剪与 1px hairline，NSPanel 负责真实窗口阴影。
+private final class ClipinPanelChromeView<V: View>: NSView {
+    private let materialView = NSVisualEffectView()
+    private let hostingView: ClipinPanelHostingView<V>
+
+    init(rootView: V, contentSize: NSSize) {
+        self.hostingView = ClipinPanelHostingView(rootView: rootView)
+        super.init(frame: NSRect(origin: .zero, size: contentSize))
+
+        wantsLayer = true
+        setupMaterialView()
+        setupHostingView()
+        updateLayerChrome()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func layout() {
+        super.layout()
+        materialView.frame = bounds
+        hostingView.frame = bounds
+        updateLayerChrome()
+        window?.invalidateShadow()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateLayerChrome()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateLayerChrome()
+        window?.invalidateShadow()
+    }
+
+    private func setupMaterialView() {
+        materialView.frame = bounds
+        materialView.autoresizingMask = [.width, .height]
+        materialView.blendingMode = .behindWindow
+        materialView.material = .popover
+        materialView.state = .active
+        addSubview(materialView)
+    }
+
+    private func setupHostingView() {
+        hostingView.frame = bounds
+        hostingView.autoresizingMask = [.width, .height]
+        addSubview(hostingView)
+    }
+
+    private func updateLayerChrome() {
+        guard let layer else { return }
+        layer.backgroundColor = NSColor.clear.cgColor
+        layer.cornerRadius = ClipinChrome.shellCornerRadius
+        layer.cornerCurve = .continuous
+        layer.allowsEdgeAntialiasing = true
+        layer.borderWidth = 1 / max(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2, 1)
+        layer.borderColor = separatorLineColor.cgColor
+        layer.masksToBounds = true
+    }
+
+    private var separatorLineColor: NSColor {
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return isDark
+            ? NSColor.white.withAlphaComponent(0.15)
+            : NSColor.black.withAlphaComponent(0.11)
+    }
+}
+
+private final class ClipinPanelHostingView<V: View>: NSHostingView<V> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var isOpaque: Bool { false }
+
+    override func updateLayer() {
+        super.updateLayer()
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.borderWidth = 0
+        layer?.borderColor = nil
+        layer?.masksToBounds = false
+    }
+}
+
 /// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
 private final class ClipinPanel: NSPanel {
@@ -307,14 +396,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         self.viewModel = vm
+        let panelSize = NSSize(width: 800, height: 540)
 
         let panel = ClipinPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 540),
+            contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.contentView = ClipinHostingView(rootView: MainPanel(viewModel: vm))
+        panel.contentView = ClipinPanelChromeView(
+            rootView: MainPanel(viewModel: vm),
+            contentSize: panelSize
+        )
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
