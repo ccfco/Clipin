@@ -360,5 +360,6 @@
 "Deletion undone." = "已撤销删除。";
 "Could not write this item to the clipboard." = "无法将这条记录写入剪贴板。";
 "Could not preview this item." = "无法预览这条记录。";
+"preview.metadata.formats" = "格式";
 "Accessibility permission is required to paste automatically." = "自动粘贴需要辅助功能权限。";
 "Copied to clipboard." = "已复制到剪贴板。";

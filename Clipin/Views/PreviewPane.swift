@@ -207,6 +207,10 @@ struct PreviewPane: View {
             PreviewRailEntry(item: $0, prominence: .supporting)
         })
 
+        if let formats = formatsBadge(for: item) {
+            entries.append(PreviewRailEntry(item: formats, prominence: .supporting))
+        }
+
         if let usage = usageBadge(for: item) {
             entries.append(PreviewRailEntry(item: usage, prominence: .supporting))
         }
@@ -428,6 +432,30 @@ struct PreviewPane: View {
             )
         }
         return nil
+    }
+
+    private var formatsDisplay: String {
+        var labels: [String] = ["plain"]
+        let utis = vm.selectedRepresentationUTIs
+        if utis.contains("public.html") { labels.append("html") }
+        if utis.contains("public.rtf")  { labels.append("rtf") }
+        if utis.contains("public.rtfd") { labels.append("rtfd") }
+        if utis.contains("public.url")  { labels.append("url") }
+        return labels.joined(separator: " · ")
+    }
+
+    /// Formats badge：展示当前条目保留了哪些 representation（plain/html/rtf/rtfd/url）。
+    /// 仅在文本/URL 条目，且除 plain 外还有其它格式时显示，避免对纯文本条目造成视觉噪声。
+    private func formatsBadge(for item: ClipItem) -> PreviewBadgeItem? {
+        guard item.clipType == .text || item.clipType == .url else { return nil }
+        let display = formatsDisplay
+        guard display != "plain" else { return nil }
+        return PreviewBadgeItem(
+            id: "formats",
+            title: display,
+            systemImage: "doc.richtext",
+            helpText: NSLocalizedString("preview.metadata.formats", comment: "Formats label in preview metadata")
+        )
     }
 
     private func ocrBadge(for item: ClipItem) -> PreviewBadgeItem? {

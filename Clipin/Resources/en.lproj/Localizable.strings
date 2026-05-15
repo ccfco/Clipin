@@ -360,5 +360,6 @@
 "Deletion undone." = "Deletion undone.";
 "Could not write this item to the clipboard." = "Could not write this item to the clipboard.";
 "Could not preview this item." = "Could not preview this item.";
+"preview.metadata.formats" = "Formats";
 "Accessibility permission is required to paste automatically." = "Accessibility permission is required to paste automatically.";
 "Copied to clipboard." = "Copied to clipboard.";

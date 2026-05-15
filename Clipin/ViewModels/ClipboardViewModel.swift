@@ -37,6 +37,7 @@ final class ClipboardViewModel: ObservableObject {
     @Published var isContinuousPasteEnabled: Bool = false
     @Published private(set) var launcherNotice: LauncherNotice?
     @Published private(set) var isPreparingPreview = false
+    @Published private(set) var selectedRepresentationUTIs: [String] = []
 
     func navigatePalette(delta: Int) {
         let count = paletteActions.count
@@ -216,6 +217,7 @@ final class ClipboardViewModel: ObservableObject {
         previewTask = nil
         isPreparingPreview = false
         selectedItemID = id
+        reloadRepresentationsForSelected()
         guard let id else {
             selectedItem = nil
             return
@@ -229,6 +231,22 @@ final class ClipboardViewModel: ObservableObject {
             }.value
             guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
             self.selectedItem = item
+        }
+    }
+
+    func reloadRepresentationsForSelected() {
+        guard let id = selectedItemID else {
+            selectedRepresentationUTIs = []
+            return
+        }
+        let core = self.core
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let reps = (try? core.getRepresentations(id: id)) ?? []
+            await MainActor.run {
+                guard let self else { return }
+                guard self.selectedItemID == id else { return }
+                self.selectedRepresentationUTIs = reps.map { $0.uti }
+            }
         }
     }
 
