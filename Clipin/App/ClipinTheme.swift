@@ -317,10 +317,10 @@ struct ClipinShellBackground: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.0 : 0.08), lineWidth: 0.5)
+                    .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.0 : 0.045), lineWidth: 0.35)
                     .mask(
                         LinearGradient(
-                            colors: [Color.white, Color.white.opacity(0.10), Color.clear],
+                            colors: [Color.white, Color.white.opacity(0.06), Color.clear],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -328,7 +328,7 @@ struct ClipinShellBackground: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.045 : 0.055), lineWidth: 0.35)
+                    .strokeBorder(Color.primary.opacity(colorScheme == .dark ? 0.025 : 0.018), lineWidth: 0.25)
             )
             .onAppear {
                 guard !reduceMotion else { return }
