@@ -100,6 +100,11 @@ private final class ClipinPanelChromeView<V: View>: NSView {
 private final class ClipinPanelHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var isOpaque: Bool { false }
+    // `.titled + .fullSizeContentView` 会把隐藏标题栏区域作为 SwiftUI safe area 注入，
+    // 导致 launcher 内容整体下移。主面板 chrome 已由外层 AppKit view 裁切，内容区必须填满 bounds。
+    override var safeAreaInsets: NSEdgeInsets {
+        NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    }
 
     override func updateLayer() {
         super.updateLayer()
@@ -110,7 +115,7 @@ private final class ClipinPanelHostingView<V: View>: NSHostingView<V> {
     }
 }
 
-/// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
+/// launcher 是 nonactivating panel，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
 private final class ClipinPanel: NSPanel {
     override var canBecomeKey: Bool { true }
