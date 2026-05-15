@@ -15,19 +15,29 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
         layer?.cornerRadius = ClipinChrome.shellCornerRadius
         layer?.cornerCurve = .continuous
         layer?.allowsEdgeAntialiasing = true
-        layer?.borderWidth = 0
-        layer?.borderColor = nil
+        layer?.borderWidth = 1 / max(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2, 1)
+        layer?.borderColor = separatorLineColor.cgColor
         layer?.masksToBounds = true
         window?.invalidateShadow()
+    }
+
+    private var separatorLineColor: NSColor {
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return isDark
+            ? NSColor.white.withAlphaComponent(0.16)
+            : NSColor.black.withAlphaComponent(0.12)
     }
 }
 
 /// Borderless launcher 需要把两个职责拆开：
 /// - 内层 hosting view 裁切 material 圆角；
-/// - 外层透明 window canvas 只给阴影留空间，不参与可见边界。
+/// - 外层透明 window canvas 只给扩散阴影留空间；
+/// - 1px 分离线由内层 hosting layer 画，避免 shadow 雾边承担边界。
 private final class ClipinWindowChromeView<V: View>: NSView {
     private let hostingView: ClipinHostingView<V>
     private let shadowMargin: CGFloat
+    private let ambientShadowLayer = CALayer()
+    private let contactShadowLayer = CALayer()
 
     init(rootView: V, contentSize: NSSize, shadowMargin: CGFloat) {
         self.hostingView = ClipinHostingView(rootView: rootView)
@@ -44,15 +54,12 @@ private final class ClipinWindowChromeView<V: View>: NSView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.masksToBounds = false
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.16
-        layer?.shadowRadius = 36
-        layer?.shadowOffset = CGSize(width: 0, height: -18)
+        configureShadowLayers()
 
         hostingView.frame = contentFrame
         hostingView.autoresizingMask = [.width, .height]
         addSubview(hostingView)
-        updateShadowPath()
+        updateShadowLayers()
     }
 
     @available(*, unavailable)
@@ -65,7 +72,7 @@ private final class ClipinWindowChromeView<V: View>: NSView {
     override func layout() {
         super.layout()
         hostingView.frame = contentFrame
-        updateShadowPath()
+        updateShadowLayers()
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -77,13 +84,37 @@ private final class ClipinWindowChromeView<V: View>: NSView {
         bounds.insetBy(dx: shadowMargin, dy: shadowMargin)
     }
 
-    private func updateShadowPath() {
-        layer?.shadowPath = CGPath(
+    private func configureShadowLayers() {
+        ambientShadowLayer.shadowColor = NSColor.black.cgColor
+        ambientShadowLayer.shadowOpacity = 0.095
+        ambientShadowLayer.shadowRadius = 46
+        ambientShadowLayer.shadowOffset = CGSize(width: 0, height: -26)
+
+        contactShadowLayer.shadowColor = NSColor.black.cgColor
+        contactShadowLayer.shadowOpacity = 0.11
+        contactShadowLayer.shadowRadius = 14
+        contactShadowLayer.shadowOffset = CGSize(width: 0, height: -7)
+
+        [ambientShadowLayer, contactShadowLayer].forEach { shadowLayer in
+            shadowLayer.backgroundColor = NSColor.clear.cgColor
+            shadowLayer.masksToBounds = false
+            layer?.addSublayer(shadowLayer)
+        }
+    }
+
+    private func updateShadowLayers() {
+        let path = CGPath(
             roundedRect: contentFrame,
             cornerWidth: ClipinChrome.shellCornerRadius,
             cornerHeight: ClipinChrome.shellCornerRadius,
             transform: nil
         )
+
+        [ambientShadowLayer, contactShadowLayer].forEach { shadowLayer in
+            shadowLayer.frame = bounds
+            shadowLayer.contentsScale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            shadowLayer.shadowPath = path
+        }
     }
 }
 
