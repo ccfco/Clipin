@@ -98,22 +98,14 @@ struct PreviewPane: View {
             }
 
         case .url:
-            VStack(alignment: .leading, spacing: 14) {
-                if let url = URL(string: item.content) {
-                    Link(destination: url) {
-                        Label(url.absoluteString, systemImage: "safari")
-                            .font(.system(size: 13, weight: .medium))
-                    }
-                }
-
-                TextPreviewBody(
-                    text: item.content,
-                    font: previewTextFont(),
-                    searchQuery: searchQuery
-                )
-                .environmentObject(vm)
-            }
-            .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
+            URLPreviewView(
+                urlString: item.content,
+                searchQuery: searchQuery,
+                glass: glass,
+                hierarchy: hierarchy,
+                colorScheme: colorScheme
+            )
+            .environmentObject(vm)
 
         case .image:
             ScrollView {
@@ -895,5 +887,215 @@ private struct SelectableTextPreview: NSViewRepresentable {
             textView.textStorage?.setAttributedString(attributed)
             textView.setSelectedRange(NSRange(location: 0, length: 0))
         }
+    }
+}
+
+// MARK: - URL Preview
+
+/// 远程 favicon 缓存：actor 串行化 + pending dedup，避免列表来回切换时同一 host 重复发请求。
+/// 拿不到就返回 nil，由调用方自己画 globe 占位，不在这里造假数据。
+private actor FaviconCache {
+    static let shared = FaviconCache()
+    private var cache: [String: NSImage] = [:]
+    private var pending: [String: Task<NSImage?, Never>] = [:]
+
+    func icon(for host: String) async -> NSImage? {
+        if let cached = cache[host] { return cached }
+        if let task = pending[host] { return await task.value }
+
+        let task = Task<NSImage?, Never> {
+            guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=128") else {
+                return nil
+            }
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                return NSImage(data: data)
+            } catch {
+                return nil
+            }
+        }
+        pending[host] = task
+        let result = await task.value
+        pending[host] = nil
+        if let result {
+            cache[host] = result
+        }
+        return result
+    }
+}
+
+private struct FaviconView: View {
+    let host: String?
+    let glass: ClipinGlassPalette
+    let hierarchy: ClipinPanelHierarchy
+    @State private var image: NSImage?
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(glass.keycapTint)
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .padding(12)
+            } else {
+                Image(systemName: "globe")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(hierarchy.support.subduedInk)
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(glass.controlStroke.opacity(0.4), lineWidth: 0.6)
+        )
+        .task(id: host ?? "") {
+            image = nil
+            guard let host, !host.isEmpty else { return }
+            image = await FaviconCache.shared.icon(for: host)
+        }
+    }
+}
+
+private struct URLPreviewView: View {
+    let urlString: String
+    let searchQuery: String
+    let glass: ClipinGlassPalette
+    let hierarchy: ClipinPanelHierarchy
+    let colorScheme: ColorScheme
+    @EnvironmentObject var vm: ClipboardViewModel
+
+    private var url: URL? { URL(string: urlString) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                fullURLBlock
+                if let url, !queryItems(for: url).isEmpty {
+                    queryBlock(items: queryItems(for: url))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            FaviconView(host: url?.host, glass: glass, hierarchy: hierarchy)
+                .frame(width: 64, height: 64)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(url?.host ?? urlString)
+                    .font(.system(size: 17, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+
+                if let subtitle = pathSubtitle {
+                    Text(subtitle)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(hierarchy.support.subduedInk)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let url {
+                Link(destination: url) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "safari")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Open")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(hierarchy.selection.badgeFill)
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(hierarchy.selection.stroke.opacity(0.72), lineWidth: 0.6)
+                            )
+                    )
+                    .foregroundStyle(hierarchy.selection.ink)
+                }
+                .buttonStyle(.plain)
+                .help("Open in default browser")
+            }
+        }
+    }
+
+    private var pathSubtitle: String? {
+        guard let url else { return nil }
+        if !url.path.isEmpty, url.path != "/" { return url.path }
+        return nil
+    }
+
+    private var fullURLBlock: some View {
+        urlInfoBlock(title: "Full URL", systemImage: "link") {
+            SelectableTextPreview(
+                text: urlString,
+                font: .monospacedSystemFont(ofSize: 12.5, weight: .regular),
+                searchQuery: searchQuery,
+                vm: vm
+            )
+            .frame(minHeight: 44, maxHeight: 92)
+        }
+    }
+
+    private func queryItems(for url: URL) -> [(String, String)] {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = components.queryItems else { return [] }
+        return items.map { ($0.name, $0.value ?? "") }
+    }
+
+    private func queryBlock(items: [(String, String)]) -> some View {
+        urlInfoBlock(title: "Query parameters", systemImage: "questionmark.app") {
+            VStack(spacing: 8) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, pair in
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(pair.0)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(hierarchy.support.smallLabelInk)
+                            .frame(width: 96, alignment: .leading)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .textSelection(.enabled)
+                        Text(pair.1)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(Color.primary.opacity(0.88))
+                            .lineLimit(3)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+
+    private func urlInfoBlock<Content: View>(
+        title: LocalizedStringKey,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(hierarchy.support.subduedInk)
+            content()
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            ClipinSurfaceBackground(
+                role: .grouped,
+                cornerRadius: ClipinChrome.detailMetadataCornerRadius,
+                glass: glass
+            )
+        )
     }
 }

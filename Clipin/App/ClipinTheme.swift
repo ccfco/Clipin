@@ -458,6 +458,8 @@ struct ClipinSurfaceBackground: View {
 }
 
 /// 所有列表型界面的选中/悬停底板，主列表、动作面板、设置侧栏共用。
+/// `isPinned` 让主列表用左侧 accent rail 表达 pin 状态（常驻、低调），
+/// 不依赖 hover/selected 才显示。其他列表（动作面板 / 设置 sidebar）不传 isPinned。
 struct ClipinSelectableRowBackground: View {
     let isSelected: Bool
     let isHovered: Bool
@@ -466,6 +468,7 @@ struct ClipinSelectableRowBackground: View {
     let hoverFill: Color
     let hoverStroke: Color
     var showsSelectionAccent: Bool = false
+    var isPinned: Bool = false
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -489,12 +492,21 @@ struct ClipinSelectableRowBackground: View {
                         )
                 )
 
+            // 选中态 rail：3pt 满色（优先级最高）
+            // pinned 态 rail：2pt 淡色（非选中时表达 pin 状态）
+            // selected + pinned 合并到 selected 视觉，不叠加信号
             if isSelected && showsSelectionAccent {
                 Capsule(style: .continuous)
                     .fill(selectionStroke)
                     .frame(width: 3)
                     .padding(.vertical, 10)
                     .padding(.leading, 7)
+            } else if isPinned {
+                Capsule(style: .continuous)
+                    .fill(selectionStroke.opacity(0.45))
+                    .frame(width: 2)
+                    .padding(.vertical, 11)
+                    .padding(.leading, 7.5)
             }
         }
     }

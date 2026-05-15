@@ -209,7 +209,7 @@ struct SearchBar: View {
 
             InterceptingTextFieldView(
                 text: $query,
-                placeholder: NSLocalizedString("Search…  · Tab", comment: ""),
+                placeholder: NSLocalizedString("Search clipboard history…", comment: ""),
                 onNavigate: onNavigate,
                 onSubmit: onSubmit,
                 onEscape: onEscape,
@@ -218,7 +218,7 @@ struct SearchBar: View {
             .frame(height: 16)
             .layoutPriority(-1)
 
-            filterRail
+            filterChip
 
             if !query.isEmpty {
                 Button { query = "" } label: {
@@ -257,94 +257,92 @@ struct SearchBar: View {
         .frame(width: 24, height: 24)
     }
 
-    private var filterRail: some View {
-        filterPills
-            .padding(.horizontal, 4)
-            .padding(.vertical, 3)
-            .background(
-                ClipinSurfaceBackground(
-                    role: .grouped,
-                    cornerRadius: 9,
-                    glass: glass
-                )
-            )
-    }
-
-    private var filterPills: some View {
-        HStack(spacing: 3) {
-            pill(label: "All", mode: .all, shortcut: "⌥0")
-            pinnedPill
-            pill(label: "Text",   mode: .text,  shortcut: "⌥2")
-            pill(label: "Images", mode: .image, shortcut: "⌥3")
-            pill(label: "Files",  mode: .file,  shortcut: "⌥4")
-            pill(label: "URLs",   mode: .url,   shortcut: "⌥5")
-        }
-    }
-
-    /// 固定视图专用 pill，与类型 pills 互斥激活
-    private var pinnedPill: some View {
+    /// 单一 filter chip：当前 mode == all 时极简（只显示一个筛选图标 + Tab 提示），
+    /// 选中具体类型时显示 icon + label。点击弹出 macOS 原生 Menu 提供完整鼠标路径。
+    /// 键盘 Tab/Shift-Tab 循环和 ⌥0-5 直达由 AppDelegate.keyMonitor 处理，不在此控件里。
+    private var filterChip: some View {
         let displayedMode = LauncherSearchScope.displayedMode(query: query, browseMode: browseMode)
-        let isActive = displayedMode == .pinned
-        return Button {
-            browseMode = .pinned
+        let isAll = displayedMode == .all
+
+        return Menu {
+            menuItem(.all, key: "0")
+            menuItem(.pinned, key: "1")
+            Divider()
+            menuItem(.text, key: "2")
+            menuItem(.image, key: "3")
+            menuItem(.file, key: "4")
+            menuItem(.url, key: "5")
         } label: {
-            HStack(spacing: 2) {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 8.5, weight: .medium))
-                    .foregroundStyle(isActive ? hierarchy.scope.ink : hierarchy.support.subduedInk)
-                Text("⌥1")
-                    .font(.system(size: 8.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : hierarchy.support.hintInk)
+            HStack(spacing: 5) {
+                Image(systemName: iconName(for: displayedMode))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(isAll ? hierarchy.support.subduedInk : hierarchy.scope.ink)
+
+                if !isAll {
+                    Text(chipLabel(for: displayedMode))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(hierarchy.scope.ink)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                Text("⇥")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(isAll ? hierarchy.support.hintInk : hierarchy.scope.shortcutInk)
             }
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isActive ? hierarchy.scope.fill : Color.clear)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isAll ? Color.clear : hierarchy.scope.fill)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .strokeBorder(
-                                isActive ? hierarchy.scope.stroke : idlePillStroke,
+                                isAll ? idlePillStroke : hierarchy.scope.stroke,
                                 lineWidth: 0.5
                             )
                     )
             )
         }
-        .buttonStyle(.plain)
-        .animation(ClipinMotion.feedback, value: isActive)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(NSLocalizedString("Filter by type — press Tab to cycle", comment: ""))
+        .animation(ClipinMotion.feedback, value: displayedMode)
     }
 
-    private func pill(label: LocalizedStringKey, mode: LauncherBrowseMode, shortcut: String) -> some View {
-        let displayedMode = LauncherSearchScope.displayedMode(query: query, browseMode: browseMode)
-        let isActive = displayedMode == mode
-
-        return Button {
+    /// 给 menu item 绑定真实 keyboard shortcut（NSMenuItem.keyEquivalent），
+    /// 否则 Menu 打开期间 ⌥0-5 既不会被 AppDelegate 全局监视器接收（NSMenu 切走 run loop mode），
+    /// 也不会被 SwiftUI 自动响应——文本里画了 "⌥0" 也按不动。
+    @ViewBuilder
+    private func menuItem(_ mode: LauncherBrowseMode, key: String) -> some View {
+        Button {
             browseMode = mode
         } label: {
-            HStack(spacing: 2) {
-                Text(label)
-                    .font(.system(size: 11.5, weight: isActive ? .semibold : .regular))
-                    .foregroundStyle(isActive ? hierarchy.scope.ink : hierarchy.support.subduedInk)
-                Text(shortcut)
-                    .font(.system(size: 8.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(isActive ? hierarchy.scope.shortcutInk : hierarchy.support.hintInk)
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(isActive ? hierarchy.scope.fill : Color.clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(
-                                isActive ? hierarchy.scope.stroke : idlePillStroke,
-                                lineWidth: 0.5
-                            )
-                    )
-            )
+            Label(mode.displayName, systemImage: iconName(for: mode))
         }
-        .buttonStyle(.plain)
-        .animation(ClipinMotion.feedback, value: isActive)
+        .keyboardShortcut(KeyEquivalent(Character(key)), modifiers: .option)
     }
 
+    private func iconName(for mode: LauncherBrowseMode) -> String {
+        switch mode {
+        case .all:    return "line.3.horizontal.decrease"
+        case .pinned: return "pin.fill"
+        case .text:   return "doc.text"
+        case .image:  return "photo"
+        case .file:   return "folder"
+        case .url:    return "link"
+        }
+    }
+
+    private func chipLabel(for mode: LauncherBrowseMode) -> String {
+        switch mode {
+        case .all:    return NSLocalizedString("All", comment: "")
+        case .pinned: return NSLocalizedString("Pinned", comment: "")
+        case .text:   return NSLocalizedString("Text", comment: "")
+        case .image:  return NSLocalizedString("Images", comment: "")
+        case .file:   return NSLocalizedString("Files", comment: "")
+        case .url:    return NSLocalizedString("URLs", comment: "")
+        }
+    }
 }

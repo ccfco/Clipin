@@ -5,6 +5,9 @@ struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
     @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
+    /// footer hover 展开辅助命令（Plain Text / Open / Preview），鼠标移开自动收起，
+    /// 让平时视觉只剩 CTA + ⌘K 两个核心；键盘用户仍然走全局快捷键，不依赖此 hover 状态。
+    @State private var isFooterHovered = false
 
     private var glass: ClipinGlassPalette {
         .make(theme: settings.visualTheme, colorScheme: colorScheme)
@@ -168,30 +171,35 @@ struct MainPanel: View {
                 }
                 .buttonStyle(PrimaryFooterButtonStyle())
 
-                commandCluster {
-                    Button { viewModel.pastePlainSelected() } label: {
-                        keyBadge(label: "Plain Text", key: "⇧↵")
-                    }
-                    .buttonStyle(.plain)
-                    .help(NSLocalizedString("Paste as Plain Text", comment: ""))
-
-                    if viewModel.canOpenSelectedItem {
-                        Button { viewModel.openSelected() } label: {
-                            keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
+                // hover 展开的辅助命令簇。平时不占视觉重量，鼠标到 footer 时浮现，
+                // 离开 footer 自动收起；键盘用户走全局快捷键不依赖此入口。
+                if isFooterHovered {
+                    commandCluster {
+                        Button { viewModel.pastePlainSelected() } label: {
+                            keyBadge(label: "Plain Text", key: "⇧↵")
                         }
                         .buttonStyle(.plain)
-                        .help(viewModel.selectedOpenLabel)
-                    }
+                        .help(NSLocalizedString("Paste as Plain Text", comment: ""))
 
-                    if viewModel.canPreviewSelectedItem {
-                        Button { _ = viewModel.previewSelected() } label: {
-                            keyBadge(label: viewModel.isPreparingPreview ? "Preparing…" : "Preview", key: "Space")
+                        if viewModel.canOpenSelectedItem {
+                            Button { viewModel.openSelected() } label: {
+                                keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
+                            }
+                            .buttonStyle(.plain)
+                            .help(viewModel.selectedOpenLabel)
                         }
-                        .buttonStyle(.plain)
-                        .help(NSLocalizedString("Preview", comment: ""))
+
+                        if viewModel.canPreviewSelectedItem {
+                            Button { _ = viewModel.previewSelected() } label: {
+                                keyBadge(label: viewModel.isPreparingPreview ? "Preparing…" : "Preview", key: "Space")
+                            }
+                            .buttonStyle(.plain)
+                            .help(NSLocalizedString("Preview", comment: ""))
+                        }
                     }
+                    .padding(.leading, 8)
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
-                .padding(.leading, 8)
 
                 Spacer()
             } else {
@@ -214,34 +222,26 @@ struct MainPanel: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
 
+            // footer 只保留 ⌘K Actions 作为常驻全局入口。
+            // 设置入口、Continuous Paste 开关、Plain Text/Open/Preview 已经在 ⌘K 面板内可触达，
+            // 不再在 footer 里重复展示，避免命令条信息过载。
             commandCluster {
                 Button { viewModel.toggleActionsPalette() } label: {
                     keyBadge(label: "Actions", key: "⌘K")
                 }
                 .buttonStyle(.plain)
-
-                if !viewModel.isContinuousPasteEnabled {
-                    Button { viewModel.toggleContinuousPaste() } label: {
-                        keyBadge(label: "Continuous Paste", key: "⌘⇧L")
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Button { viewModel.openSettings() } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 12))
-                        .foregroundStyle(hierarchy.support.subduedInk)
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.borderless)
-                .help(NSLocalizedString("Settings", comment: ""))
-                .accessibilityLabel(Text("Settings"))
             }
             .padding(.leading, 10)
         }
         .padding(.horizontal, ClipinChrome.footerContentInset)
         .padding(.vertical, ClipinChrome.footerContentInset)
         .frame(minHeight: ClipinChrome.footerMinHeight)
+        .onHover { hovering in
+            withAnimation(ClipinMotion.commandReveal) {
+                isFooterHovered = hovering
+            }
+        }
+        .animation(ClipinMotion.commandReveal, value: isFooterHovered)
         .background(
             ClipinSurfaceBackground(
                 role: .strip,
@@ -557,7 +557,8 @@ private struct ItemListView: View {
                 selectionStroke: hierarchy.selection.stroke,
                 hoverFill: glass.hoverFill,
                 hoverStroke: glass.hoverStroke,
-                showsSelectionAccent: true
+                showsSelectionAccent: true,
+                isPinned: item.isPinned
             )
         )
         .padding(.horizontal, ClipinChrome.listRowOuterInset)

@@ -93,12 +93,8 @@ struct ClipItemRow: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            if item.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 9))
-                    .foregroundStyle(isSelected ? hierarchy.selection.dimInk : hierarchy.support.smallLabelInk)
-                    .opacity(isSelected || isHovered ? 1 : 0)
-            }
+            // pin 信号已交给 left accent rail（ClipinSelectableRowBackground.isPinned），
+            // 这里不再放 pin.fill icon，避免列表 row 视觉重量过高。
 
             trailingMeta
         }
@@ -149,56 +145,32 @@ struct ClipItemRow: View {
         }
     }
 
+    /// trailing 区域：⌘N + 时间戳，无胶囊背景，贴边显示。
+    /// ⌘N 静止时极淡（opacity 0.35），hover/selected 时浮现到全可见。
+    /// 时间戳改用默认 design（去掉 monospaced log 感），常驻但低调。
     private var trailingMeta: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             if let n = shortcutNumber {
                 Text("⌘\(n)")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
                     .foregroundStyle(
                         isSelected
                             ? hierarchy.selection.dimInk
                             : hierarchy.support.smallLabelInk
                     )
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(
-                                isSelected
-                                    ? hierarchy.selection.badgeFill
-                                    : Color.primary.opacity(isHovered ? 0.08 : 0.05)
-                            )
-                    )
+                    .opacity(isSelected || isHovered ? 1.0 : 0.42)
+                    .animation(ClipinMotion.feedback, value: isHovered)
             }
 
             Text(timeLabel)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .foregroundStyle(isSelected ? hierarchy.selection.dimInk : hierarchy.support.smallLabelInk)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(
-            Capsule(style: .continuous)
-                .fill(metaFill)
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(metaStroke, lineWidth: 0.5)
+                .font(.system(size: 10.5, weight: .regular))
+                .foregroundStyle(
+                    isSelected
+                        ? hierarchy.selection.dimInk
+                        : hierarchy.support.hintInk
                 )
-        )
-    }
-
-    private var metaFill: Color {
-        if isSelected {
-            return hierarchy.selection.badgeFill.opacity(0.94)
         }
-        return glass.keycapTint.opacity(isHovered ? 0.94 : 0.82)
-    }
-
-    private var metaStroke: Color {
-        if isSelected {
-            return hierarchy.selection.stroke.opacity(0.72)
-        }
-        return glass.controlStroke.opacity(isHovered ? 0.72 : 0.56)
+        .padding(.trailing, 2)
     }
 
     private var typeIndicatorScale: CGFloat {
