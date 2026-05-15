@@ -22,6 +22,71 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     }
 }
 
+/// Borderless launcher 需要把两个职责拆开：
+/// - 内层 hosting view 裁切 material 圆角；
+/// - 外层透明 window canvas 只给阴影留空间，不参与可见边界。
+private final class ClipinWindowChromeView<V: View>: NSView {
+    private let hostingView: ClipinHostingView<V>
+    private let shadowMargin: CGFloat
+
+    init(rootView: V, contentSize: NSSize, shadowMargin: CGFloat) {
+        self.hostingView = ClipinHostingView(rootView: rootView)
+        self.shadowMargin = shadowMargin
+
+        super.init(frame: NSRect(
+            origin: .zero,
+            size: NSSize(
+                width: contentSize.width + shadowMargin * 2,
+                height: contentSize.height + shadowMargin * 2
+            )
+        ))
+
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.masksToBounds = false
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.16
+        layer?.shadowRadius = 36
+        layer?.shadowOffset = CGSize(width: 0, height: -18)
+
+        hostingView.frame = contentFrame
+        hostingView.autoresizingMask = [.width, .height]
+        addSubview(hostingView)
+        updateShadowPath()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func layout() {
+        super.layout()
+        hostingView.frame = contentFrame
+        updateShadowPath()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard hostingView.frame.contains(point) else { return nil }
+        return super.hitTest(point)
+    }
+
+    private var contentFrame: NSRect {
+        bounds.insetBy(dx: shadowMargin, dy: shadowMargin)
+    }
+
+    private func updateShadowPath() {
+        layer?.shadowPath = CGPath(
+            roundedRect: contentFrame,
+            cornerWidth: ClipinChrome.shellCornerRadius,
+            cornerHeight: ClipinChrome.shellCornerRadius,
+            transform: nil
+        )
+    }
+}
+
 /// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
 private final class ClipinPanel: NSPanel {
@@ -98,6 +163,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private enum SettingsWindowMetrics {
         static let size = NSSize(width: 720, height: 608)
+    }
+
+    private enum MainPanelWindowMetrics {
+        static let contentSize = NSSize(width: 800, height: 540)
+        static let shadowMargin: CGFloat = 42
+        static let windowSize = NSSize(
+            width: contentSize.width + shadowMargin * 2,
+            height: contentSize.height + shadowMargin * 2
+        )
     }
 
     private enum OnboardingWindowMetrics {
@@ -302,16 +376,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.viewModel = vm
 
         let panel = ClipinPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 540),
+            contentRect: NSRect(origin: .zero, size: MainPanelWindowMetrics.windowSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.contentView = ClipinHostingView(rootView: MainPanel(viewModel: vm))
+        panel.contentView = ClipinWindowChromeView(
+            rootView: MainPanel(viewModel: vm),
+            contentSize: MainPanelWindowMetrics.contentSize,
+            shadowMargin: MainPanelWindowMetrics.shadowMargin
+        )
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
