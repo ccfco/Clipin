@@ -1283,7 +1283,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func performPaste(_ item: ClipItem) {
         monitor?.pause()
-        guard PasteService.writeToClipboard(item) else {
+
+        let representations: [ClipRepresentation]
+        if item.clipType == .text || item.clipType == .url {
+            representations = (try? appState.core.getRepresentations(id: item.id)) ?? []
+        } else {
+            representations = []
+        }
+
+        guard PasteService.writeAllRepresentations(item, representations: representations) else {
             monitor?.resume()
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
