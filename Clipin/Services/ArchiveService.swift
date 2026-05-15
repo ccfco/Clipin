@@ -103,7 +103,8 @@ enum ArchiveService {
                         sourceName: item.sourceName,
                         imagePath: imagePath,
                         isPinned: item.isPinned,
-                        createdAt: item.createdAt
+                        createdAt: item.createdAt,
+                        representations: []   // Task 5.3 接通时改为真实数据
                     )
                 } catch {
                     if let imagePath {

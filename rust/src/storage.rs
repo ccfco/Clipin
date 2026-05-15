@@ -1448,6 +1448,7 @@ impl Storage {
         image_path: Option<&str>,
         is_pinned: bool,
         created_at: i64,
+        representations: &[ClipRepresentation],
     ) -> Result<bool, ClipinError> {
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
         let id = Uuid::new_v4().to_string();
@@ -1472,6 +1473,20 @@ impl Storage {
                     }
                 }
             }
+
+            // 现有条目 reps 为空时补齐——计为 imported；reps 非空保留不覆盖
+            if !representations.is_empty() {
+                let existing_count: i32 = conn.query_row(
+                    "SELECT COUNT(*) FROM clip_representations WHERE item_id = ?1",
+                    params![existing_id],
+                    |r| r.get(0),
+                )?;
+                if existing_count == 0 {
+                    drop(conn); // 释放锁，避免 insert_representations 内 self.conn() 死锁
+                    self.insert_representations(&existing_id, representations)?;
+                    return Ok(true);
+                }
+            }
             return Ok(false);
         }
 
@@ -1494,6 +1509,8 @@ impl Storage {
                 pinyin_initials,
             ],
         )?;
+        drop(conn); // 释放锁后写副表
+        self.insert_representations(&id, representations)?;
         Ok(true)
     }
 

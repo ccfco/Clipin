@@ -185,6 +185,7 @@ impl ClipinCore {
         image_path: Option<String>,
         is_pinned: bool,
         created_at: i64,
+        representations: Vec<ClipRepresentation>,
     ) -> Result<bool, ClipinError> {
         self.storage.import_item_if_missing(
             &content,
@@ -194,6 +195,7 @@ impl ClipinCore {
             image_path.as_deref(),
             is_pinned,
             created_at,
+            &representations,
         )
     }
 
@@ -683,6 +685,7 @@ mod tests {
                 None,
                 true,
                 1_000,
+                vec![],
             )
             .unwrap();
 
@@ -722,6 +725,7 @@ mod tests {
                 Some(restored_path.clone()),
                 true,
                 2_000,
+                vec![],
             )
             .unwrap();
 
@@ -733,6 +737,134 @@ mod tests {
         assert!(!items[0].is_pinned);
         assert_eq!(items[0].image_path.as_deref(), Some(restored_path.as_str()));
         assert!(PathBuf::from(restored_path).exists());
+    }
+
+    #[test]
+    fn test_import_item_if_missing_with_representations_new() {
+        let core = setup_core();
+        let reps = vec![ClipRepresentation {
+            uti: "public.html".into(),
+            data: b"<p>hi</p>".to_vec(),
+        }];
+        let imported = core
+            .import_item_if_missing(
+                "hi".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                1_715_000_000,
+                reps,
+            )
+            .unwrap();
+        assert!(imported);
+
+        let items = core.get_items(10, 0, None);
+        assert_eq!(items.len(), 1);
+        let loaded_reps = core.get_representations(items[0].id.clone()).unwrap();
+        assert_eq!(loaded_reps.len(), 1);
+        assert_eq!(loaded_reps[0].uti, "public.html");
+        assert_eq!(loaded_reps[0].data, b"<p>hi</p>".to_vec());
+    }
+
+    #[test]
+    fn test_import_item_if_missing_merges_into_empty_representations() {
+        let core = setup_core();
+        // 先用空 reps 导入一次（模拟 v1 archive）
+        let first = core
+            .import_item_if_missing(
+                "hi".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                1_715_000_000,
+                vec![],
+            )
+            .unwrap();
+        assert!(first);
+
+        // 再用带 reps 的 archive import；应该补齐并计为 imported
+        let reps = vec![ClipRepresentation {
+            uti: "public.html".into(),
+            data: b"<p>hi</p>".to_vec(),
+        }];
+        let imported = core
+            .import_item_if_missing(
+                "hi".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                1_715_000_000,
+                reps,
+            )
+            .unwrap();
+        assert!(
+            imported,
+            "merging representations into empty should count as imported"
+        );
+
+        let items = core.get_items(10, 0, None);
+        assert_eq!(items.len(), 1);
+        let loaded_reps = core.get_representations(items[0].id.clone()).unwrap();
+        assert_eq!(loaded_reps.len(), 1);
+    }
+
+    #[test]
+    fn test_import_item_if_missing_skips_when_representations_exist() {
+        let core = setup_core();
+        let orig_reps = vec![ClipRepresentation {
+            uti: "public.html".into(),
+            data: b"<p>old</p>".to_vec(),
+        }];
+        let first = core
+            .import_item_if_missing(
+                "hi".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                1_715_000_000,
+                orig_reps,
+            )
+            .unwrap();
+        assert!(first);
+
+        // 第二次 import 同 hash 带不同 representations，应该跳过且不覆盖
+        let new_reps = vec![ClipRepresentation {
+            uti: "public.html".into(),
+            data: b"<p>new</p>".to_vec(),
+        }];
+        let imported = core
+            .import_item_if_missing(
+                "hi".into(),
+                ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                1_715_000_000,
+                new_reps,
+            )
+            .unwrap();
+        assert!(
+            !imported,
+            "should skip when target already has representations"
+        );
+
+        let items = core.get_items(10, 0, None);
+        let loaded = core.get_representations(items[0].id.clone()).unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(
+            loaded[0].data,
+            b"<p>old</p>".to_vec(),
+            "existing representations must NOT be overwritten"
+        );
     }
 
     #[test]
