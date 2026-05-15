@@ -283,6 +283,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         vm.onPastePlainRequested = { [weak self] item in
             self?.performPastePlain(item)
         }
+        vm.onPasteRepresentationRequested = { [weak self] item, uti in
+            self?.performPasteRepresentation(item, uti: uti)
+        }
         vm.onCopyRequested = { [weak self] item in
             self?.performCopy(item)
         }
@@ -1303,6 +1306,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func performPastePlain(_ item: ClipItem) {
         monitor?.pause()
         guard PasteService.writeAsPlainText(item) else {
+            monitor?.resume()
+            viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
+            return
+        }
+        do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
+        executePasteFlow(isImage: false)
+    }
+
+    private func performPasteRepresentation(_ item: ClipItem, uti: String) {
+        monitor?.pause()
+        let representations = (try? appState.core.getRepresentations(id: item.id)) ?? []
+        guard PasteService.writeRepresentation(item, uti: uti, representations: representations) else {
             monitor?.resume()
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return

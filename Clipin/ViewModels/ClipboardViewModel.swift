@@ -127,6 +127,7 @@ final class ClipboardViewModel: ObservableObject {
 
     var onPasteRequested: ((ClipItem) -> Void)?
     var onPastePlainRequested: ((ClipItem) -> Void)?
+    var onPasteRepresentationRequested: ((ClipItem, String) -> Void)?
     var onCopyRequested: ((ClipItem) -> Void)?
     var onCloseRequested: (() -> Void)?
     var onOpenSettingsRequested: (() -> Void)?
@@ -293,6 +294,43 @@ final class ClipboardViewModel: ObservableObject {
         guard let item = try? core.getItem(id: selectedItemID) else { return }
         try? core.touchItem(id: selectedItemID)
         onPastePlainRequested?(item)
+    }
+
+    func pasteRepresentationSelected(uti: String) {
+        guard let selectedItemID else { return }
+        guard let item = try? core.getItem(id: selectedItemID) else { return }
+        try? core.touchItem(id: selectedItemID)
+        onPasteRepresentationRequested?(item, uti)
+    }
+
+    /// 当前选中条目可用的 "Paste as X" 动作（仅 HTML / RTF）。
+    /// 仅在 text/url 且确实存在对应 UTI 时才返回对应条目；否则返回空数组。
+    /// "Paste as Plain Text" 由 ActionPaletteBuilder 单独处理，不在此返回。
+    func representationActions(for item: ClipItem) -> [PaletteAction] {
+        guard item.clipType == .text || item.clipType == .url else { return [] }
+        let utis = Set(selectedRepresentationUTIs)
+        var actions: [PaletteAction] = []
+        if utis.contains("public.html") {
+            actions.append(PaletteAction(
+                "action.pasteAsHTML",
+                systemImage: "chevron.left.forwardslash.chevron.right",
+                shortcut: .pasteAsHTML,
+                section: .primary
+            ) { [weak self] in
+                self?.pasteRepresentationSelected(uti: "public.html")
+            })
+        }
+        if utis.contains("public.rtf") {
+            actions.append(PaletteAction(
+                "action.pasteAsRTF",
+                systemImage: "doc.richtext",
+                shortcut: .pasteAsRTF,
+                section: .primary
+            ) { [weak self] in
+                self?.pasteRepresentationSelected(uti: "public.rtf")
+            })
+        }
+        return actions
     }
 
     func copySelected() {

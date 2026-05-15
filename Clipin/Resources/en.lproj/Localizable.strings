@@ -363,3 +363,5 @@
 "preview.metadata.formats" = "Formats";
 "Accessibility permission is required to paste automatically." = "Accessibility permission is required to paste automatically.";
 "Copied to clipboard." = "Copied to clipboard.";
+"action.pasteAsHTML" = "Paste as HTML";
+"action.pasteAsRTF" = "Paste as RTF";

@@ -246,6 +246,11 @@ struct ActionPaletteBuilder {
                 viewModel.pasteSelected()
             })
 
+            // HTML/RTF representation actions（仅 text/url 且有对应 UTI 时出现）
+            if let item = viewModel.currentSelectedItem() {
+                list.append(contentsOf: viewModel.representationActions(for: item))
+            }
+
             list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", shortcut: .pastePlain, section: .primary) {
                 viewModel.pastePlainSelected()
             })
