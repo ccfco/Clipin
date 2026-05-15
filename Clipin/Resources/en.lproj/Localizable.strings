@@ -365,3 +365,5 @@
 "Copied to clipboard." = "Copied to clipboard.";
 "action.pasteAsHTML" = "Paste as HTML";
 "action.pasteAsRTF" = "Paste as RTF";
+"Paste as HTML" = "Paste as HTML";
+"Paste as RTF" = "Paste as RTF";

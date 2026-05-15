@@ -175,6 +175,24 @@ struct MainPanel: View {
                 // 离开 footer 自动收起；键盘用户走全局快捷键不依赖此入口。
                 if isFooterHovered {
                     commandCluster {
+                        // HTML / RTF pill —— 仅当选中条目存在对应 UTI 时出现，
+                        // 鼠标点击等同于 ⌘K 动作面板中的 Paste as HTML / RTF。
+                        if viewModel.selectedRepresentationUTIs.contains("public.html") {
+                            Button { viewModel.pasteRepresentationSelected(uti: "public.html") } label: {
+                                keyBadge(label: "HTML", key: "⌥H")
+                            }
+                            .buttonStyle(.plain)
+                            .help(NSLocalizedString("Paste as HTML", comment: ""))
+                        }
+
+                        if viewModel.selectedRepresentationUTIs.contains("public.rtf") {
+                            Button { viewModel.pasteRepresentationSelected(uti: "public.rtf") } label: {
+                                keyBadge(label: "RTF", key: "⌥R")
+                            }
+                            .buttonStyle(.plain)
+                            .help(NSLocalizedString("Paste as RTF", comment: ""))
+                        }
+
                         Button { viewModel.pastePlainSelected() } label: {
                             keyBadge(label: "Plain Text", key: "⇧↵")
                         }

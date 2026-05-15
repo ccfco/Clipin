@@ -365,3 +365,5 @@
 "Copied to clipboard." = "已复制到剪贴板。";
 "action.pasteAsHTML" = "粘贴为 HTML";
 "action.pasteAsRTF" = "粘贴为 RTF";
+"Paste as HTML" = "粘贴为 HTML";
+"Paste as RTF" = "粘贴为 RTF";
