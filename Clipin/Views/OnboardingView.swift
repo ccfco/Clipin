@@ -77,9 +77,6 @@ struct OnboardingView: View {
         .padding(ClipinChrome.shellGap)
         .frame(width: 560, height: 640)
         .background(ClipinShellBackground(glass: glass))
-        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous))
-        .shadow(color: .black.opacity(0.16), radius: 42, y: 20)
-        .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
         .onAppear { permission.checkNow() }
         .accessibilityElement(children: .contain)
     }

@@ -2,15 +2,33 @@ import AppKit
 import SwiftUI
 import Combine
 
-/// NSHostingView 默认 acceptsFirstMouse = false，导致点击普通 NSWindow 里的 SwiftUI 控件
-/// 需要两次点击（第一次激活窗口，第二次才触发动作）。子类化覆盖后，首次点击直接触发动作。
-private final class ClipinHostingView<V: View>: NSHostingView<V> {
+/// 原生 titled/fullSizeContentView 窗口专用 hosting view。
+/// 这类窗口的 frame、圆角、裁切和阴影都交给 AppKit，不在 content layer 再画边/裁切。
+private final class ClipinWindowHostingView<V: View>: NSHostingView<V> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var isOpaque: Bool { false }
+    override var safeAreaInsets: NSEdgeInsets {
+        NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    }
+
+    override func updateLayer() {
+        super.updateLayer()
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.borderWidth = 0
+        layer?.borderColor = nil
+        layer?.masksToBounds = false
+    }
+}
+
+/// borderless 小浮层专用 hosting view。
+/// 没有原生 window frame 的窗口才在 content layer 负责圆角裁切和轻量分离线。
+private final class ClipinBorderlessHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var isOpaque: Bool { false }
     override func updateLayer() {
         super.updateLayer()
         // masksToBounds=true 在 CALayer compositor 层裁掉所有 AppKit subview（含 NSVisualEffectView），
-        // 是根治圆角透明的唯一正确位置——SwiftUI .clipShape() 不进入 AppKit compositor。
+        // 只用于 borderless 浮层；原生 titled 窗口不能走这里，否则会和 NSWindow frame 叠线。
         layer?.backgroundColor = .clear
         layer?.cornerRadius = ClipinChrome.shellCornerRadius
         layer?.cornerCurve = .continuous
@@ -190,11 +208,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private enum SettingsWindowMetrics {
-        static let size = NSSize(width: 720, height: 608)
+        static let size = NSSize(width: 748, height: 620)
     }
 
     private enum OnboardingWindowMetrics {
         static let size = NSSize(width: 560, height: 640)
+    }
+
+    private enum PermissionWindowMetrics {
+        static let size = NSSize(width: 430, height: 486)
     }
 
     private enum KeyboardContext {
@@ -1124,7 +1146,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isMovableByWindowBackground = true
             newWindow.hasShadow = true
             newWindow.isReleasedWhenClosed = false
-            newWindow.contentView = ClipinHostingView(
+            newWindow.contentView = ClipinWindowHostingView(
                 rootView: SettingsView(
                     settings: settings,
                     updateReminder: updateReminder,
@@ -1149,7 +1171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let window: NSWindow
 
         if let existingWindow = updateReminderWindow {
-            existingWindow.contentView = ClipinHostingView(
+            existingWindow.contentView = ClipinBorderlessHostingView(
                 rootView: UpdateReminderView(
                     settings: settings,
                     release: release,
@@ -1174,7 +1196,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.hidesOnDeactivate = false
             newWindow.collectionBehavior = [.canJoinAllSpaces, .transient]
             newWindow.isReleasedWhenClosed = false
-            newWindow.contentView = ClipinHostingView(
+            newWindow.contentView = ClipinBorderlessHostingView(
                 rootView: UpdateReminderView(
                     settings: settings,
                     release: release,
@@ -1292,7 +1314,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.hasShadow = true
             // 不设 .floating，让 System Settings 等系统窗口可以自然覆盖在上方
             newWindow.delegate = self
-            newWindow.contentView = ClipinHostingView(
+            newWindow.contentView = ClipinWindowHostingView(
                 rootView: OnboardingView(permission: permission, flow: flow)
             )
             onboardingWindow = newWindow
@@ -1346,17 +1368,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window = existingWindow
         } else {
             let newWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 400, height: 460),
+                contentRect: NSRect(origin: .zero, size: PermissionWindowMetrics.size),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
-            newWindow.contentView = NSHostingView(rootView: PermissionView(
+            newWindow.contentView = ClipinWindowHostingView(rootView: PermissionView(
                 permission: pm,
                 onSkip: { [weak newWindow] in newWindow?.close() }
             ))
             newWindow.titlebarAppearsTransparent = true
             newWindow.titleVisibility = .hidden
+            newWindow.titlebarSeparatorStyle = .none
+            newWindow.backgroundColor = .clear
+            newWindow.isOpaque = false
+            newWindow.isMovableByWindowBackground = true
+            newWindow.hasShadow = true
             newWindow.delegate = self
             newWindow.center()
             // 不设 .floating，让 System Settings 可以自然覆盖在权限窗口上方
