@@ -92,6 +92,7 @@ impl Storage {
 
     pub fn new(db_path: &str, image_dir: &str) -> Result<Self, ClipinError> {
         let conn = Connection::open(db_path)?;
+        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         let storage = Storage {
             conn: Mutex::new(conn),
             image_dir: image_dir.to_string(),
@@ -1863,5 +1864,18 @@ mod migration_tests {
                 .iter()
                 .any(|item| item.content == "two" && !item.is_pinned)
         );
+    }
+
+    #[test]
+    fn test_foreign_keys_pragma_is_enabled() {
+        let tmpfile = tempfile::NamedTempFile::new().unwrap();
+        let tmpdir = tempfile::tempdir().unwrap();
+        let storage = Storage::new(
+            tmpfile.path().to_str().unwrap(),
+            tmpdir.path().to_str().unwrap(),
+        ).unwrap();
+        let conn = storage.conn();
+        let fk_enabled: i32 = conn.query_row("PRAGMA foreign_keys", [], |r| r.get(0)).unwrap();
+        assert_eq!(fk_enabled, 1, "foreign_keys must be ON for ON DELETE CASCADE");
     }
 }
