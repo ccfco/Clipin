@@ -29,8 +29,7 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     }
 }
 
-/// 主 launcher 的窗口 chrome 必须由 AppKit 负责：NSVisualEffectView 提供原生材质，
-/// 根 CALayer 统一处理圆角裁剪与 1px hairline，NSPanel 负责真实窗口阴影。
+/// 主 launcher 使用原生 NSPanel frame/shadow 作为外框，content view 只负责 material 裁切。
 private final class ClipinPanelChromeView<V: View>: NSView {
     private let materialView = NSVisualEffectView()
     private let hostingView: ClipinPanelHostingView<V>
@@ -92,16 +91,9 @@ private final class ClipinPanelChromeView<V: View>: NSView {
         layer.cornerRadius = ClipinChrome.shellCornerRadius
         layer.cornerCurve = .continuous
         layer.allowsEdgeAntialiasing = true
-        layer.borderWidth = 1 / max(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2, 1)
-        layer.borderColor = separatorLineColor.cgColor
+        layer.borderWidth = 0
+        layer.borderColor = nil
         layer.masksToBounds = true
-    }
-
-    private var separatorLineColor: NSColor {
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        return isDark
-            ? NSColor.white.withAlphaComponent(0.15)
-            : NSColor.black.withAlphaComponent(0.11)
     }
 }
 
@@ -400,7 +392,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let panel = ClipinPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -409,9 +401,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             contentSize: panelSize
         )
         panel.isMovableByWindowBackground = true
+        panel.title = ""
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
+        [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+            panel.standardWindowButton(button)?.isHidden = true
+        }
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
