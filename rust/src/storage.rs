@@ -142,6 +142,9 @@ impl Storage {
         if from_version < 8 {
             Self::migrate_to_v8(&self.conn())?;
         }
+        if from_version < 9 {
+            Self::migrate_to_v9(&self.conn())?;
+        }
         Ok(())
     }
 
@@ -394,6 +397,28 @@ impl Storage {
             END;
 
             PRAGMA user_version = 8;
+            ",
+        )?;
+        Ok(())
+    }
+
+    fn migrate_to_v9(conn: &Connection) -> Result<(), ClipinError> {
+        // 副表存放 text/url 条目的额外 UTI representation (HTML/RTF/RTFD/URL)
+        // 主表 clip_items 保持 plain text 不变，搜索/排序/FTS 逻辑零改动
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS clip_representations (
+                item_id  TEXT NOT NULL,
+                uti      TEXT NOT NULL,
+                data     BLOB NOT NULL,
+                PRIMARY KEY (item_id, uti),
+                FOREIGN KEY (item_id) REFERENCES clip_items(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_representations_item_id
+                ON clip_representations(item_id);
+
+            PRAGMA user_version = 9;
             ",
         )?;
         Ok(())
@@ -1649,7 +1674,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 8, "新建数据库应为 v8");
+        assert_eq!(storage.schema_version(), 9, "新建数据库应为 v9");
     }
 
     #[test]
@@ -1668,7 +1693,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 8, "旧数据库应 migrate 到 v8");
+        assert_eq!(storage.schema_version(), 9, "旧数据库应 migrate 到 v9");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -1695,7 +1720,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 8);
+        assert_eq!(s2.schema_version(), 9);
     }
 
     #[test]
@@ -1729,6 +1754,25 @@ mod migration_tests {
         assert!(trigger_sql.contains(
             "AFTER UPDATE OF content, source_name, ocr_text, pinyin_flat, pinyin_initials"
         ));
+    }
+
+    #[test]
+    fn test_v9_creates_representations_table() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+
+        let storage = Storage::new(&db_path, &img_dir).unwrap();
+        let conn = storage.conn.lock().unwrap();
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='clip_representations'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_exists, 1);
     }
 
     #[test]
