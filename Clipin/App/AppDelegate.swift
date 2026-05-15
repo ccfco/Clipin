@@ -15,6 +15,8 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
         layer?.cornerRadius = ClipinChrome.shellCornerRadius
         layer?.cornerCurve = .continuous
         layer?.allowsEdgeAntialiasing = true
+        layer?.borderWidth = 0
+        layer?.borderColor = nil
         layer?.masksToBounds = true
         window?.invalidateShadow()
     }
