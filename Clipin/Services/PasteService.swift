@@ -34,6 +34,36 @@ enum PasteService {
         }
     }
 
+    /// Return 路径的"全量回放"：把所有 representation 写到一个 NSPasteboardItem。
+    /// 由调用方（ViewModel/AppDelegate）通过 ClipinCore.getRepresentations 先取出 reps 再传入。
+    /// pasteboard 参数仅供测试注入；生产路径走 NSPasteboard.general。
+    @discardableResult
+    static func writeAllRepresentations(
+        _ item: ClipItem,
+        representations: [ClipRepresentation],
+        to pasteboard: NSPasteboard = .general
+    ) -> Bool {
+        guard item.clipType == .text || item.clipType == .url else {
+            return writeToClipboard(item)
+        }
+
+        let pbItem = NSPasteboardItem()
+
+        // plain text 始终存在；先写到 pbItem 验证，再 clearContents
+        guard pbItem.setString(item.content, forType: .string) else { return false }
+
+        if item.clipType == .url {
+            _ = pbItem.setString(item.content, forType: .URL)
+        }
+
+        for rep in representations {
+            _ = pbItem.setData(rep.data, forType: .init(rep.uti))
+        }
+
+        pasteboard.clearContents()
+        return pasteboard.writeObjects([pbItem])
+    }
+
     /// 以纯文本写回剪贴板（去除富文本格式，图片/文件转为路径文本），成功返回 true
     @discardableResult
     static func writeAsPlainText(_ item: ClipItem) -> Bool {
