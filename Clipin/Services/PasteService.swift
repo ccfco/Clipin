@@ -64,6 +64,31 @@ enum PasteService {
         return pasteboard.writeObjects([pbItem])
     }
 
+    /// 动作面板 "Paste as X" 入口：仅写一种 UTI。
+    /// UTI = public.utf8-plain-text 时从 item.content 重建；其他 UTI 需要 representations 里找得到。
+    /// 找不到时返回 false 且 NOT clearContents。
+    @discardableResult
+    static func writeRepresentation(
+        _ item: ClipItem,
+        uti: String,
+        representations: [ClipRepresentation],
+        to pasteboard: NSPasteboard = .general
+    ) -> Bool {
+        let data: Data
+        if uti == NSPasteboard.PasteboardType.string.rawValue || uti == "public.utf8-plain-text" {
+            guard let bytes = item.content.data(using: .utf8) else { return false }
+            data = bytes
+        } else {
+            guard let rep = representations.first(where: { $0.uti == uti }) else {
+                return false  // 不 clearContents
+            }
+            data = rep.data
+        }
+
+        pasteboard.clearContents()
+        return pasteboard.setData(data, forType: .init(uti))
+    }
+
     /// 以纯文本写回剪贴板（去除富文本格式，图片/文件转为路径文本），成功返回 true
     @discardableResult
     static func writeAsPlainText(_ item: ClipItem) -> Bool {
