@@ -87,3 +87,11 @@ impl From<std::io::Error> for ClipinError {
         }
     }
 }
+
+/// 单条剪贴板条目的一种 UTI representation
+/// 仅适用于 text 和 url 类型；image / file 不存额外 representation
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ClipRepresentation {
+    pub uti: String,
+    pub data: Vec<u8>,
+}
