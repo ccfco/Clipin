@@ -29,7 +29,7 @@ private final class ClipinHostingView<V: View>: NSHostingView<V> {
     }
 }
 
-/// 主 launcher 使用原生 NSPanel frame/shadow 作为外框，content view 只负责 material 裁切。
+/// 主 launcher 使用原生 NSPanel frame/shadow 作为外框，content view 只负责承载 material。
 private final class ClipinPanelChromeView<V: View>: NSView {
     private let materialView = NSVisualEffectView()
     private let hostingView: ClipinPanelHostingView<V>
@@ -88,12 +88,12 @@ private final class ClipinPanelChromeView<V: View>: NSView {
     private func updateLayerChrome() {
         guard let layer else { return }
         layer.backgroundColor = NSColor.clear.cgColor
-        layer.cornerRadius = ClipinChrome.shellCornerRadius
-        layer.cornerCurve = .continuous
-        layer.allowsEdgeAntialiasing = true
         layer.borderWidth = 0
         layer.borderColor = nil
-        layer.masksToBounds = true
+        // 原生 titled/fullSizeContentView window 已经负责圆角 frame 和 clipping。
+        // 这里再做 cornerRadius + masksToBounds 会在 NSVisualEffectView 边缘产生一层
+        // 抗锯齿灰边，和 NSWindow frame hairline 叠成更粗的 outer stroke。
+        layer.masksToBounds = false
     }
 }
 
