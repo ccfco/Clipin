@@ -185,54 +185,6 @@ struct MainPanel: View {
             Spacer()
 
             if viewModel.selectedListItem != nil {
-                // hover 展开的辅助命令簇。平时不占视觉重量，鼠标到 footer 时浮现，
-                // 离开 footer 自动收起；键盘用户走全局快捷键不依赖此入口。
-                // 位于 Spacer 右侧、Paste CTA 左邻；从 Spacer 侧（.leading）滑入滑出，避免与 CTA 对穿。
-                if isFooterHovered {
-                    commandCluster {
-                        // HTML / RTF pill —— 仅当选中条目存在对应 UTI 时出现，
-                        // 鼠标点击等同于 ⌘K 动作面板中的 Paste as HTML / RTF。
-                        if viewModel.selectedRepresentationUTIs.contains("public.html") {
-                            Button { viewModel.pasteRepresentationSelected(uti: "public.html") } label: {
-                                keyBadge(label: "HTML", key: "⌥H")
-                            }
-                            .buttonStyle(ClipinFooterGlassButtonStyle())
-                            .help(NSLocalizedString("Paste as HTML", comment: ""))
-                        }
-
-                        if viewModel.selectedRepresentationUTIs.contains("public.rtf") {
-                            Button { viewModel.pasteRepresentationSelected(uti: "public.rtf") } label: {
-                                keyBadge(label: "RTF", key: "⌥R")
-                            }
-                            .buttonStyle(ClipinFooterGlassButtonStyle())
-                            .help(NSLocalizedString("Paste as RTF", comment: ""))
-                        }
-
-                        Button { viewModel.pastePlainSelected() } label: {
-                            keyBadge(label: "Plain Text", key: "⇧↵")
-                        }
-                        .buttonStyle(ClipinFooterGlassButtonStyle())
-                        .help(NSLocalizedString("Paste as Plain Text", comment: ""))
-
-                        if viewModel.canOpenSelectedItem {
-                            Button { viewModel.openSelected() } label: {
-                                keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
-                            }
-                            .buttonStyle(ClipinFooterGlassButtonStyle())
-                            .help(viewModel.selectedOpenLabel)
-                        }
-
-                        if viewModel.canPreviewSelectedItem {
-                            Button { _ = viewModel.previewSelected() } label: {
-                                keyBadge(label: viewModel.isPreparingPreview ? "Preparing…" : "Preview", key: "Space")
-                            }
-                            .buttonStyle(ClipinFooterGlassButtonStyle())
-                            .help(NSLocalizedString("Preview", comment: ""))
-                        }
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
-                }
-
                 Button { viewModel.pasteSelected() } label: {
                     pasteCallToAction(
                         label: viewModel.targetAppName.map { String(format: NSLocalizedString("Paste to %@", comment: ""), $0) } ?? NSLocalizedString("Paste", comment: ""),
@@ -240,6 +192,18 @@ struct MainPanel: View {
                     )
                 }
                 .buttonStyle(ClipinFooterGlassButtonStyle())
+                // hover Paste → 其正上方派生次级粘贴/动作玻璃胶囊簇(真机 Raycast 式:
+                // hover 控件→正上方派生独立玻璃胶囊提示次级快捷键)。alignmentGuide 把
+                // 派生簇底边顶到 Paste 顶边上方 6pt(留缝、无箭头),不占布局、向上浮在
+                // 内容区上(与 Raycast 一致)。键盘用户走全局快捷键,不依赖此层。
+                .overlay(alignment: .top) {
+                    if isFooterHovered {
+                        FooterHoverDerivedPills(pills: hoverPills())
+                            .fixedSize()
+                            .alignmentGuide(.top) { dimension in dimension[.bottom] + 6 }
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                }
             }
 
             if viewModel.isContinuousPasteEnabled {
@@ -355,6 +319,36 @@ struct MainPanel: View {
         HStack(spacing: 8) {
             content()
         }
+    }
+
+    /// hover Paste 时其正上方派生的次级动作胶囊数据(随选中条目能力动态)。
+    /// 动作与旧"横向展开簇"字节不变,仅呈现位置从"Paste 左侧横排"改"Paste 正上方派生"。
+    private func hoverPills() -> [FooterDerivedPill] {
+        var pills: [FooterDerivedPill] = []
+        if viewModel.selectedRepresentationUTIs.contains("public.html") {
+            pills.append(FooterDerivedPill(label: "HTML", shortcut: "⌥H") {
+                viewModel.pasteRepresentationSelected(uti: "public.html")
+            })
+        }
+        if viewModel.selectedRepresentationUTIs.contains("public.rtf") {
+            pills.append(FooterDerivedPill(label: "RTF", shortcut: "⌥R") {
+                viewModel.pasteRepresentationSelected(uti: "public.rtf")
+            })
+        }
+        pills.append(FooterDerivedPill(label: "Plain Text", shortcut: "⇧↵") {
+            viewModel.pastePlainSelected()
+        })
+        if viewModel.canOpenSelectedItem {
+            pills.append(FooterDerivedPill(label: viewModel.selectedOpenLabel, shortcut: "⌘O") {
+                viewModel.openSelected()
+            })
+        }
+        if viewModel.canPreviewSelectedItem {
+            pills.append(FooterDerivedPill(label: viewModel.isPreparingPreview ? "Preparing…" : "Preview", shortcut: "Space") {
+                _ = viewModel.previewSelected()
+            })
+        }
+        return pills
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
