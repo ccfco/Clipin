@@ -78,7 +78,7 @@ struct ActionPalette: View {
 
             palettePanel
                 .padding(.trailing, ClipinChrome.shellGap)
-                .padding(.bottom, ClipinChrome.footerMinHeight + ClipinChrome.shellGap + 6)
+                .padding(.bottom, ClipinChrome.floatingFooterBand + ClipinChrome.shellGap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }

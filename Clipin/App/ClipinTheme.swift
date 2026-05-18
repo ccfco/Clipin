@@ -43,6 +43,9 @@ enum ClipinChrome {
     static let detailMetadataCornerRadius: CGFloat = 12
     static let detailMediaCornerRadius: CGFloat = 14
     static let footerMinHeight: CGFloat = 44
+    /// 悬浮液态玻璃底栏「外接带」高度(玻璃元件高 + 与窗口边间距)。
+    /// 列表 scroll 底部 inset 与预览卡 bottom margin 共用此单一度量,防两处各算漂移。规格单元 B。
+    static let floatingFooterBand: CGFloat = 56
     static let footerContentInset: CGFloat = 6
     static let footerCalloutVerticalInset: CGFloat = 4
     static let footerCalloutHorizontalLeading: CGFloat = 10
@@ -132,13 +135,6 @@ struct ClipinSceneState: Equatable {
 
     var metadataLift: CGFloat {
         isShowingActions ? -1.5 : 0
-    }
-
-    var stripAccentOpacity: Double {
-        if isContinuousPasteEnabled { return 0.94 }
-        if isShowingActions { return 0.66 }
-        if hasSelection { return 0.34 }
-        return 0.14
     }
 
     var stripScale: CGFloat {

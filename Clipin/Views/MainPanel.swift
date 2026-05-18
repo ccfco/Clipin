@@ -1,10 +1,13 @@
 import SwiftUI
+import AppKit
 
 /// 主面板 - 更贴近 macOS 26 的 frosted glass 双栏布局
 struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
-    /// footer hover 展开辅助命令（Plain Text / Open / Preview），鼠标移开自动收起，
-    /// 让平时视觉只剩 CTA + ⌘K 两个核心；键盘用户仍然走全局快捷键，不依赖此 hover 状态。
+    /// footer hover 展开辅助命令（HTML/RTF/Plain Text/Open/Preview），鼠标移开自动收起。
+    /// 底栏恒为：左 sourceBreadcrumb（选中显来源 app，无选中回退 Clipboard History）/
+    /// 右 Paste CTA(仅选中) + Continuous Paste pill(连续粘贴时) + Actions ⌘K。
+    /// 键盘用户走全局快捷键，不依赖此 hover 状态。
     @State private var isFooterHovered = false
 
     private var sceneState: ClipinSceneState {
@@ -37,7 +40,6 @@ struct MainPanel: View {
         VStack(spacing: 0) {
             headerBar
             contentArea
-            bottomBar
         }
         .frame(width: 800, height: 540)
         .overlay(alignment: .top) {
@@ -52,9 +54,12 @@ struct MainPanel: View {
             }
         }
         .overlay(alignment: .bottom) {
+            bottomBar
+        }
+        .overlay(alignment: .bottom) {
             if let notice = viewModel.launcherNotice {
                 launcherNoticeBanner(notice)
-                    .padding(.bottom, ClipinChrome.footerMinHeight + ClipinChrome.shellGap * 3)
+                    .padding(.bottom, ClipinChrome.floatingFooterBand + ClipinChrome.shellGap)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -165,17 +170,22 @@ struct MainPanel: View {
 
     private var bottomBar: some View {
         HStack(spacing: 8) {
-            if viewModel.selectedListItem != nil {
-                Button { viewModel.pasteSelected() } label: {
-                    pasteCallToAction(
-                        label: viewModel.targetAppName.map { String(format: NSLocalizedString("Paste to %@", comment: ""), $0) } ?? NSLocalizedString("Paste", comment: ""),
-                        key: "↵"
-                    )
-                }
-                .buttonStyle(.glassProminent)
+            // 底栏恒为左对齐的来源面包屑：选中时显条目来源 app，无选中回退 Clipboard History。
+            sourceBreadcrumb
 
+            if viewModel.hasActiveFilter && viewModel.selectedListItem == nil {
+                Text("No selection")
+                    .font(.system(size: 11))
+                    .foregroundStyle(ClipinInk.tertiary)
+                    .padding(.leading, 8)
+            }
+
+            Spacer()
+
+            if viewModel.selectedListItem != nil {
                 // hover 展开的辅助命令簇。平时不占视觉重量，鼠标到 footer 时浮现，
                 // 离开 footer 自动收起；键盘用户走全局快捷键不依赖此入口。
+                // 位于 Spacer 右侧、Paste CTA 左邻；从 Spacer 侧（.leading）滑入滑出，避免与 CTA 对穿。
                 if isFooterHovered {
                     commandCluster {
                         // HTML / RTF pill —— 仅当选中条目存在对应 UTI 时出现，
@@ -218,24 +228,16 @@ struct MainPanel: View {
                             .help(NSLocalizedString("Preview", comment: ""))
                         }
                     }
-                    .padding(.leading, 8)
                     .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
 
-                Spacer()
-            } else {
-                Text("Clipboard History")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(ClipinInk.secondary)
-
-                if viewModel.hasActiveFilter {
-                    Text("No selection")
-                        .font(.system(size: 11))
-                        .foregroundStyle(ClipinInk.tertiary)
-                        .padding(.leading, 8)
+                Button { viewModel.pasteSelected() } label: {
+                    pasteCallToAction(
+                        label: viewModel.targetAppName.map { String(format: NSLocalizedString("Paste to %@", comment: ""), $0) } ?? NSLocalizedString("Paste", comment: ""),
+                        key: "↵"
+                    )
                 }
-
-                Spacer()
+                .buttonStyle(.glassProminent)
             }
 
             if viewModel.isContinuousPasteEnabled {
@@ -243,7 +245,7 @@ struct MainPanel: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
 
-            // footer 只保留 ⌘K Actions 作为常驻全局入口。
+            // footer 右侧常驻命令簇只保留 ⌘K Actions 作为全局入口。
             // 设置入口、Continuous Paste 开关、Plain Text/Open/Preview 已经在 ⌘K 面板内可触达，
             // 不再在 footer 里重复展示，避免命令条信息过载。
             commandCluster {
@@ -263,12 +265,47 @@ struct MainPanel: View {
             }
         }
         .animation(ClipinMotion.commandReveal, value: isFooterHovered)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.sectionCornerRadius)
         .scaleEffect(sceneState.stripScale)
-        .padding(.horizontal, ClipinChrome.shellGap)
-        .padding(.top, ClipinChrome.shellGap)
+        .padding(.horizontal, ClipinChrome.shellGap * 2)
         .padding(.bottom, ClipinChrome.shellGap)
         .animation(ClipinMotion.focusShift, value: sceneState)
+    }
+
+    /// 来源 app 图标:按 bundle id 解析(镜像 PreviewPane.sourceAppIcon,来源 app 未运行也可用)
+    private func sourceAppIcon(bundleId: String?) -> NSImage? {
+        guard let bundleId,
+              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
+        else { return nil }
+        return NSWorkspace.shared.icon(forFile: url.path)
+    }
+
+    private var sourceBreadcrumb: some View {
+        HStack(spacing: 7) {
+            if let item = viewModel.selectedListItem, let name = item.sourceName {
+                if let icon = sourceAppIcon(bundleId: item.sourceApp) {
+                    Image(nsImage: icon).resizable().frame(width: 14, height: 14)
+                } else {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(ClipinInk.secondary)
+                }
+                Text(name)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(ClipinInk.secondary)
+                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            } else {
+                Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(ClipinInk.secondary)
+                Text("Clipboard History")
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(ClipinInk.secondary)
+                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .clipinChromeGlass(in: Capsule(style: .continuous))
     }
 
     private var continuousPastePill: some View {
@@ -312,7 +349,7 @@ struct MainPanel: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.badgeCornerRadius + 2)
+        .clipinChromeGlass(in: Capsule(style: .continuous))
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
@@ -480,6 +517,9 @@ private struct ItemListView: View {
                     }
                 }
                 .padding(.vertical, 6)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: ClipinChrome.floatingFooterBand)
             }
             .onChange(of: selection.wrappedValue) { _, newID in
                 hoveredID = nil

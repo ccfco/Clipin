@@ -54,6 +54,7 @@ struct PreviewPane: View {
                     elevated: true
                 )
             )
+            .padding(.bottom, ClipinChrome.floatingFooterBand)
     }
 
     private func previewFooter(for item: ClipItem) -> some View {
