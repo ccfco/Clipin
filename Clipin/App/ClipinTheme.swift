@@ -22,7 +22,7 @@ enum VisualTheme: String, CaseIterable {
 }
 
 enum ClipinChrome {
-    // 圆角层级：shell 24 → section 16 → contentStage/search 14 → metadata 12 → row 12 → badge 10/7
+    // 圆角层级：shell 24 → section 16 → contentStage/field 14 → metadata 12 → row 12 → badge 10/7
     static let shellCornerRadius: CGFloat = 24
     static let sectionCornerRadius: CGFloat = 16
     static let cardCornerRadius: CGFloat = 18
