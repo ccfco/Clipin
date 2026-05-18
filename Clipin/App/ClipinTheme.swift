@@ -825,3 +825,52 @@ extension ClipinGlassPalette {
         }
     }
 }
+
+// MARK: - Liquid Glass (macOS 26 原生)
+
+/// 唯一玻璃缝:chrome 才用玻璃,内容区永不调用。
+/// 首版单 native 无 tint —— 不接 tint 参数,杜绝"主题兜底"。
+extension View {
+    /// Requires macOS 26+ (deployment target enforced in project.yml).
+    /// 窗口附着的 chrome 玻璃(搜索栏/底栏/动作面板/胶囊/orb)。
+    func clipinChromeGlass(in shape: some Shape) -> some View {
+        glassEffect(.regular, in: shape)
+    }
+
+    /// 圆角矩形 chrome 玻璃的便捷写法。
+    func clipinChromeGlass(cornerRadius: CGFloat) -> some View {
+        glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
+/// 内容区实色中性面(列表区/预览 contentStage/metadata):
+/// 显式不上玻璃,文字坐其上保持清晰。可选 shadow 表达"浮起"。
+struct ClipinContentSurface: View {
+    let cornerRadius: CGFloat
+    let elevated: Bool
+
+    init(cornerRadius: CGFloat, elevated: Bool = false) {
+        self.cornerRadius = cornerRadius
+        self.elevated = elevated
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color(nsColor: .controlBackgroundColor))
+            .shadow(
+                color: elevated ? .black.opacity(0.10) : .clear,
+                radius: elevated ? 12 : 0,
+                y: elevated ? 4 : 0
+            )
+    }
+}
+
+/// 文字层级语义色,统一命名以便日后整体替换/分流(如 accent 化)。
+/// primary/secondary 是 SwiftUI 语义色别名,tertiary/quaternary 桥接 NSColor
+/// (SwiftUI 未原生暴露)。统一走 ClipinInk 让 search-replace 有单一抓手。
+enum ClipinInk {
+    static let primary = Color.primary
+    static let secondary = Color.secondary
+    static let tertiary = Color(nsColor: .tertiaryLabelColor)
+    static let quaternary = Color(nsColor: .quaternaryLabelColor)
+}
