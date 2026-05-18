@@ -363,6 +363,7 @@
 "preview.metadata.formats" = "格式";
 "Accessibility permission is required to paste automatically." = "自动粘贴需要辅助功能权限。";
 "Copied to clipboard." = "已复制到剪贴板。";
+"notice.pastedWithFormats" = "已粘贴 %d 种格式 — 格式已保留";
 "action.pasteAsHTML" = "粘贴为 HTML";
 "action.pasteAsRTF" = "粘贴为 RTF";
 "Paste as HTML" = "粘贴为 HTML";

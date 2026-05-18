@@ -1300,6 +1300,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
+
+        // 富文本首次粘贴的教育提示：告诉用户额外格式被保留。
+        // 仅在连续粘贴模式触发——普通模式 executePasteFlow 会立即 hidePanel，
+        // launcher notice 根本来不及被看到（与 performCopy 的 notice 同一约束）。
+        // representations 只含 plain text 之外的额外 UTI，总格式数需 +1。
+        if viewModel?.isContinuousPasteEnabled == true,
+           !representations.isEmpty,
+           settings.richPasteNoticeCountSeen < 3 {
+            viewModel?.showNotice(
+                String(
+                    format: NSLocalizedString("notice.pastedWithFormats", comment: ""),
+                    representations.count + 1
+                ),
+                style: .success
+            )
+            settings.richPasteNoticeCountSeen += 1
+        }
+
         executePasteFlow(isImage: item.clipType == .image)
     }
 
