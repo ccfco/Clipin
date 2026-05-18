@@ -77,13 +77,7 @@ impl ClipinCore {
         self.storage.get_items(limit, offset, type_filter.as_ref())
     }
 
-    /// 获取导出专用快照。一次性读取稳定顺序，避免 OFFSET 分页期间历史变化导致跳项/重复。
-    pub fn export_items_snapshot(&self) -> Vec<ClipItem> {
-        self.storage.export_items_snapshot()
-    }
-
-    /// 导出专用：在同一把 DB 锁内一次性读出 items + 各自 representations，
-    /// 避免「先快照 items 再逐条取 reps」期间条目被删/CASCADE 导致丢 representations。
+    /// 导出专用快照，原子性见 `Storage::export_archive_snapshot`。
     pub fn export_archive_snapshot(&self) -> Result<Vec<ArchiveSnapshotItem>, ClipinError> {
         self.storage.export_archive_snapshot()
     }
@@ -461,7 +455,7 @@ mod tests {
     }
 
     #[test]
-    fn test_export_items_snapshot_returns_stable_full_order() {
+    fn test_export_archive_snapshot_returns_stable_full_order() {
         let core = setup_core();
         let base = 1_700_000_000_000;
 
@@ -518,11 +512,14 @@ mod tests {
                 .then_with(|| right.id.cmp(&left.id))
         });
 
-        let snapshot = core.export_items_snapshot();
+        let snapshot = core.export_archive_snapshot().unwrap();
         let expected: Vec<String> = std::iter::once(pinned.content)
             .chain(expected_unpinned.into_iter().map(|item| item.content))
             .collect();
-        let actual: Vec<String> = snapshot.into_iter().map(|item| item.content).collect();
+        let actual: Vec<String> = snapshot
+            .into_iter()
+            .map(|entry| entry.item.content)
+            .collect();
 
         assert_eq!(actual, expected);
     }

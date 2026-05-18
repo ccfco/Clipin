@@ -124,8 +124,12 @@ enum PasteService {
         }
 
         guard !text.isEmpty else { return false }
+        // 与 writeToClipboard/writeAllRepresentations 同一「写前先验证」语义：
+        // 先写进游离 pbItem 校验，成功后才清空，避免 setString 失败时擦掉系统剪贴板。
+        let pbItem = NSPasteboardItem()
+        guard pbItem.setString(text, forType: .string) else { return false }
         pasteboard.clearContents()
-        return pasteboard.setString(text, forType: .string)
+        return pasteboard.writeObjects([pbItem])
     }
 
     /// 已知终端仿真器的 bundle ID 集合（用于图片粘贴时自动切换到 Ctrl+V）

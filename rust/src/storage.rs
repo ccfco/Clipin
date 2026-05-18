@@ -618,6 +618,23 @@ impl Storage {
         )
     }
 
+    /// 在调用方已持有的事务内写入 representations（`INSERT OR REPLACE`，按 uti 幂等）。
+    /// 必须接收 `&Transaction` 而非 `&self`：`Storage::conn()` 不可重入，再取一次锁会
+    /// 死锁；且 rep 与主表写入必须落在同一事务才能保证原子性。
+    fn insert_representations_in_tx(
+        tx: &rusqlite::Transaction,
+        item_id: &str,
+        representations: &[ClipRepresentation],
+    ) -> Result<(), ClipinError> {
+        for rep in representations {
+            tx.execute(
+                "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
+                params![item_id, rep.uti, rep.data],
+            )?;
+        }
+        Ok(())
+    }
+
     /// 保存一条剪贴板记录（自动去重），并在**同一事务**内写入 representations。
     /// item 与其 representations 必须原子落库：save_item 的 `DELETE FROM clip_items`
     /// 会通过 `ON DELETE CASCADE` 清掉旧同 hash 条目的副表行；若 rep 写入不在同一
@@ -683,12 +700,7 @@ impl Storage {
                 pinyin_initials,
             ],
         )?;
-        for rep in representations {
-            tx.execute(
-                "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
-                params![id, rep.uti, rep.data],
-            )?;
-        }
+        Self::insert_representations_in_tx(&tx, &id, representations)?;
         tx.commit()?;
         Self::remove_image_files(old_image_paths, image_path);
 
@@ -746,24 +758,10 @@ impl Storage {
         result.unwrap_or_default()
     }
 
-    pub fn export_items_snapshot(&self) -> Vec<ClipItem> {
-        let conn = self.conn();
-        let result = conn.prepare(
-            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
-             FROM clip_items
-             ORDER BY is_pinned DESC, created_at DESC, id DESC",
-        ).and_then(|mut stmt| {
-            stmt.query_map([], Self::row_to_item)
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
-        });
-
-        result.unwrap_or_default()
-    }
-
     /// 导出专用：在同一把锁内一次性读出 items 与各自的 representations。
-    /// 不能像旧路径那样先 `export_items_snapshot` 再逐条 `load_representations`——
-    /// 两次取锁之间条目可能被删除/CASCADE，导致导出的 v2 archive 丢 representations。
-    /// items 顺序与 `export_items_snapshot` 一致（is_pinned DESC, created_at DESC, id DESC）。
+    /// 旧实现先快照 items 再逐条 `load_representations` 二次取锁，两次之间条目可能
+    /// 被删除/CASCADE，导致导出的 v2 archive 丢 representations。
+    /// items 顺序固定为 is_pinned DESC, created_at DESC, id DESC（导入/分页依赖此稳定序）。
     pub fn export_archive_snapshot(&self) -> Result<Vec<ArchiveSnapshotItem>, ClipinError> {
         let conn = self.conn();
         let items: Vec<ClipItem> = {
@@ -1552,12 +1550,7 @@ impl Storage {
                     // 补齐副表必须与「现有条目仍为空」的判断在同一事务内，
                     // 否则并发导入同 hash 时两个调用都读到 0、各写一遍、互相覆盖。
                     let tx = conn.transaction()?;
-                    for rep in representations {
-                        tx.execute(
-                            "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
-                            params![existing_id, rep.uti, rep.data],
-                        )?;
-                    }
+                    Self::insert_representations_in_tx(&tx, &existing_id, representations)?;
                     tx.commit()?;
                     return Ok(true);
                 }
@@ -1587,12 +1580,7 @@ impl Storage {
                 pinyin_initials,
             ],
         )?;
-        for rep in representations {
-            tx.execute(
-                "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
-                params![id, rep.uti, rep.data],
-            )?;
-        }
+        Self::insert_representations_in_tx(&tx, &id, representations)?;
         tx.commit()?;
         Ok(true)
     }
