@@ -95,3 +95,11 @@ pub struct ClipRepresentation {
     pub uti: String,
     pub data: Vec<u8>,
 }
+
+/// 导出专用快照：item 与其全部 representations 在同一把 DB 锁内一次性读出，
+/// 避免「先快照 items 再逐条取 reps」期间条目被删除/CASCADE 导致丢 representations。
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct ArchiveSnapshotItem {
+    pub item: ClipItem,
+    pub representations: Vec<ClipRepresentation>,
+}

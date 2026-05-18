@@ -608,6 +608,30 @@ impl Storage {
         source_name: Option<&str>,
         image_path: Option<&str>,
     ) -> Result<ClipItem, ClipinError> {
+        self.save_item_with_representations(
+            content,
+            clip_type,
+            source_app,
+            source_name,
+            image_path,
+            &[],
+        )
+    }
+
+    /// 保存一条剪贴板记录（自动去重），并在**同一事务**内写入 representations。
+    /// item 与其 representations 必须原子落库：save_item 的 `DELETE FROM clip_items`
+    /// 会通过 `ON DELETE CASCADE` 清掉旧同 hash 条目的副表行；若 rep 写入不在同一
+    /// 事务内（旧实现 commit 后再单独取锁写副表），进程在两步之间中断会留下
+    /// 「有 item 无 rep」的部分状态，富文本格式静默丢失。
+    pub fn save_item_with_representations(
+        &self,
+        content: &str,
+        clip_type: &ClipType,
+        source_app: Option<&str>,
+        source_name: Option<&str>,
+        image_path: Option<&str>,
+        representations: &[ClipRepresentation],
+    ) -> Result<ClipItem, ClipinError> {
         // 锁外提前计算：fs::read（图片 hash）和 compute_pinyin 是 I/O / CPU 密集操作，
         // 不需要 DB 连接，持锁期间执行会阻塞所有其他存储调用（包括主线程的 getListItems）
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
@@ -659,6 +683,12 @@ impl Storage {
                 pinyin_initials,
             ],
         )?;
+        for rep in representations {
+            tx.execute(
+                "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
+                params![id, rep.uti, rep.data],
+            )?;
+        }
         tx.commit()?;
         Self::remove_image_files(old_image_paths, image_path);
 
@@ -728,6 +758,43 @@ impl Storage {
         });
 
         result.unwrap_or_default()
+    }
+
+    /// 导出专用：在同一把锁内一次性读出 items 与各自的 representations。
+    /// 不能像旧路径那样先 `export_items_snapshot` 再逐条 `load_representations`——
+    /// 两次取锁之间条目可能被删除/CASCADE，导致导出的 v2 archive 丢 representations。
+    /// items 顺序与 `export_items_snapshot` 一致（is_pinned DESC, created_at DESC, id DESC）。
+    pub fn export_archive_snapshot(&self) -> Result<Vec<ArchiveSnapshotItem>, ClipinError> {
+        let conn = self.conn();
+        let items: Vec<ClipItem> = {
+            let mut stmt = conn.prepare(
+                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
+                 FROM clip_items
+                 ORDER BY is_pinned DESC, created_at DESC, id DESC",
+            )?;
+            let rows = stmt.query_map([], Self::row_to_item)?;
+            rows.filter_map(|r| r.ok()).collect()
+        };
+
+        let mut rep_stmt = conn.prepare(
+            "SELECT uti, data FROM clip_representations WHERE item_id = ?1 ORDER BY uti",
+        )?;
+        let mut result = Vec::with_capacity(items.len());
+        for item in items {
+            let reps = rep_stmt
+                .query_map(params![item.id], |row| {
+                    Ok(ClipRepresentation {
+                        uti: row.get(0)?,
+                        data: row.get(1)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
+            result.push(ArchiveSnapshotItem {
+                item,
+                representations: reps,
+            });
+        }
+        Ok(result)
     }
 
     pub fn get_list_items(
@@ -1454,7 +1521,7 @@ impl Storage {
         let id = Uuid::new_v4().to_string();
         let char_count = content.chars().count() as i32;
         let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
-        let conn = self.conn();
+        let mut conn = self.conn();
 
         if let Some(existing_id) = Self::load_item_id_for_hash(&conn, &hash)? {
             if clip_type == &ClipType::Image {
@@ -1482,15 +1549,26 @@ impl Storage {
                     |r| r.get(0),
                 )?;
                 if existing_count == 0 {
-                    drop(conn); // 释放锁，避免 insert_representations 内 self.conn() 死锁
-                    self.insert_representations(&existing_id, representations)?;
+                    // 补齐副表必须与「现有条目仍为空」的判断在同一事务内，
+                    // 否则并发导入同 hash 时两个调用都读到 0、各写一遍、互相覆盖。
+                    let tx = conn.transaction()?;
+                    for rep in representations {
+                        tx.execute(
+                            "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
+                            params![existing_id, rep.uti, rep.data],
+                        )?;
+                    }
+                    tx.commit()?;
                     return Ok(true);
                 }
             }
             return Ok(false);
         }
 
-        conn.execute(
+        // 主表 + 副表必须原子：旧实现 INSERT clip_items 后释放锁再单独写副表，
+        // 进程在两步之间中断会留下「有 item 无 rep」的部分导入。
+        let tx = conn.transaction()?;
+        tx.execute(
             "INSERT INTO clip_items
              (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials)
              VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?7,?11,?12)",
@@ -1509,8 +1587,13 @@ impl Storage {
                 pinyin_initials,
             ],
         )?;
-        drop(conn); // 释放锁后写副表
-        self.insert_representations(&id, representations)?;
+        for rep in representations {
+            tx.execute(
+                "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
+                params![id, rep.uti, rep.data],
+            )?;
+        }
+        tx.commit()?;
         Ok(true)
     }
 
@@ -1638,27 +1721,6 @@ impl Storage {
             "UPDATE clip_items SET paste_count = paste_count + 1 WHERE id = ?1",
             params![id],
         )?;
-        Ok(())
-    }
-
-    /// 批量写入某条目的副表 representation；同 (item_id, uti) 已存在则覆盖 data。
-    pub fn insert_representations(
-        &self,
-        item_id: &str,
-        representations: &[ClipRepresentation],
-    ) -> Result<(), ClipinError> {
-        if representations.is_empty() {
-            return Ok(());
-        }
-        let mut conn = self.conn();
-        let tx = conn.transaction()?;
-        for rep in representations {
-            tx.execute(
-                "INSERT OR REPLACE INTO clip_representations (item_id, uti, data) VALUES (?1, ?2, ?3)",
-                params![item_id, rep.uti, rep.data],
-            )?;
-        }
-        tx.commit()?;
         Ok(())
     }
 
@@ -1989,12 +2051,13 @@ mod migration_tests {
             tmpdir.path().to_str().unwrap(),
         ).unwrap();
 
-        let item = storage.save_item("hi", &ClipType::Text, None, None, None).unwrap();
-        let reps = vec![
-            ClipRepresentation { uti: "public.html".into(), data: b"<p>hi</p>".to_vec() },
-            ClipRepresentation { uti: "public.rtf".into(),  data: b"{\\rtf1 hi}".to_vec() },
-        ];
-        storage.insert_representations(&item.id, &reps).unwrap();
+        let item = storage.save_item_with_representations(
+            "hi", &ClipType::Text, None, None, None,
+            &[
+                ClipRepresentation { uti: "public.html".into(), data: b"<p>hi</p>".to_vec() },
+                ClipRepresentation { uti: "public.rtf".into(),  data: b"{\\rtf1 hi}".to_vec() },
+            ],
+        ).unwrap();
 
         let loaded = storage.load_representations(&item.id).unwrap();
         assert_eq!(loaded.len(), 2);
@@ -2010,10 +2073,10 @@ mod migration_tests {
             tmpdir.path().to_str().unwrap(),
         ).unwrap();
 
-        let item = storage.save_item("hi", &ClipType::Text, None, None, None).unwrap();
-        storage.insert_representations(&item.id, &[
-            ClipRepresentation { uti: "public.html".into(), data: b"<p>hi</p>".to_vec() },
-        ]).unwrap();
+        let item = storage.save_item_with_representations(
+            "hi", &ClipType::Text, None, None, None,
+            &[ClipRepresentation { uti: "public.html".into(), data: b"<p>hi</p>".to_vec() }],
+        ).unwrap();
 
         storage.delete_item(&item.id).unwrap();
 

@@ -49,18 +49,14 @@ impl ClipinCore {
         image_path: Option<String>,
         representations: Vec<ClipRepresentation>,
     ) -> Result<ClipItem, ClipinError> {
-        let item = self.storage.save_item(
+        self.storage.save_item_with_representations(
             &content,
             &clip_type,
             source_app.as_deref(),
             source_name.as_deref(),
             image_path.as_deref(),
-        )?;
-        if !representations.is_empty() {
-            self.storage
-                .insert_representations(&item.id, &representations)?;
-        }
-        Ok(item)
+            &representations,
+        )
     }
 
     /// 读取一条条目的所有 representations
@@ -84,6 +80,12 @@ impl ClipinCore {
     /// 获取导出专用快照。一次性读取稳定顺序，避免 OFFSET 分页期间历史变化导致跳项/重复。
     pub fn export_items_snapshot(&self) -> Vec<ClipItem> {
         self.storage.export_items_snapshot()
+    }
+
+    /// 导出专用：在同一把 DB 锁内一次性读出 items + 各自 representations，
+    /// 避免「先快照 items 再逐条取 reps」期间条目被删/CASCADE 导致丢 representations。
+    pub fn export_archive_snapshot(&self) -> Result<Vec<ArchiveSnapshotItem>, ClipinError> {
+        self.storage.export_archive_snapshot()
     }
 
     /// 获取轻量列表项，避免大文本拖慢列表渲染

@@ -38,6 +38,10 @@ enum ClipboardRepresentationExtractor {
         for type in whitelist where availableTypes.contains(type) {
             guard let data = pasteboard.data(forType: type) else { continue }
 
+            // 空 data 直接跳过：空的 public.html/rtf 持久化后会让 UI 暴露
+            // Paste as HTML/RTF，粘贴时目标 app 可能优先消费空富文本而丢掉 plain text。
+            guard !data.isEmpty else { continue }
+
             // 去重：data 解码为 UTF-8 后等同于 primaryContent → 跳过
             if let asString = String(data: data, encoding: .utf8), asString == primaryContent {
                 continue

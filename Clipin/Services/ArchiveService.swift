@@ -13,6 +13,10 @@ struct ArchiveImportResult: Sendable {
     let importedCount: Int
     let skippedMissingImageCount: Int
     let skippedDuplicateCount: Int
+    /// base64 解码失败而被丢弃的 representation 条数。
+    /// 单条 rep 损坏不应让整个 archive 导入失败（item 本体仍可用），
+    /// 但「不兜底」要求把损坏暴露出来而不是纯静默，故计数并在结果里上报。
+    let failedRepresentationCount: Int
 
     var skippedCount: Int {
         skippedMissingImageCount + skippedDuplicateCount
@@ -74,6 +78,7 @@ enum ArchiveService {
             var importedCount = 0
             var skippedMissingImageCount = 0
             var skippedDuplicateCount = 0
+            var failedRepresentationCount = 0
 
             for item in archive.items {
                 try Task.checkCancellation()
@@ -94,11 +99,15 @@ enum ArchiveService {
                     imagePath = nil
                 }
 
-                // base64-decode 失败的 rep 用 compactMap 静默丢弃：单条 rep 损坏
-                // 不应让整个 archive 导入失败。
-                let coreReps: [ClipRepresentation] = (item.representations ?? []).compactMap { rep in
-                    guard let data = Data(base64Encoded: rep.dataBase64) else { return nil }
-                    return ClipRepresentation(uti: rep.uti, data: data)
+                // base64 解码失败的单条 rep 丢弃但计数：item 本体仍可导入，
+                // 不让整个 archive 失败；同时把损坏暴露给调用方上报，而非纯静默。
+                var coreReps: [ClipRepresentation] = []
+                for rep in item.representations ?? [] {
+                    guard let data = Data(base64Encoded: rep.dataBase64) else {
+                        failedRepresentationCount += 1
+                        continue
+                    }
+                    coreReps.append(ClipRepresentation(uti: rep.uti, data: data))
                 }
 
                 let didImport: Bool
@@ -134,7 +143,8 @@ enum ArchiveService {
                 url: url,
                 importedCount: importedCount,
                 skippedMissingImageCount: skippedMissingImageCount,
-                skippedDuplicateCount: skippedDuplicateCount
+                skippedDuplicateCount: skippedDuplicateCount,
+                failedRepresentationCount: failedRepresentationCount
             )
         }.value
     }
@@ -159,20 +169,24 @@ enum ArchiveService {
 
     private static func writeArchiveSnapshot(to url: URL, core: ClipinCore) throws -> ArchiveExportResult {
         try Task.checkCancellation()
-        let items = core.exportItemsSnapshot()
+        // 单快照：item 与其 representations 在同一把 DB 锁内一次性读出。
+        // 不再「先快照 items 再逐条 getRepresentations」——两次取锁之间条目可能被
+        // 删除/CASCADE，导致导出的 v2 archive 静默丢 representations。读取失败直接
+        // 抛错让整个导出失败，而不是把损坏当成「无 representations」掩盖掉。
+        let snapshot = try core.exportArchiveSnapshot()
         var exportedItems: [ArchiveItem] = []
-        exportedItems.reserveCapacity(items.count)
+        exportedItems.reserveCapacity(snapshot.count)
         var skippedCount = 0
 
-        for item in items {
+        for entry in snapshot {
             try Task.checkCancellation()
+            let item = entry.item
 
-            // 取 representations 用 try?：导出过程中 representations 取失败不应该让整个 archive 失败；
-            // 当成无 representations 处理即可。
-            let coreReps = (try? core.getRepresentations(id: item.id)) ?? []
-            let archiveReps: [ArchiveRepresentation]? = coreReps.isEmpty ? nil : coreReps.map {
-                ArchiveRepresentation(uti: $0.uti, dataBase64: $0.data.base64EncodedString())
-            }
+            let archiveReps: [ArchiveRepresentation]? = entry.representations.isEmpty
+                ? nil
+                : entry.representations.map {
+                    ArchiveRepresentation(uti: $0.uti, dataBase64: $0.data.base64EncodedString())
+                }
 
             if item.clipType == .image {
                 guard let imagePath = item.imagePath,

@@ -1125,7 +1125,8 @@ struct SettingsView: View {
                         result.url.lastPathComponent
                     ) + importSkippedSuffix(
                         missingImageCount: result.skippedMissingImageCount,
-                        duplicateCount: result.skippedDuplicateCount
+                        duplicateCount: result.skippedDuplicateCount,
+                        failedRepresentationCount: result.failedRepresentationCount
                     ) + cleanupSuffix
                 )
             } catch ArchiveError.cancelled {
@@ -1142,13 +1143,20 @@ struct SettingsView: View {
             : ""
     }
 
-    private func importSkippedSuffix(missingImageCount: Int, duplicateCount: Int) -> String {
+    private func importSkippedSuffix(
+        missingImageCount: Int,
+        duplicateCount: Int,
+        failedRepresentationCount: Int
+    ) -> String {
         var parts: [String] = []
         if missingImageCount > 0 {
             parts.append(localized("Skipped %d items with missing image data.", missingImageCount))
         }
         if duplicateCount > 0 {
             parts.append(localized("Skipped %d duplicate items.", duplicateCount))
+        }
+        if failedRepresentationCount > 0 {
+            parts.append(localized("Dropped %d corrupt format representations.", failedRepresentationCount))
         }
         return parts.isEmpty ? "" : " " + parts.joined(separator: " ")
     }

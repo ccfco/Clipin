@@ -49,15 +49,23 @@ enum PasteService {
 
         let pbItem = NSPasteboardItem()
 
-        // plain text 始终存在；先写到 pbItem 验证，再 clearContents
+        // 所有写入都先落到游离的 pbItem 并校验返回值；任一失败立即 return false，
+        // 此时尚未 clearContents，用户当前系统剪贴板不受影响。全部成功后才 clear+write。
+        // setData/setString 对**已存在的同一 type** 会返回 false，故先按 type 去重再写，
+        // 避免 url item 的 .URL 与 representations 里的 public.url 冲突导致整体失败（回归）。
         guard pbItem.setString(item.content, forType: .string) else { return false }
+        var writtenTypes: Set<NSPasteboard.PasteboardType> = [.string]
 
         if item.clipType == .url {
-            _ = pbItem.setString(item.content, forType: .URL)
+            guard pbItem.setString(item.content, forType: .URL) else { return false }
+            writtenTypes.insert(.URL)
         }
 
         for rep in representations {
-            _ = pbItem.setData(rep.data, forType: .init(rep.uti))
+            let type = NSPasteboard.PasteboardType(rep.uti)
+            // 已写过的 type 跳过（数据已在），而不是触发必然失败的重复 setData
+            guard writtenTypes.insert(type).inserted else { continue }
+            guard pbItem.setData(rep.data, forType: type) else { return false }
         }
 
         pasteboard.clearContents()
@@ -85,8 +93,14 @@ enum PasteService {
             data = rep.data
         }
 
+        // 先把 data 写进游离 pbItem 验证成功，再 clearContents + writeObjects。
+        // 不能先 clearContents() 再对 pasteboard 直接 setData：若 setData 失败，
+        // 用户当前系统剪贴板已被清空（违反「写剪贴板前必须先验证 payload」）。
+        let pbItem = NSPasteboardItem()
+        guard pbItem.setData(data, forType: .init(uti)) else { return false }
+
         pasteboard.clearContents()
-        return pasteboard.setData(data, forType: .init(uti))
+        return pasteboard.writeObjects([pbItem])
     }
 
     /// 以纯文本写回剪贴板（去除富文本格式，图片/文件转为路径文本），成功返回 true
