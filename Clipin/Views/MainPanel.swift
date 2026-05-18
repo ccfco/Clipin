@@ -159,10 +159,11 @@ struct MainPanel: View {
     }
 
     private var bottomBar: some View {
-        // macOS 26 原生半透明 Liquid Glass 命令条:悬浮在内容上(内容从玻璃后淡淡透出,
-        // 即用户说的 iOS26 感)。命令按钮全用原生 .buttonStyle(.glass)——半透明胶囊 +
-        // 自带原生 hover/press 交互,装进 GlassEffectContainer 统一融合采样(glass 不能
-        // 采样 glass)。不再自绘扁平/不透明 prominent。
+        // macOS 26 原生 Liquid Glass 命令条:悬浮在内容上,内容从玻璃后淡淡透出。
+        // 命令按钮 = ClipinFooterGlassButtonStyle:原生 .regular.interactive() 圆角矩形
+        // (~12pt,对齐 Raycast 实测——是「角的弧度」非整颗药丸),静息即可见、自带系统
+        // 原生 hover/press。装进 GlassEffectContainer 统一融合采样(glass 不能采样 glass)。
+        // 不用 .buttonStyle(.glass)(Apple 静息近隐形,深面上看不见,永远到不了 Raycast 感)。
         GlassEffectContainer {
         HStack(spacing: 8) {
             // 底栏恒为左对齐的来源面包屑：选中时显条目来源 app，无选中回退 Clipboard History。
@@ -189,7 +190,7 @@ struct MainPanel: View {
                             Button { viewModel.pasteRepresentationSelected(uti: "public.html") } label: {
                                 keyBadge(label: "HTML", key: "⌥H")
                             }
-                            .buttonStyle(.glass)
+                            .buttonStyle(ClipinFooterGlassButtonStyle())
                             .help(NSLocalizedString("Paste as HTML", comment: ""))
                         }
 
@@ -197,21 +198,21 @@ struct MainPanel: View {
                             Button { viewModel.pasteRepresentationSelected(uti: "public.rtf") } label: {
                                 keyBadge(label: "RTF", key: "⌥R")
                             }
-                            .buttonStyle(.glass)
+                            .buttonStyle(ClipinFooterGlassButtonStyle())
                             .help(NSLocalizedString("Paste as RTF", comment: ""))
                         }
 
                         Button { viewModel.pastePlainSelected() } label: {
                             keyBadge(label: "Plain Text", key: "⇧↵")
                         }
-                        .buttonStyle(.glass)
+                        .buttonStyle(ClipinFooterGlassButtonStyle())
                         .help(NSLocalizedString("Paste as Plain Text", comment: ""))
 
                         if viewModel.canOpenSelectedItem {
                             Button { viewModel.openSelected() } label: {
                                 keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
                             }
-                            .buttonStyle(.glass)
+                            .buttonStyle(ClipinFooterGlassButtonStyle())
                             .help(viewModel.selectedOpenLabel)
                         }
 
@@ -219,7 +220,7 @@ struct MainPanel: View {
                             Button { _ = viewModel.previewSelected() } label: {
                                 keyBadge(label: viewModel.isPreparingPreview ? "Preparing…" : "Preview", key: "Space")
                             }
-                            .buttonStyle(.glass)
+                            .buttonStyle(ClipinFooterGlassButtonStyle())
                             .help(NSLocalizedString("Preview", comment: ""))
                         }
                     }
@@ -232,7 +233,7 @@ struct MainPanel: View {
                         key: "↵"
                     )
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(ClipinFooterGlassButtonStyle())
             }
 
             if viewModel.isContinuousPasteEnabled {
@@ -247,7 +248,7 @@ struct MainPanel: View {
                 Button { viewModel.toggleActionsPalette() } label: {
                     keyBadge(label: "Actions", key: "⌘K")
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(ClipinFooterGlassButtonStyle())
             }
             .padding(.leading, 10)
         }
@@ -314,7 +315,8 @@ struct MainPanel: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 6)
-        .glassEffect(.regular, in: Capsule(style: .continuous))
+        // 来源面包屑与命令胶囊同语:圆角矩形(~12pt)原生 glass,对齐 Raycast 静息可见 chip。
+        .clipinChromeGlass(cornerRadius: ClipinChrome.footerChipCornerRadius)
         .frame(maxWidth: 220, alignment: .leading)
     }
 
@@ -335,7 +337,7 @@ struct MainPanel: View {
                 )
             }
         }
-        .buttonStyle(.glass)
+        .buttonStyle(ClipinFooterGlassButtonStyle())
         .help(NSLocalizedString("Press Esc to exit Continuous Paste.", comment: ""))
         .accessibilityLabel(Text("Continuous Paste"))
         .accessibilityHint(Text("Press Esc to exit Continuous Paste."))

@@ -43,6 +43,9 @@ enum ClipinChrome {
     static let detailMetadataCornerRadius: CGFloat = 12
     static let detailMediaCornerRadius: CGFloat = 14
     static let footerMinHeight: CGFloat = 44
+    /// 底栏命令胶囊/来源面包屑的圆角:实测对齐 Raycast——是「圆角矩形」(~12pt)而非整颗药丸。
+    /// 用户原话:那个按钮的弧度是「个角的弧度」。所有 footer glass chip 共用此度量。
+    static let footerChipCornerRadius: CGFloat = 12
     /// 悬浮液态玻璃底栏「外接带」高度(玻璃元件高 + 与窗口边间距)。
     /// 列表 scroll 底部 inset 与预览卡 bottom margin 共用此单一度量,防两处各算漂移。规格单元 B。
     static let floatingFooterBand: CGFloat = 56
@@ -289,6 +292,32 @@ extension View {
     /// 圆角矩形 chrome 玻璃的便捷写法。
     func clipinChromeGlass(cornerRadius: CGFloat) -> some View {
         glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+}
+
+/// 底栏命令按钮样式:对齐 Raycast 实测——静息即可见的「圆角矩形」原生 Liquid Glass 胶囊。
+/// 用与来源面包屑同一个 `.regular` 原生 glass 物料(真机截图证实 `.regular` 静息可见,
+/// 而 `.regular.interactive()` 与 `.buttonStyle(.glass)` 都是 Apple「静息近隐形」设计,
+/// 在我们这种深色玻璃面上等于看不见,永远到不了 Raycast 那种静息可见的胶囊感)。
+/// 按下时叠一层极轻 press 反馈;不是 `.glassProminent`(不透明)、不是手搓扁平条——
+/// 只把原生 glass 物料封装成可复用 style,全底栏 chip 同语。
+struct ClipinFooterGlassButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        // 关键:先给 label 内边距再上 glass。glass 物料在「当前 bounds 内」渲染,
+        // label 不留 padding 时 bounds≈文字紧贴框,玻璃只剩一条发丝、看着像没有。
+        // 来源面包屑可见正因它先 padding 再 glass——这里与之同语,胶囊才有「身体」。
+        configuration.label
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .glassEffect(
+                .regular,
+                in: RoundedRectangle(
+                    cornerRadius: ClipinChrome.footerChipCornerRadius,
+                    style: .continuous
+                )
+            )
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

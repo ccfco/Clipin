@@ -6,7 +6,6 @@ import UniformTypeIdentifiers
 
 /// 右侧预览面板
 struct PreviewPane: View {
-    @Environment(\.colorScheme) private var colorScheme
     let item: ClipItem?
     var searchQuery: String = ""
     let sceneState: ClipinSceneState
@@ -504,19 +503,12 @@ struct PreviewPane: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // 预览图片直接落在毛玻璃面上：无底板、无描边、无阴影、无内边距，
+    // 只给位图本身一个轻微圆角，避免裁切边过于锐利（对齐 Raycast）。
     private func mediaCanvas<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-            content()
-                .padding(16)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.6)
-        )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.12 : 0.06), radius: 8, y: 3)
+        content()
+            .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func supportingBlock<Content: View>(
