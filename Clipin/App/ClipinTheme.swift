@@ -239,9 +239,8 @@ struct ClipinSectionIntro: View {
     }
 }
 
-/// 所有列表型界面的选中/悬停底板，主列表、动作面板、设置侧栏共用。
-/// `isPinned` 让主列表用左侧 accent rail 表达 pin 状态（常驻、低调），
-/// 不依赖 hover/selected 才显示。其他列表（动作面板 / 设置 sidebar）不传 isPinned。
+/// 所有列表型界面的选中/悬停底板,主列表、动作面板、设置侧栏共用。
+/// 减法重构:选中=单一中性填充(无 rail/无描边);pinned 仍用左侧中性细 rail 表达常驻 pin 状态。
 struct ClipinSelectableRowBackground: View {
     let isSelected: Bool
     let isHovered: Bool
@@ -249,7 +248,6 @@ struct ClipinSelectableRowBackground: View {
     let selectionStroke: Color
     let hoverFill: Color
     let hoverStroke: Color
-    var showsSelectionAccent: Bool = false
     var isPinned: Bool = false
 
     var body: some View {
@@ -262,28 +260,10 @@ struct ClipinSelectableRowBackground: View {
                             ? hoverFill
                             : Color.clear
                 )
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
-                        .strokeBorder(
-                            isSelected
-                                ? selectionStroke
-                                : isHovered
-                                    ? hoverStroke
-                                    : Color.clear,
-                            lineWidth: 0.5
-                        )
-                )
 
-            // 选中态 rail：3pt 满色（优先级最高）
-            // pinned 态 rail：2pt 淡色（非选中时表达 pin 状态）
-            // selected + pinned 合并到 selected 视觉，不叠加信号
-            if isSelected && showsSelectionAccent {
-                Capsule(style: .continuous)
-                    .fill(selectionStroke)
-                    .frame(width: 3)
-                    .padding(.vertical, 10)
-                    .padding(.leading, 7)
-            } else if isPinned {
+            // pinned 态 rail:2pt 中性细条(非选中时表达常驻 pin 状态)。
+            // 选中态不再画 rail/描边,仅靠中性填充区分。
+            if isPinned && !isSelected {
                 Capsule(style: .continuous)
                     .fill(selectionStroke.opacity(0.45))
                     .frame(width: 2)
@@ -343,16 +323,17 @@ enum ClipinInk {
     static let quaternary = Color(nsColor: .quaternaryLabelColor)
 }
 
-/// 选中态语义色:列表/动作面板/侧栏共用,改一处调全局(theme-tint 的天然接入缝)。
+/// 选中态语义色:列表/动作面板/侧栏共用,改一处调全局。
+/// 减法重构后全部中性化(规格单元 A/E:accent 仅余 Paste 主键帽)。
 enum ClipinSelectionInk {
-    static let fill = Color.accentColor.opacity(0.18)
-    static let stroke = Color.accentColor
-    static let dim = Color.accentColor.opacity(0.72)        // 选中态里弱化的次要文字/⌘N
-    static let highlight = Color.accentColor.opacity(0.22)  // 搜索命中高亮
+    static let fill = Color.primary.opacity(0.07)          // 选中填充,明确强于 hover
+    static let stroke = Color.primary.opacity(0.28)        // 仅余 pinned rail 用(中性)
+    static let dim = Color.secondary                        // 选中态次要文字/⌘N,中性
+    static let highlight = Color.accentColor.opacity(0.20)  // 仅搜索命中高亮保留极淡 accent
 }
 
-/// 悬停态语义色:与选中态同一套抓手。
+/// 悬停态语义色:与选中态同一套抓手,明确弱于选中。
 enum ClipinHoverInk {
-    static let fill = Color.primary.opacity(0.06)
-    static let stroke = Color.primary.opacity(0.12)
+    static let fill = Color.primary.opacity(0.035)
+    static let stroke = Color.clear
 }

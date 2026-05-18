@@ -35,7 +35,6 @@ func detectHexColor(in text: String) -> Color? {
 
 private struct ClipThumbnailImage: View {
     let path: String
-    let isSelected: Bool
     @State private var thumbnail: CGImage?
 
     var body: some View {
@@ -47,11 +46,11 @@ private struct ClipThumbnailImage: View {
             } else {
                 Image(systemName: "photo")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.secondary)
+                    .foregroundStyle(ClipinInk.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(isSelected ? ClipinSelectionInk.fill : Color(nsColor: .controlColor))
+                            .fill(Color(nsColor: .controlColor))
                     )
             }
         }
@@ -84,15 +83,17 @@ struct ClipItemRow: View {
                 .animation(ClipinMotion.feedback, value: isHovered)
 
             Text(highlightedDisplayText)
-                .font(.system(size: 13.5, weight: isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.primary)
+                .font(.system(size: 13.5, weight: .medium))
+                .foregroundStyle(ClipinInk.primary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // pin 信号已交给 left accent rail（ClipinSelectableRowBackground.isPinned），
+            // pin 信号已交给左侧中性细 rail（ClipinSelectableRowBackground.isPinned），
             // 这里不再放 pin.fill icon，避免列表 row 视觉重量过高。
 
-            trailingMeta
+            if isSelected {
+                trailingMeta
+            }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
@@ -105,8 +106,7 @@ struct ClipItemRow: View {
         if item.clipType == .image, let path = item.imagePath,
            !path.isEmpty {
             ClipThumbnailImage(
-                path: path,
-                isSelected: isSelected
+                path: path
             )
         } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
             ZStack {
@@ -118,51 +118,32 @@ struct ClipItemRow: View {
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.secondary)
+                .foregroundStyle(ClipinInk.secondary)
                 .frame(width: 24, height: 22)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? ClipinSelectionInk.fill : Color(nsColor: .controlColor))
+                        .fill(Color(nsColor: .controlColor))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(
-                                    isSelected ? ClipinSelectionInk.dim : ClipinHoverInk.stroke,
-                                    lineWidth: 0.5
-                                )
+                                .strokeBorder(ClipinHoverInk.stroke, lineWidth: 0.5)
                         )
-                )
-                .shadow(
-                    color: Color.accentColor.opacity(isSelected ? 0.18 * sceneState.stripAccentOpacity : 0),
-                    radius: 8,
-                    y: 2
                 )
         }
     }
 
     /// trailing 区域：⌘N + 时间戳，无胶囊背景，贴边显示。
-    /// ⌘N 静止时极淡（opacity 0.35），hover/selected 时浮现到全可见。
-    /// 时间戳改用默认 design（去掉 monospaced log 感），常驻但低调。
+    /// 仅在选中行显示（非选中时整体隐藏），常驻中性色调。
     private var trailingMeta: some View {
         HStack(spacing: 7) {
             if let n = shortcutNumber {
                 Text("⌘\(n)")
                     .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(
-                        isSelected
-                            ? ClipinSelectionInk.dim
-                            : ClipinInk.secondary
-                    )
-                    .opacity(isSelected || isHovered ? 1.0 : 0.42)
-                    .animation(ClipinMotion.feedback, value: isHovered)
+                    .foregroundStyle(ClipinSelectionInk.dim)
             }
 
             Text(timeLabel)
                 .font(.system(size: 10.5, weight: .regular))
-                .foregroundStyle(
-                    isSelected
-                        ? ClipinSelectionInk.dim
-                        : ClipinInk.tertiary
-                )
+                .foregroundStyle(ClipinSelectionInk.dim)
         }
         .padding(.trailing, 2)
     }

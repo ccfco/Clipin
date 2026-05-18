@@ -525,7 +525,6 @@ private struct ItemListView: View {
                 selectionStroke: ClipinSelectionInk.stroke,
                 hoverFill: ClipinHoverInk.fill,
                 hoverStroke: ClipinHoverInk.stroke,
-                showsSelectionAccent: true,
                 isPinned: item.isPinned
             )
         )
