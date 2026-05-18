@@ -35,7 +35,6 @@ struct MainPanel: View {
         VStack(spacing: 0) {
             headerBar
             contentArea
-            bottomBar
         }
         .frame(width: 800, height: 540)
         .overlay(alignment: .top) {
@@ -50,9 +49,12 @@ struct MainPanel: View {
             }
         }
         .overlay(alignment: .bottom) {
+            bottomBar
+        }
+        .overlay(alignment: .bottom) {
             if let notice = viewModel.launcherNotice {
                 launcherNoticeBanner(notice)
-                    .padding(.bottom, ClipinChrome.footerMinHeight + ClipinChrome.shellGap)
+                    .padding(.bottom, ClipinChrome.floatingFooterBand + ClipinChrome.shellGap)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -157,12 +159,11 @@ struct MainPanel: View {
     }
 
     private var bottomBar: some View {
-        // Raycast 式扁平命令条:一条带顶部细分隔线的薄 bar,贴窗底全宽,
-        // 内全是扁平文字+小键帽,无玻璃簇、无大按钮(窗面已是 Liquid Glass)。
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(Color.primary.opacity(0.08))
-                .frame(height: 0.5)
+        // macOS 26 原生半透明 Liquid Glass 命令条:悬浮在内容上(内容从玻璃后淡淡透出,
+        // 即用户说的 iOS26 感)。命令按钮全用原生 .buttonStyle(.glass)——半透明胶囊 +
+        // 自带原生 hover/press 交互,装进 GlassEffectContainer 统一融合采样(glass 不能
+        // 采样 glass)。不再自绘扁平/不透明 prominent。
+        GlassEffectContainer {
         HStack(spacing: 8) {
             // 底栏恒为左对齐的来源面包屑：选中时显条目来源 app，无选中回退 Clipboard History。
             sourceBreadcrumb
@@ -188,7 +189,7 @@ struct MainPanel: View {
                             Button { viewModel.pasteRepresentationSelected(uti: "public.html") } label: {
                                 keyBadge(label: "HTML", key: "⌥H")
                             }
-                            .buttonStyle(FooterCommandButtonStyle())
+                            .buttonStyle(.glass)
                             .help(NSLocalizedString("Paste as HTML", comment: ""))
                         }
 
@@ -196,21 +197,21 @@ struct MainPanel: View {
                             Button { viewModel.pasteRepresentationSelected(uti: "public.rtf") } label: {
                                 keyBadge(label: "RTF", key: "⌥R")
                             }
-                            .buttonStyle(FooterCommandButtonStyle())
+                            .buttonStyle(.glass)
                             .help(NSLocalizedString("Paste as RTF", comment: ""))
                         }
 
                         Button { viewModel.pastePlainSelected() } label: {
                             keyBadge(label: "Plain Text", key: "⇧↵")
                         }
-                        .buttonStyle(FooterCommandButtonStyle())
+                        .buttonStyle(.glass)
                         .help(NSLocalizedString("Paste as Plain Text", comment: ""))
 
                         if viewModel.canOpenSelectedItem {
                             Button { viewModel.openSelected() } label: {
                                 keyBadge(label: viewModel.selectedOpenLabel, key: "⌘O")
                             }
-                            .buttonStyle(FooterCommandButtonStyle())
+                            .buttonStyle(.glass)
                             .help(viewModel.selectedOpenLabel)
                         }
 
@@ -218,7 +219,7 @@ struct MainPanel: View {
                             Button { _ = viewModel.previewSelected() } label: {
                                 keyBadge(label: viewModel.isPreparingPreview ? "Preparing…" : "Preview", key: "Space")
                             }
-                            .buttonStyle(FooterCommandButtonStyle())
+                            .buttonStyle(.glass)
                             .help(NSLocalizedString("Preview", comment: ""))
                         }
                     }
@@ -231,7 +232,7 @@ struct MainPanel: View {
                         key: "↵"
                     )
                 }
-                .buttonStyle(FooterCommandButtonStyle())
+                .buttonStyle(.glass)
             }
 
             if viewModel.isContinuousPasteEnabled {
@@ -246,11 +247,12 @@ struct MainPanel: View {
                 Button { viewModel.toggleActionsPalette() } label: {
                     keyBadge(label: "Actions", key: "⌘K")
                 }
-                .buttonStyle(FooterCommandButtonStyle())
+                .buttonStyle(.glass)
             }
             .padding(.leading, 10)
         }
-        .padding(.horizontal, ClipinChrome.shellGap * 2)
+        .padding(.horizontal, ClipinChrome.footerContentInset)
+        .padding(.vertical, ClipinChrome.footerContentInset)
         .frame(minHeight: ClipinChrome.footerMinHeight)
         .onHover { hovering in
             withAnimation(ClipinMotion.commandReveal) {
@@ -258,6 +260,9 @@ struct MainPanel: View {
             }
         }
         .animation(ClipinMotion.commandReveal, value: isFooterHovered)
+        .scaleEffect(sceneState.stripScale)
+        .padding(.horizontal, ClipinChrome.shellGap * 2)
+        .padding(.bottom, ClipinChrome.shellGap)
         .animation(ClipinMotion.focusShift, value: sceneState)
         }
     }
@@ -307,6 +312,9 @@ struct MainPanel: View {
                     .truncationMode(.tail)
             }
         }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .glassEffect(.regular, in: Capsule(style: .continuous))
         .frame(maxWidth: 220, alignment: .leading)
     }
 
@@ -326,14 +334,8 @@ struct MainPanel: View {
                     foreground: ClipinInk.secondary
                 )
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.primary.opacity(0.06))
-            )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.glass)
         .help(NSLocalizedString("Press Esc to exit Continuous Paste.", comment: ""))
         .accessibilityLabel(Text("Continuous Paste"))
         .accessibilityHint(Text("Press Esc to exit Continuous Paste."))
@@ -432,33 +434,6 @@ struct MainPanel: View {
     }
 }
 
-/// 底栏命令按钮的统一交互态:与列表行 hover 同一视觉语言(中性轻量圆角高亮),
-/// macOS 26 / Raycast 菜单同款——hover 浮现淡圆角底,按下轻微变暗。不上玻璃。
-private struct FooterCommandButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        FooterCommandButtonBody(configuration: configuration)
-    }
-
-    private struct FooterCommandButtonBody: View {
-        let configuration: ButtonStyle.Configuration
-        @State private var isHovering = false
-
-        var body: some View {
-            configuration.label
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.primary.opacity(isHovering ? 0.08 : 0))
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .opacity(configuration.isPressed ? 0.55 : 1)
-                .onHover { isHovering = $0 }
-                .animation(.easeOut(duration: 0.12), value: isHovering)
-        }
-    }
-}
-
 private struct ItemListView: View {
     let sections: [ClipSection]
     /// ViewModel 预计算的 ⌘1-9 序列（按当前可见列表；搜索结果可包含 pinned 项）
@@ -510,6 +485,9 @@ private struct ItemListView: View {
                     }
                 }
                 .padding(.vertical, 6)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: ClipinChrome.floatingFooterBand)
             }
             .onChange(of: selection.wrappedValue) { _, newID in
                 hoveredID = nil
