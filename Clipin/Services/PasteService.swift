@@ -9,12 +9,16 @@ enum PasteService {
 
         switch item.clipType {
         case .text, .url:
+            // 先把 string(+URL) 写进游离 pbItem 验证成功，再 clearContents + writeObjects。
+            // 与 writeAllRepresentations/.image/.file 保持同一「写前先验证 payload」语义，
+            // 避免 setString 失败时已清空用户当前系统剪贴板。
+            let pbItem = NSPasteboardItem()
+            guard pbItem.setString(item.content, forType: .string) else { return false }
+            if item.clipType == .url {
+                guard pbItem.setString(item.content, forType: .URL) else { return false }
+            }
             pasteboard.clearContents()
-            let didWriteString = pasteboard.setString(item.content, forType: .string)
-            let didWriteURL = item.clipType == .url
-                ? pasteboard.setString(item.content, forType: .URL)
-                : true
-            return didWriteString && didWriteURL
+            return pasteboard.writeObjects([pbItem])
 
         case .image:
             guard let path = item.imagePath,
