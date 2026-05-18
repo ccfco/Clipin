@@ -362,24 +362,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        // AppKit system material 基座(Apple HIG:控件须坐在 system material 上,不能直接贴
-        // 内容;Raycast/Spotlight 同款 vibrant 实底)。SwiftUI 内容层不再自带玻璃/背景。
-        // 不给 effectView 加 cornerRadius/mask/border —— 窗口 frame 的 cornerRadius KVC
-        // 已统一圆角,再 mask 会与 NSWindow frame hairline 叠成双发丝线(CLAUDE.md 已记此坑)。
-        let materialBase = NSVisualEffectView(frame: NSRect(origin: .zero, size: panelSize))
-        materialBase.material = .popover
-        materialBase.blendingMode = .behindWindow
-        materialBase.state = .active
-        let panelHosting = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
-        panelHosting.translatesAutoresizingMaskIntoConstraints = false
-        materialBase.addSubview(panelHosting)
-        NSLayoutConstraint.activate([
-            panelHosting.leadingAnchor.constraint(equalTo: materialBase.leadingAnchor),
-            panelHosting.trailingAnchor.constraint(equalTo: materialBase.trailingAnchor),
-            panelHosting.topAnchor.constraint(equalTo: materialBase.topAnchor),
-            panelHosting.bottomAnchor.constraint(equalTo: materialBase.bottomAnchor)
-        ])
-        panel.contentView = materialBase
+        // macOS 26 原生 Liquid Glass 窗面(Spotlight/Raycast 那种"整窗即玻璃、内容浮其上"):
+        // NSGlassEffectView 是 .glassEffect 的 AppKit 对应,contentView 自动用 Auto Layout
+        // 绑定几何。launcher 整体即导航层,整面玻璃合法。cornerRadius 与 shell 一致;窗口
+        // frame cornerRadius KVC 在 macOS 26 会自动 concentric 框住玻璃,不手动 mask/border
+        // (避免与 NSWindow frame hairline 叠双发丝线 —— CLAUDE.md 旧坑)。
+        let glassSurface = NSGlassEffectView()
+        glassSurface.cornerRadius = ClipinChrome.shellCornerRadius
+        glassSurface.contentView = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
+        panel.contentView = glassSurface
         panel.isMovableByWindowBackground = true
         panel.title = ""
         panel.titleVisibility = .hidden

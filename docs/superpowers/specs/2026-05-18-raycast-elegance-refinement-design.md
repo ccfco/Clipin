@@ -57,9 +57,18 @@
 
 - 删除 `MainPanel.body`(`MainPanel.swift:24-37`)的 `GlassEffectContainer { … }.glassEffect(.regular, in: RoundedRectangle(shellCornerRadius))` 外壳玻璃包裹。`MainPanel` 根视图不再自带任何玻璃/背景。
 - **前提勘误(Codex 复审抓到的 BLOCKER,留痕):** 本 spec 初稿写"交还给**已存在的** AppKit `NSVisualEffectView`",这是**错的**——核实代码:全仓无任何 `NSVisualEffectView`,`ClipinPanelChromeView` 不存在,panel 是 `backgroundColor=.clear / isOpaque=false`,`ClipinPanelHostingView` 注释自承"chrome 玻璃已移交 SwiftUI 根 GlassEffectContainer"。即:迁移时**故意**把材质全放进 SwiftUI 外壳玻璃、AppKit 层全透明,CLAUDE.md 那条"ClipinPanelChromeView 用 NSVisualEffectView"决策**从未落地**。所以单纯删外壳玻璃会让窗口变透明(=坏)。教训:又一次"凭文档/CLAUDE.md 断言而未核代码",必须代码为准。
-- **单元 1 因此必须同时实现 AppKit system material 基座(不是"交还",是"补建"):** 在 `AppDelegate` 主 panel 创建处,把 `panel.contentView` 由"直接是 `ClipinPanelHostingView(MainPanel)`"改为"`NSVisualEffectView`(`material=.popover`、`blendingMode=.behindWindow`、`state=.active`)作 contentView,`ClipinPanelHostingView(MainPanel)` 作其填满子视图(`autoresizingMask=[.width,.height]`)"。这层 = Raycast/Spotlight 的 vibrant 实底,也是 Apple HIG 明文要求的"controls sit on top of a **system material**, not directly on content"分隔层。SwiftUI 内容层仍**不**加任何 `.background(...)`。
-- **不给 effectView 加 cornerRadius/masksToBounds/border:** 窗口 frame 的 `cornerRadius` KVC(=`shellCornerRadius` 24)已负责圆角;再给 effectView 自己 mask 会与 NSWindow frame hairline 叠成双发丝线(CLAUDE.md 已记此坑)。effectView 方角填满,由 window frame KVC 统一圆角。`hasShadow`、cornerRadius KVC、`.nonactivatingPanel`、safe-area 归零等窗口行为**全部不变**。
-- **`NSVisualEffectView` system material 一旦建好即绝不可删/不可被当内容盒子**:它与单元 2 删的 SwiftUI 内容层 `ClipinContentSurface` 是两个层级——删的是 SwiftUI 内容层盒子,补/保的是 AppKit 窗口层 system material。
+- **材质勘误 2(用户真机截图验证,留痕):** 第一版补建用 `NSVisualEffectView(material=.popover, blendingMode=.behindWindow)`,真机截图证明**太透**——列表 gutter/行间/预览空白处能清晰读到后面窗口(终端)的字,又脏又不原生。根因:`.popover` 是"小气泡浮在自己内容上"的旧 vibrancy,拿来当"整窗、透到桌面"的 launcher 底材质是错的 API。用户明确目标:**macOS 26 聚焦搜索(Spotlight)那种**。
+- **单元 1 正解:用 macOS 26 AppKit 原生 `NSGlassEffectView` 作窗面**(WWDC25/310 + Xcode26 AppKit 文档背书)。`NSGlassEffectView` 是 `.glassEffect` 的 AppKit 对应:`contentView` 放内容、`cornerRadius` 设圆角、自动用 Auto Layout 把几何绑定到 contentView。在 `AppDelegate` 主 panel 创建处:
+  ```
+  let glass = NSGlassEffectView()
+  glass.cornerRadius = ClipinChrome.shellCornerRadius
+  glass.contentView = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
+  panel.contentView = glass
+  ```
+  这就是 Spotlight/Raycast 那种"整窗即 Liquid Glass、内容浮其上"的原生做法——launcher 整体即导航层,整面玻璃合法(非文档内容)。SwiftUI 内容层仍**不**加任何 `.background(...)`。
+- **窗口行为不变:** `hasShadow`、panel frame `cornerRadius` KVC(macOS 26 会自动让窗口 concentric 框住玻璃)、`.nonactivatingPanel`、`canBecomeKey`、safe-area 归零、键盘路由全部不动。不再用 `NSVisualEffectView`,不手动 mask/border。
+- **窗面玻璃一旦建好即绝不可删/不可被当内容盒子**:它与单元 2 删的 SwiftUI 内容层 `ClipinContentSurface` 是两个层级——删的是 SwiftUI 内容层盒子,补/保的是 AppKit 窗口层 Liquid Glass 窗面。
+- **已知待真机确认项(留痕):** 窗面变真玻璃后,单元 3 的底栏 `GlassEffectContainer` 是"玻璃浮在玻璃上"。Spotlight 底部是直接坐玻璃面上的轻控件,不是二层玻璃簇。本次先做决定性的窗面材质修正(用户唯一明确否的点),底栏 glass-on-glass 是否需压扁为 Spotlight 式贴面控件,留作用户下一次真机检查时定,不投机预改(用户本次未否底栏)。
 - `panelContent` 仍按 shell 圆角 `clipShape`(保留圆角窗形,这与玻璃层无关),但不再有 `.glassEffect`。圆角值沿用 `ClipinChrome.shellCornerRadius`(窗形裁剪,非玻璃元件,不适用 `.containerConcentric`)。
 
 ### 单元 2 —— 删掉所有内容盒子,内容直接坐实底
