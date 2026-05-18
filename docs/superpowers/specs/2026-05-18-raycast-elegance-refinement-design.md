@@ -45,11 +45,14 @@
 ### 单元 B —— macOS 26 悬浮液态玻璃底部(无底栏条)
 
 - **删整条底栏玻璃**:`MainPanel.bottomBar` 外层 `.clipinChromeGlass(cornerRadius: sectionCornerRadius)`(满宽长条 + 内部胶囊再叠玻璃 = 玻璃套玻璃)删除。无底栏条、无任何分隔线。
-- **内容铺满全高**:列表 + 预览不再为 footer 预留 `footerMinHeight` 高度;`bottomBar` 从 VStack 流式布局改为 `.overlay(alignment: .bottom)` 浮层。内容延伸到窗口最底,悬浮玻璃覆盖其上。
+- **底栏改浮层**:不再为 footer 预留 `footerMinHeight` 流式高度;`bottomBar` 从 VStack 流式布局改为 `.overlay(alignment: .bottom)` 浮层。但「内容是否进玻璃带」按区域语义分两类(见下「分区遮挡语义」),不是一律铺满钻进玻璃。
 - **底部 = 离散半透明液态玻璃元件**(`.glassEffect(.regular, in:)`,原生即半透明,内容从玻璃后淡淡透出):
   - **左:source 面包屑胶囊**。D2(已确认):显示选中项来源 app —— 彩色 `sourceAppIcon` + `sourceName`;无选中时回退 `Clipboard History` + Clipin 字形。`.glassEffect(.regular, in: Capsule)`。
   - **右:Paste / Actions 软圆角玻璃组**。单个 `.glassEffect(.regular, in: RoundedRectangle)` 容器,内含两段:`Paste to {targetApp}` + 主键帽 `↵`(此处保留 accent —— 全窗唯一强调点)| 细分隔 | `Actions` + 键帽 `⌘K`。hover 辅助命令簇(HTML/RTF/Plain/Open/Preview)与连续粘贴 pill 行为不变,重新归位到该悬浮布局中(各自独立玻璃元件,不再套在长条里)。
-- **悬浮遮挡防护(修根因,不打补丁)**:内容铺满全高会让悬浮玻璃永久遮住最后一行/预览底部 —— 这是真实可用性 bug,不接受。解法:列表滚动容器 + 预览内容追加 `底部 content inset = 悬浮玻璃外接高度 + 间距`,使滚到底时最后一项能停在玻璃**上方**可达;滚动途中的中间项从半透明玻璃后透出(macOS 26 / iOS 26 悬浮 tab bar 安全区同款语义)。视觉「内容在玻璃后」与可用「最后一项可达」二者同时成立。
+- **分区遮挡语义(选项 A,已与用户确认;修根因,不打补丁)**:悬浮玻璃带会遮住其下内容,这对两类区域语义不同,必须分别处理,不能一律「铺满钻进玻璃」:
+  - **左·列表(可滚动内容)**:铺满全高,滚动途中中间行从半透明玻璃后淡淡透出(macOS 26 / iOS 26 悬浮 tab bar 安全区同款沉浸语义);滚动容器追加 `底部 content inset = 悬浮玻璃带外接高度 + 间距`,保证滚到底时最后一行能停在玻璃**上方**可达。
+  - **右·预览卡(含钉底横滚胶囊条,固定且右端可横滚交互)**:固定可交互元素**绝不允许**落到遮挡玻璃下。预览卡(`ClipinContentSurface(elevated:true)`,连同其 `safeAreaInset(.bottom)` 的 `PreviewFooterRail`)整体 `bottom margin = 悬浮玻璃带外接高度 + 间距`,使预览卡(连同胶囊条)永远完整位于玻璃带**上方**——绝不进玻璃带、绝不被遮、横滚发现区全程可见可交互。预览卡因此比列表矮约一个玻璃带高度;左右底部不对称是「可滚动内容沉浸 vs 固定元数据抬起」的语义诚实结果,刻意为之,非缺陷。
+  - 两区共用同一个「悬浮玻璃带外接高度 + 间距」度量,作为单一可调常量,避免两处各算导致漂移。
 - 本单元同时恢复并升级 CLAUDE.md 原始决策「底栏是透明 command area,只让独立胶囊各自承担材质」(迁移时被糊回长条,已退化);现进一步做到内容在悬浮玻璃后流动,符合真·macOS 26 习语。
 
 ### 单元 C —— 搜索:borderless inline(去框)
@@ -95,7 +98,7 @@ grep -rn "@available(macOS" Clipin/ --include='*.swift' | wc -l                #
 
 1. 全窗无底栏条、无任何分隔线
 2. 底部 source 面包屑 + Paste/Actions 是半透明液态玻璃,内容从玻璃后淡淡透出
-3. 滚到底时最后一行/预览底部可达,不被悬浮玻璃永久遮挡(悬浮遮挡防护生效)
+3. 分区遮挡(选项 A)验收:① 列表滚到底,最后一行能停在玻璃带上方完整可达(不被永久遮);② 预览卡连同横滚胶囊条**永远完整位于玻璃带上方**,任意选中项、任意横滚位置下 bottom-right Paste/Actions 玻璃都不压住胶囊条、不挡横滚发现区
 4. 选中 = 单一极淡中性填充,无 rail/加粗/变色/描边;在已转不透明的列表面上,任意时刻不会出现"多行同时选中"错觉(根因修复验证)
 5. 搜索无框,glyph+文字直接坐面上
 6. 预览胶囊条除去顶部发丝线外原样;读作卡内安静注脚,不与底部 footer 抢
@@ -118,7 +121,7 @@ grep -rn "@available(macOS" Clipin/ --include='*.swift' | wc -l                #
 | 风险 | 缓解 |
 |---|---|
 | 列表转不透明面后,选中仅靠极淡中性是否仍不可混淆 | 核查项 #4 专项;选中清空 hoveredID(沿用既有根因修复)防 hover 残留成第二选中态 |
-| 悬浮玻璃永久遮住最后一行(可用性 bug) | 单元 B「悬浮遮挡防护」:content 底部 inset = 玻璃高度 + 间距;核查项 #3 验收 |
+| 悬浮玻璃遮住最后一行 / 压住预览横滚胶囊条(可用性 bug,用户已逮到的设计洞) | 单元 B「分区遮挡语义(选项 A)」:列表 scroll inset 保最后一行可达;预览卡含条整体 bottom margin 抬到玻璃带上方绝不被遮;核查项 #3 ①②分别验收;两区共用单一度量常量防漂移 |
 | ⌘1-9 失去可发现性(与 CLAUDE.md 决策冲突) | 折中:仅当前选中行显示 ⌘N+时间戳;规格审阅时由用户最终确认是否可接受 |
 | rail 退役不彻底,残留 `showsSelectionAccent` 悬空 | grep 门强制为 0;Codex 复审专查 |
 | D1 改全局 token 牵连动作面板/设置侧栏视觉 | 这是预期且符合「共享选中语法」;核查项 #8 确认三处一致而非各异 |
