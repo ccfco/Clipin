@@ -4,14 +4,12 @@ import SwiftUI
 
 struct ShortcutRecorder: NSViewRepresentable {
     @Binding var shortcut: HotKeyShortcut
-    let glass: ClipinGlassPalette
 
     func makeNSView(context: Context) -> ShortcutRecorderField {
         let field = ShortcutRecorderField()
         field.onShortcutChange = { newShortcut in
             shortcut = newShortcut
         }
-        field.applyTheme(glass: glass)
         field.update(shortcut: shortcut)
         return field
     }
@@ -20,7 +18,6 @@ struct ShortcutRecorder: NSViewRepresentable {
         nsView.onShortcutChange = { newShortcut in
             shortcut = newShortcut
         }
-        nsView.applyTheme(glass: glass)
         nsView.update(shortcut: shortcut)
     }
 }
@@ -107,16 +104,6 @@ final class ShortcutRecorderField: NSTextField {
         if !isCapturing {
             stringValue = currentDisplayString
         }
-    }
-
-    func applyTheme(glass: ClipinGlassPalette) {
-        idleBorderColor = NSColor(glass.controlStroke)
-        activeBorderColor = NSColor(glass.emphasisStroke)
-        idleBackgroundColor = NSColor(glass.controlFill)
-        activeBackgroundColor = NSColor(glass.emphasisFill)
-        idleTextColor = NSColor.secondaryLabelColor
-        activeTextColor = NSColor(glass.emphasisInk)
-        updateAppearance()
     }
 
     private func updateAppearance() {

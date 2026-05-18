@@ -105,14 +105,6 @@ struct SettingsView: View {
     @State private var hoveredTab: SettingsTab?
     @State private var activeOperation: SettingsOperation?
 
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
-    private var hierarchy: ClipinPanelHierarchy {
-        .make(glass: glass, colorScheme: colorScheme)
-    }
-
     private var appDisplayName: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
@@ -212,11 +204,7 @@ struct SettingsView: View {
             .padding(.vertical, 6)
         }
         .background(
-            ClipinSurfaceBackground(
-                role: .sidebar,
-                cornerRadius: ClipinChrome.sectionCornerRadius,
-                glass: glass
-            )
+            ClipinContentSurface(cornerRadius: ClipinChrome.sectionCornerRadius)
         )
         .frame(width: 220)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -229,23 +217,27 @@ struct SettingsView: View {
         return HStack(spacing: 10) {
             Image(systemName: tab.icon)
                 .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(isSelected ? hierarchy.selection.ink : hierarchy.support.subduedInk)
+                .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.secondary)
                 .frame(width: 28, height: 24)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? hierarchy.selection.badgeFill : glass.keycapTint)
-                        .overlay(
+                    Group {
+                        if isSelected {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(
-                                    isSelected ? hierarchy.selection.stroke.opacity(0.72) : glass.hoverStroke.opacity(0.82),
-                                    lineWidth: 0.5
+                                .fill(ClipinSelectionInk.fill)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .strokeBorder(ClipinSelectionInk.stroke.opacity(0.72), lineWidth: 0.5)
                                 )
-                        )
+                        } else {
+                            Color.clear
+                                .clipinChromeGlass(in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                    }
                 )
 
             Text(tab.title)
                 .font(.system(size: 13, weight: isSelected ? .medium : .regular))
-                .foregroundStyle(isSelected ? hierarchy.selection.ink : hierarchy.support.subduedInk)
+                .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.secondary)
 
             Spacer(minLength: 0)
         }
@@ -256,10 +248,10 @@ struct SettingsView: View {
             ClipinSelectableRowBackground(
                 isSelected: isSelected,
                 isHovered: isHovered,
-                selectionFill: hierarchy.selection.fill,
-                selectionStroke: hierarchy.selection.stroke,
-                hoverFill: glass.hoverFill,
-                hoverStroke: glass.hoverStroke
+                selectionFill: ClipinSelectionInk.fill,
+                selectionStroke: ClipinSelectionInk.stroke,
+                hoverFill: ClipinHoverInk.fill,
+                hoverStroke: ClipinHoverInk.stroke
             )
         )
         .padding(.horizontal, ClipinChrome.listRowOuterInset)
@@ -295,11 +287,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(
-            ClipinSurfaceBackground(
-                role: .column,
-                cornerRadius: ClipinChrome.sectionCornerRadius,
-                glass: glass
-            )
+            ClipinContentSurface(cornerRadius: ClipinChrome.sectionCornerRadius)
         )
     }
 
@@ -318,8 +306,7 @@ struct SettingsView: View {
                                 shortcut: Binding(
                                     get: { settings.shortcut },
                                     set: { settings.shortcut = $0 }
-                                ),
-                                glass: glass
+                                )
                             )
                             .frame(width: 180, height: 34)
 
@@ -332,7 +319,7 @@ struct SettingsView: View {
 
                         Text("Click the field and press the new shortcut. At least one modifier key is required.")
                             .font(.system(size: 11))
-                            .foregroundStyle(hierarchy.support.subduedInk)
+                            .foregroundStyle(ClipinInk.secondary)
 
                         if let note = settings.shortcutRegistrationNote {
                             Label(note, systemImage: "exclamationmark.triangle.fill")
@@ -417,18 +404,8 @@ struct SettingsView: View {
                         .frame(width: 220)
                     }
 
-                    groupDivider
-
-                    settingFieldRow("Theme", description: "Adjust the panel tint while keeping native materials and shared chrome.") {
-                        Picker("", selection: $settings.visualTheme) {
-                            ForEach(VisualTheme.allCases, id: \.self) { theme in
-                                Text(theme.displayName).tag(theme)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.segmented)
-                        .frame(width: 220)
-                    }
+                    // 主题 tint 已推迟,首版单 native 无 tint —— 显式决策,非兜底
+                    // SettingsStore.visualTheme 持久化保留以防破坏迁移,渲染层不再读其值。
 
                     groupDivider
 
@@ -452,7 +429,7 @@ struct SettingsView: View {
 
     private var privacyContent: some View {
         VStack(spacing: contentStackSpacing) {
-            contentGroup(role: .control, padding: 14) {
+            contentGroup(padding: 14) {
                 infoCallout(
                     icon: "checkmark.shield.fill",
                     tint: .green,
@@ -610,7 +587,7 @@ struct SettingsView: View {
                                     ?? "Choose a destination folder for clipin-backup.json."
                             )
                             .font(.system(size: 12))
-                            .foregroundStyle(hierarchy.support.subduedInk)
+                            .foregroundStyle(ClipinInk.secondary)
                             .lineLimit(2)
                             .truncationMode(.middle)
 
@@ -643,7 +620,7 @@ struct SettingsView: View {
                             Text("Backup status")
                                 .font(.system(size: 13, weight: .medium))
 
-                            contentGroup(role: .control, padding: 14) {
+                            contentGroup(padding: 14) {
                                 HStack(spacing: 10) {
                                     if let error = autoBackup.lastBackupError {
                                         Circle().fill(Color.red).frame(width: 7, height: 7)
@@ -654,12 +631,12 @@ struct SettingsView: View {
                                         Circle().fill(Color.green).frame(width: 7, height: 7)
                                         Text(localized("Last backup: %@", relativeString(from: date, to: now)))
                                             .font(.system(size: 11))
-                                            .foregroundStyle(hierarchy.support.subduedInk)
+                                            .foregroundStyle(ClipinInk.secondary)
                                     } else {
                                         Circle().fill(Color.secondary.opacity(0.4)).frame(width: 7, height: 7)
                                         Text("No backup yet")
                                             .font(.system(size: 11))
-                                            .foregroundStyle(hierarchy.support.hintInk)
+                                            .foregroundStyle(ClipinInk.tertiary)
                                     }
 
                                     Spacer()
@@ -704,11 +681,11 @@ struct SettingsView: View {
 
                         Text(currentVersionLine)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(hierarchy.support.subduedInk)
+                            .foregroundStyle(ClipinInk.secondary)
 
                         Text("A fast, keyboard-first clipboard companion for macOS.")
                             .font(.system(size: 12))
-                            .foregroundStyle(hierarchy.support.subduedInk)
+                            .foregroundStyle(ClipinInk.secondary)
                             .frame(maxWidth: 420, alignment: .leading)
                     }
                 }
@@ -722,7 +699,7 @@ struct SettingsView: View {
 
                         Text("Clipin checks GitHub Releases and lets you download the newest build manually.")
                             .font(.system(size: 11))
-                            .foregroundStyle(hierarchy.support.subduedInk)
+                            .foregroundStyle(ClipinInk.secondary)
                     }
 
                     toggleSettingRow(
@@ -749,7 +726,7 @@ struct SettingsView: View {
 
                             Text(latestRelease.notesPreview.isEmpty ? NSLocalizedString("No release notes provided.", comment: "") : latestRelease.notesPreview)
                                 .font(.system(size: 11))
-                                .foregroundStyle(hierarchy.support.subduedInk)
+                                .foregroundStyle(ClipinInk.secondary)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -763,7 +740,7 @@ struct SettingsView: View {
 
                                 Text("Open the GitHub release page, or jump straight to the latest installer asset.")
                                     .font(.system(size: 11))
-                                    .foregroundStyle(hierarchy.support.subduedInk)
+                                    .foregroundStyle(ClipinInk.secondary)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -820,14 +797,13 @@ struct SettingsView: View {
     // MARK: - Transfer
 
     private func detailHeader(for tab: SettingsTab) -> some View {
-        contentGroup(role: .contentStage, padding: 18) {
+        contentGroup(padding: 18) {
             HStack(alignment: .center, spacing: 16) {
-                ClipinSymbolOrb(systemImage: tab.icon, glass: glass, hierarchy: hierarchy, size: 58, iconSize: 20)
+                ClipinSymbolOrb(systemImage: tab.icon, size: 58, iconSize: 20)
 
                 ClipinSectionIntro(
                     title: tab.title,
                     subtitle: tab.summary,
-                    hierarchy: hierarchy,
                     eyebrow: "Preferences",
                     titleFontSize: 21
                 )
@@ -838,22 +814,22 @@ struct SettingsView: View {
     }
 
     private var windowBackdrop: some View {
-        ClipinShellBackground(glass: glass, cornerRadius: ClipinChrome.shellCornerRadius)
+        Color.clear
+            .clipinChromeGlass(cornerRadius: ClipinChrome.shellCornerRadius)
             .ignoresSafeArea()
     }
 
     private var groupDivider: some View {
         Rectangle()
-            .fill(hierarchy.support.hintInk.opacity(colorScheme == .dark ? 0.16 : 0.12))
+            .fill(ClipinInk.tertiary.opacity(colorScheme == .dark ? 0.16 : 0.12))
             .frame(height: 1)
     }
 
     private var settingsSelectionPlaceholder: some View {
-        contentGroup(role: .contentStage, padding: 18) {
+        contentGroup(padding: 18) {
             ClipinSectionIntro(
                 title: "Choose a section",
                 subtitle: "Select a section from the sidebar to edit Clipin preferences.",
-                hierarchy: hierarchy,
                 eyebrow: "Preferences",
                 titleFontSize: 18,
                 subtitleFontSize: 12
@@ -874,7 +850,7 @@ struct SettingsView: View {
                 if let description {
                     Text(description)
                         .font(.system(size: 11))
-                        .foregroundStyle(hierarchy.support.subduedInk)
+                        .foregroundStyle(ClipinInk.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -896,12 +872,12 @@ struct SettingsView: View {
 
                 Text(description)
                     .font(.system(size: 11))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
 
                 if let note {
                     Text(note)
                         .font(.system(size: 11))
-                        .foregroundStyle(hierarchy.support.subduedInk)
+                        .foregroundStyle(ClipinInk.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -955,7 +931,7 @@ struct SettingsView: View {
 
                 descriptionText
                     .font(.system(size: 11))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -995,13 +971,12 @@ struct SettingsView: View {
 
                 Text(message)
                     .font(.system(size: 11))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
             }
         }
     }
 
     private func contentGroup<Content: View>(
-        role: ClipinSurfaceRole = .grouped,
         padding: CGFloat = 18,
         @ViewBuilder content: () -> Content
     ) -> some View {
@@ -1009,11 +984,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(padding)
             .background(
-                ClipinSurfaceBackground(
-                    role: role,
-                    cornerRadius: ClipinChrome.cardCornerRadius,
-                    glass: glass
-                )
+                ClipinContentSurface(cornerRadius: ClipinChrome.cardCornerRadius)
             )
     }
 
@@ -1024,21 +995,15 @@ struct SettingsView: View {
     private func noticeView(_ notice: SettingsNotice) -> some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(notice.isError ? Color.red : glass.emphasisInk)
+                .fill(notice.isError ? Color.red : Color.accentColor)
                 .frame(width: 8, height: 8)
             Text(notice.text)
                 .font(.system(size: 12))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(
-            ClipinSurfaceBackground(
-                role: .control,
-                cornerRadius: ClipinChrome.searchCornerRadius,
-                glass: glass
-            )
-        )
+        .clipinChromeGlass(cornerRadius: ClipinChrome.searchCornerRadius)
     }
 
     private func showNotice(_ text: String, isError: Bool = false) {

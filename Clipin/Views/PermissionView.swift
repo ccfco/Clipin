@@ -4,20 +4,11 @@ import SwiftUI
 struct PermissionView: View {
     @ObservedObject var permission: PermissionManager
     var onSkip: (() -> Void)? = nil
-    @ObservedObject private var settings = SettingsStore.shared
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
-    private var hierarchy: ClipinPanelHierarchy {
-        .make(glass: glass, colorScheme: colorScheme)
-    }
 
     var body: some View {
         ZStack {
-            ClipinShellBackground(glass: glass)
+            Color.clear
+                .clipinChromeGlass(cornerRadius: ClipinChrome.shellCornerRadius)
                 .ignoresSafeArea()
 
             VStack(spacing: ClipinChrome.shellGap) {
@@ -35,8 +26,6 @@ struct PermissionView: View {
             HStack(alignment: .center, spacing: 16) {
                 ClipinSymbolOrb(
                     systemImage: permission.isAccessibilityGranted ? "checkmark.circle.fill" : "keyboard.badge.ellipsis",
-                    glass: glass,
-                    hierarchy: hierarchy,
                     size: 62,
                     iconSize: 22
                 )
@@ -46,7 +35,6 @@ struct PermissionView: View {
                     subtitle: permission.isAccessibilityGranted
                         ? "Accessibility access is on. Clipin can now return the selected item straight to the current app."
                         : "Accessibility access lets Clipin send the selected item back to the current app the moment you press Return.",
-                    hierarchy: hierarchy,
                     eyebrow: "Accessibility",
                     titleFontSize: 21
                 )
@@ -55,12 +43,12 @@ struct PermissionView: View {
             HStack(spacing: 10) {
                 Label(permission.isAccessibilityGranted ? "Granted" : "Pending", systemImage: permission.isAccessibilityGranted ? "checkmark.seal.fill" : "clock")
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(permission.isAccessibilityGranted ? Color.green : hierarchy.support.subduedInk)
+                    .foregroundStyle(permission.isAccessibilityGranted ? Color.green : ClipinInk.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(permission.isAccessibilityGranted ? Color.green.opacity(0.14) : glass.controlFill)
+                            .fill(permission.isAccessibilityGranted ? Color.green.opacity(0.14) : ClipinHoverInk.fill)
                     )
 
                 Spacer(minLength: 0)
@@ -69,11 +57,7 @@ struct PermissionView: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ClipinSurfaceBackground(
-                role: .column,
-                cornerRadius: ClipinChrome.sectionCornerRadius,
-                glass: glass
-            )
+            ClipinContentSurface(cornerRadius: ClipinChrome.sectionCornerRadius)
         )
     }
 
@@ -85,7 +69,7 @@ struct PermissionView: View {
 
                 Text("Clipin stays local and can record history without this access, but automatic paste needs Accessibility permission.")
                     .font(.system(size: 12))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -99,11 +83,7 @@ struct PermissionView: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ClipinSurfaceBackground(
-                role: .grouped,
-                cornerRadius: ClipinChrome.cardCornerRadius,
-                glass: glass
-            )
+            ClipinContentSurface(cornerRadius: ClipinChrome.cardCornerRadius)
         )
     }
 
@@ -116,10 +96,10 @@ struct PermissionView: View {
                 } else if let onSkip {
                     Button("Skip for now") { onSkip() }
                         .buttonStyle(.plain)
-                        .foregroundStyle(hierarchy.support.hintInk)
+                        .foregroundStyle(ClipinInk.tertiary)
                 } else {
                     Text("Clipin will restart automatically after permission is granted.")
-                        .foregroundStyle(hierarchy.support.hintInk)
+                        .foregroundStyle(ClipinInk.tertiary)
                 }
             }
             .font(.system(size: 11.5, weight: .medium))
@@ -133,15 +113,15 @@ struct PermissionView: View {
                 Label(permission.isAccessibilityGranted ? "Permission Granted" : "Open System Settings",
                       systemImage: permission.isAccessibilityGranted ? "checkmark.circle.fill" : "gearshape")
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(glass.emphasisOnStrongFill)
+                    .foregroundStyle(Color.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(permission.isAccessibilityGranted ? Color.green.opacity(0.80) : glass.emphasisStrongFill)
+                            .fill(permission.isAccessibilityGranted ? Color.green.opacity(0.80) : Color.accentColor)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .strokeBorder(glass.emphasisStroke, lineWidth: 0.75)
+                                    .strokeBorder(ClipinSelectionInk.stroke, lineWidth: 0.75)
                             )
                     )
             }
@@ -152,13 +132,7 @@ struct PermissionView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            ClipinSurfaceBackground(
-                role: .strip,
-                cornerRadius: ClipinChrome.sectionCornerRadius,
-                glass: glass
-            )
-        )
+        .clipinChromeGlass(cornerRadius: ClipinChrome.sectionCornerRadius)
     }
 
     private func permStepRow(_ number: String, text: LocalizedStringKey) -> some View {
@@ -169,11 +143,11 @@ struct PermissionView: View {
                 .frame(width: 18, height: 18)
                 .background(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(glass.emphasisStrongFill)
+                        .fill(Color.accentColor)
                 )
             Text(text)
                 .font(.system(size: 13))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

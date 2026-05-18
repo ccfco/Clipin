@@ -215,7 +215,6 @@ struct ClipinRoundedSurface: View {
 struct ClipinKeycap: View {
     let key: String
     let foreground: Color
-    let background: Color
 
     var body: some View {
         Text(key)
@@ -225,10 +224,7 @@ struct ClipinKeycap: View {
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(background)
-            )
+            .clipinChromeGlass(in: RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 }
 
@@ -267,8 +263,6 @@ struct ClipinSymbolOrb: View {
     @State private var isFloating = false
 
     let systemImage: String
-    let glass: ClipinGlassPalette
-    let hierarchy: ClipinPanelHierarchy
     var size: CGFloat = 64
     var iconSize: CGFloat = 22
     var emphasis: Double = 1.0
@@ -276,23 +270,20 @@ struct ClipinSymbolOrb: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
-                .fill(glass.emphasisStrongFill.opacity(0.08 + (0.04 * emphasis)))
+                .fill(Color.accentColor.opacity(0.10 + (0.05 * emphasis)))
                 .frame(width: size + 14, height: size + 14)
                 .blur(radius: 18)
                 .scaleEffect(reduceMotion ? 1 : (isFloating ? 1.04 : 0.98))
 
             RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
-                .fill(glass.emphasisFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
-                        .strokeBorder(glass.emphasisStroke.opacity(0.82), lineWidth: 0.75)
-                )
+                .fill(Color.clear)
                 .frame(width: size, height: size)
+                .clipinChromeGlass(in: RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous))
                 .scaleEffect(reduceMotion ? 1 : (isFloating ? 1.01 : 0.99))
 
             Image(systemName: systemImage)
                 .font(.system(size: iconSize, weight: .medium))
-                .foregroundStyle(hierarchy.selection.ink)
+                .foregroundStyle(Color.accentColor)
         }
         .onAppear {
             guard !reduceMotion else { return }
@@ -307,7 +298,6 @@ struct ClipinSymbolOrb: View {
 struct ClipinSectionIntro: View {
     let title: LocalizedStringKey
     let subtitle: LocalizedStringKey
-    let hierarchy: ClipinPanelHierarchy
     var eyebrow: LocalizedStringKey? = nil
     var titleFontSize: CGFloat = 24
     var subtitleFontSize: CGFloat = 13
@@ -317,7 +307,7 @@ struct ClipinSectionIntro: View {
             if let eyebrow {
                 Text(eyebrow)
                     .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(hierarchy.support.smallLabelInk)
+                    .foregroundStyle(ClipinInk.secondary)
                     .tracking(0.45)
             }
 
@@ -327,7 +317,7 @@ struct ClipinSectionIntro: View {
 
             Text(subtitle)
                 .font(.system(size: subtitleFontSize))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
         }

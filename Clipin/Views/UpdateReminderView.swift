@@ -7,27 +7,16 @@ struct UpdateReminderView: View {
     let onViewRelease: () -> Void
     let onDownload: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
-    private var hierarchy: ClipinPanelHierarchy {
-        .make(glass: glass, colorScheme: colorScheme)
-    }
-
     var body: some View {
         ZStack {
-            ClipinShellBackground(glass: glass, cornerRadius: ClipinChrome.shellCornerRadius)
+            Color.clear
+                .clipinChromeGlass(cornerRadius: ClipinChrome.shellCornerRadius)
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 12) {
                     ClipinSymbolOrb(
                         systemImage: "arrow.down.circle.fill",
-                        glass: glass,
-                        hierarchy: hierarchy,
                         size: 48,
                         iconSize: 18
                     )
@@ -44,7 +33,7 @@ struct UpdateReminderView: View {
                             )
                         )
                         .font(.system(size: 12))
-                        .foregroundStyle(hierarchy.support.subduedInk)
+                        .foregroundStyle(ClipinInk.secondary)
                     }
 
                     Spacer(minLength: 0)
@@ -53,16 +42,12 @@ struct UpdateReminderView: View {
                 if !release.notesPreview.isEmpty {
                     Text(release.notesPreview)
                         .font(.system(size: 11))
-                        .foregroundStyle(hierarchy.support.subduedInk)
+                        .foregroundStyle(ClipinInk.secondary)
                         .lineLimit(5)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
                         .background(
-                            ClipinSurfaceBackground(
-                                role: .grouped,
-                                cornerRadius: ClipinChrome.cardCornerRadius,
-                                glass: glass
-                            )
+                            ClipinContentSurface(cornerRadius: ClipinChrome.cardCornerRadius)
                         )
                 }
 

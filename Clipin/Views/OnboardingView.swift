@@ -62,12 +62,6 @@ struct OnboardingView: View {
     @ObservedObject var permission: PermissionManager
     @ObservedObject var flow: OnboardingFlow
 
-    @ObservedObject private var settings = SettingsStore.shared
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var glass: ClipinGlassPalette { .make(theme: settings.visualTheme, colorScheme: colorScheme) }
-    private var hierarchy: ClipinPanelHierarchy { .make(glass: glass, colorScheme: colorScheme) }
-
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -76,7 +70,7 @@ struct OnboardingView: View {
         }
         .padding(ClipinChrome.shellGap)
         .frame(width: 560, height: 640)
-        .background(ClipinShellBackground(glass: glass))
+        .clipinChromeGlass(cornerRadius: ClipinChrome.shellCornerRadius)
         .onAppear { permission.checkNow() }
         .accessibilityElement(children: .contain)
     }
@@ -94,7 +88,7 @@ struct OnboardingView: View {
                     .font(.system(size: 16, weight: .semibold))
                 Text("Keyboard-first clipboard, refined for focus.")
                     .font(.system(size: 11))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
             }
 
             Spacer()
@@ -102,7 +96,7 @@ struct OnboardingView: View {
             HStack(spacing: 6) {
                 ForEach(OnboardingFlow.Step.allCases) { candidate in
                     Capsule(style: .continuous)
-                        .fill(candidate == flow.step ? glass.emphasisStrongFill : glass.controlFill)
+                        .fill(candidate == flow.step ? Color.accentColor : ClipinHoverInk.fill)
                         .frame(width: candidate == flow.step ? 24 : 8, height: 8)
                 }
             }
@@ -138,7 +132,7 @@ struct OnboardingView: View {
 
     private var welcomeStage: some View {
         VStack(alignment: .leading, spacing: 12) {
-            surface(role: .column, cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
+            surface(cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .center, spacing: 22) {
                         welcomeCopy
@@ -164,7 +158,7 @@ struct OnboardingView: View {
 
     private var workflowStage: some View {
         VStack(alignment: .leading, spacing: 12) {
-            surface(role: .column, cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
+            surface(cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
                 VStack(alignment: .leading, spacing: 18) {
                     sectionHeader(title: "Three beats, then you are back to typing.", subtitle: "Clipin is built around one quiet loop: copy, open, confirm.")
 
@@ -178,7 +172,7 @@ struct OnboardingView: View {
                 }
             }
 
-            surface(role: .grouped, cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
+            surface(cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
                 HStack(spacing: 10) {
                     hintCard(title: "Tab", message: "Cycle clip types")
                     hintCard(title: "⌘K", message: "Open global actions")
@@ -191,7 +185,7 @@ struct OnboardingView: View {
 
     private var permissionStage: some View {
         VStack(alignment: .leading, spacing: 12) {
-            surface(role: .column, cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
+            surface(cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
                 VStack(alignment: .leading, spacing: 18) {
                     sectionHeader(
                         title: permission.isAccessibilityGranted ? "You are ready to paste straight back into any app." : "One system permission unlocks the last step.",
@@ -200,13 +194,13 @@ struct OnboardingView: View {
                             : "Accessibility access lets Clipin return the selected item to the current app the moment you press Return."
                     )
 
-                    surface(role: .contentStage, cornerRadius: ClipinChrome.detailStageCornerRadius, padding: 16) {
+                    surface(cornerRadius: ClipinChrome.detailStageCornerRadius, padding: 16) {
                         HStack(spacing: 14) {
                             ZStack {
-                                Circle().fill(permission.isAccessibilityGranted ? Color.green.opacity(0.18) : glass.emphasisFill)
+                                Circle().fill(permission.isAccessibilityGranted ? Color.green.opacity(0.18) : ClipinSelectionInk.fill)
                                 Image(systemName: permission.isAccessibilityGranted ? "checkmark.circle.fill" : "keyboard.badge.ellipsis")
                                     .font(.system(size: 20, weight: .medium))
-                                    .foregroundStyle(permission.isAccessibilityGranted ? Color.green : glass.emphasisInk)
+                                    .foregroundStyle(permission.isAccessibilityGranted ? Color.green : Color.accentColor)
                             }
                             .frame(width: 52, height: 52)
 
@@ -219,7 +213,7 @@ struct OnboardingView: View {
                                         : LocalizedStringKey("Needed for automatic paste")
                                 )
                                 .font(.system(size: 12))
-                                .foregroundStyle(hierarchy.support.subduedInk)
+                                .foregroundStyle(ClipinInk.secondary)
                             }
 
                             Spacer()
@@ -227,7 +221,7 @@ struct OnboardingView: View {
                         }
                     }
 
-                    surface(role: .grouped, cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
+                    surface(cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
                         VStack(alignment: .leading, spacing: 12) {
                             permissionStep("1", text: "Open System Settings.")
                             permissionStep("2", text: "Find Clipin in Privacy & Security → Accessibility.")
@@ -237,10 +231,10 @@ struct OnboardingView: View {
                 }
             }
 
-            surface(role: .grouped, cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
+            surface(cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
                 Label("Without Accessibility, Clipin can save history but cannot paste back into other apps. Turn it on to finish setup.", systemImage: "info.circle")
                     .font(.system(size: 12))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -255,11 +249,11 @@ struct OnboardingView: View {
                 Button("Maybe later") { flow.skipPermission() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(hierarchy.support.hintInk)
+                    .foregroundStyle(ClipinInk.tertiary)
             } else {
                 Text(footerHint)
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -275,7 +269,7 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(ClipinSurfaceBackground(role: .strip, cornerRadius: ClipinChrome.sectionCornerRadius, glass: glass))
+        .clipinChromeGlass(cornerRadius: ClipinChrome.sectionCornerRadius)
     }
 
     private var primaryTitle: LocalizedStringKey {
@@ -318,7 +312,6 @@ private extension OnboardingView {
             ClipinSectionIntro(
                 title: "A calmer home for everything you copy.",
                 subtitle: "Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus.",
-                hierarchy: hierarchy,
                 eyebrow: "Welcome",
                 titleFontSize: 28
             )
@@ -343,45 +336,45 @@ private extension OnboardingView {
     }
 
     var heroArtwork: some View {
-        ClipinSymbolOrb(systemImage: "clipboard.fill", glass: glass, hierarchy: hierarchy, size: 132, iconSize: 40)
+        ClipinSymbolOrb(systemImage: "clipboard.fill", size: 132, iconSize: 40)
         .frame(width: 176, height: 176)
     }
 
-    func surface<Content: View>(role: ClipinSurfaceRole, cornerRadius: CGFloat, padding: CGFloat, @ViewBuilder content: () -> Content) -> some View {
+    func surface<Content: View>(cornerRadius: CGFloat, padding: CGFloat, @ViewBuilder content: () -> Content) -> some View {
         content()
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(ClipinSurfaceBackground(role: role, cornerRadius: cornerRadius, glass: glass))
+            .background(ClipinContentSurface(cornerRadius: cornerRadius))
     }
 
     func sectionHeader(title: LocalizedStringKey, subtitle: LocalizedStringKey) -> some View {
-        ClipinSectionIntro(title: title, subtitle: subtitle, hierarchy: hierarchy, titleFontSize: 27)
+        ClipinSectionIntro(title: title, subtitle: subtitle, titleFontSize: 27)
     }
 
     func shortcutBadge(_ label: LocalizedStringKey, key: String) -> some View {
         HStack(spacing: 8) {
             Text(label)
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            ClipinKeycap(key: key, foreground: hierarchy.command.ink.opacity(0.78), background: hierarchy.command.keycapFill)
+            ClipinKeycap(key: key, foreground: ClipinInk.secondary)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(ClipinSurfaceBackground(role: .control, cornerRadius: ClipinChrome.badgeCornerRadius, glass: glass))
+        .clipinChromeGlass(cornerRadius: ClipinChrome.badgeCornerRadius)
     }
 
     func featureCard(icon: String, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
-        surface(role: .grouped, cornerRadius: ClipinChrome.cardCornerRadius, padding: 14) {
+        surface(cornerRadius: ClipinChrome.cardCornerRadius, padding: 14) {
             VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(glass.emphasisInk)
+                    .foregroundStyle(Color.accentColor)
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
                 Text(message)
                     .font(.system(size: 11))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -390,16 +383,16 @@ private extension OnboardingView {
     }
 
     func workflowCard(index: String, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
-        surface(role: .contentStage, cornerRadius: ClipinChrome.detailStageCornerRadius, padding: 14) {
+        surface(cornerRadius: ClipinChrome.detailStageCornerRadius, padding: 14) {
             VStack(alignment: .leading, spacing: 10) {
                 Text(index)
                     .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(hierarchy.selection.secondaryInk)
+                    .foregroundStyle(ClipinInk.secondary)
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
                 Text(message)
                     .font(.system(size: 11))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -409,17 +402,17 @@ private extension OnboardingView {
 
     var workflowConnector: some View {
         Capsule(style: .continuous)
-            .fill(glass.emphasisStroke.opacity(0.7))
+            .fill(ClipinSelectionInk.stroke.opacity(0.7))
             .frame(width: 18, height: 2)
             .padding(.top, 28)
     }
 
     func hintCard(title: String, message: LocalizedStringKey) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            ClipinKeycap(key: title, foreground: hierarchy.command.ink.opacity(0.78), background: hierarchy.command.keycapFill)
+            ClipinKeycap(key: title, foreground: ClipinInk.secondary)
             Text(message)
                 .font(.system(size: 11))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -432,11 +425,11 @@ private extension OnboardingView {
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
-                .background(glass.emphasisInk)
+                .background(Color.accentColor)
                 .clipShape(Circle())
             Text(text)
                 .font(.system(size: 12))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
                 .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -445,25 +438,25 @@ private extension OnboardingView {
     func statusChip(_ text: LocalizedStringKey, granted: Bool) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(granted ? Color.green : hierarchy.command.ink.opacity(0.82))
+            .foregroundStyle(granted ? Color.green : ClipinInk.secondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background((granted ? Color.green.opacity(0.12) : glass.controlFill).clipShape(Capsule(style: .continuous)))
+            .background((granted ? Color.green.opacity(0.12) : ClipinHoverInk.fill).clipShape(Capsule(style: .continuous)))
     }
 
     func primaryButton(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(glass.emphasisOnStrongFill)
+                .foregroundStyle(Color.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(glass.emphasisStrongFill)
+                        .fill(Color.accentColor)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .strokeBorder(glass.emphasisStroke, lineWidth: 0.75)
+                                .strokeBorder(ClipinSelectionInk.stroke, lineWidth: 0.75)
                         )
                 )
         }

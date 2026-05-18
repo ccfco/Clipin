@@ -280,8 +280,7 @@ struct MainPanel: View {
 
                 ClipinKeycap(
                     key: "Esc",
-                    foreground: Color.accentColor.opacity(0.82),
-                    background: Color(nsColor: .controlColor)
+                    foreground: Color.accentColor.opacity(0.82)
                 )
             }
             .padding(.horizontal, 10)
@@ -329,8 +328,7 @@ struct MainPanel: View {
 
             ClipinKeycap(
                 key: key,
-                foreground: ClipinInk.secondary,
-                background: Color(nsColor: .controlColor)
+                foreground: ClipinInk.secondary
             )
         }
         .padding(.leading, ClipinChrome.footerCalloutHorizontalLeading)
@@ -348,8 +346,7 @@ struct MainPanel: View {
                 .fixedSize(horizontal: true, vertical: false)
             ClipinKeycap(
                 key: key,
-                foreground: emphasized ? Color.accentColor.opacity(0.82) : ClipinInk.secondary,
-                background: Color(nsColor: .controlColor)
+                foreground: emphasized ? Color.accentColor.opacity(0.82) : ClipinInk.secondary
             )
         }
         .padding(.horizontal, emphasized ? 10 : 0)
@@ -594,8 +591,7 @@ private struct ItemListView: View {
     private func badgeCapsule(_ key: String) -> some View {
         ClipinKeycap(
             key: key,
-            foreground: ClipinInk.secondary,
-            background: Color(nsColor: .controlColor)
+            foreground: ClipinInk.secondary
         )
     }
 }

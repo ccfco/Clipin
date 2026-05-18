@@ -122,8 +122,7 @@ struct ActionPalette: View {
 
             ClipinKeycap(
                 key: "Esc",
-                foreground: ClipinInk.secondary,
-                background: Color(nsColor: .controlColor)
+                foreground: ClipinInk.secondary
             )
         }
         .padding(.horizontal, 4)
@@ -138,7 +137,6 @@ struct ActionPalette: View {
         let selectedStroke = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.30 : 0.22) : ClipinSelectionInk.stroke
         let selectedInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.92 : 0.82) : Color.accentColor
         let selectedSecondaryInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.72 : 0.64) : ClipinInk.secondary
-        let selectedBadgeFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.14 : 0.10) : ClipinSelectionInk.fill
 
         return HStack(spacing: 0) {
             Label {
@@ -160,8 +158,7 @@ struct ActionPalette: View {
 
             ClipinKeycap(
                 key: action.badge,
-                foreground: isSelected ? selectedSecondaryInk : ClipinInk.secondary,
-                background: isSelected ? selectedBadgeFill : Color(nsColor: .controlColor)
+                foreground: isSelected ? selectedSecondaryInk : ClipinInk.secondary
             )
         }
         .padding(.horizontal, 12)
