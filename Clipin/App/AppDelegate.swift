@@ -362,27 +362,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        // 单玻璃层架构(Raycast/ChatGPT 真实做法):窗口本体 = 实心深色面,
-        // 不再用 NSGlassEffectView「整窗玻璃」、也不用 .behindWindow vibrant
-        // (会把桌面/终端内容透进来,反复返工真因之一)。Apple 硬限制「玻璃不能
-        // 采样玻璃」——底栏那颗悬浮液态玻璃胶囊必须背后有「实体」才折射得出 rim /
-        // hover 灰。Raycast 的窗口本身就是一块实心深色板,玻璃只在底栏那一颗。
-        // 这里用一块不透明深色 layer 当底(无桌面穿透),圆角仍由下方 panel frame
-        // cornerRadius KVC 统一框(不手动 masksToBounds,避免与 frame hairline 叠
-        // 双发丝线 —— CLAUDE.md 旧坑)。
-        let surface = NSView()
-        surface.wantsLayer = true
-        surface.layer?.backgroundColor = NSColor(srgbRed: 0.118, green: 0.118, blue: 0.129, alpha: 1).cgColor
+        // 窗面回归 macOS 26 原生整窗 Liquid Glass(导航层;Spotlight/Raycast 同款)。
+        // v2 的「实心深色 NSView」被用户多轮真机否决:不够原生、非聚焦那种。
+        // NSGlassEffectView 是 .glassEffect 的 AppKit 对应:contentView 放内容、
+        // cornerRadius 设圆角,几何由系统绑定到 contentView。launcher 整窗即导航
+        // 层,整面玻璃合法(非文档内容)。底栏命令簇是独立 GlassEffectContainer
+        // 浮其上(Apple 文档化的控件玻璃浮导航玻璃模式,非禁止的无序 glass-on-glass)。
+        // 圆角仍由下方 panel frame cornerRadius KVC 统一框(不手动 masksToBounds,
+        // 避免与 frame hairline 叠双发丝线 —— CLAUDE.md 旧坑)。
+        let glass = NSGlassEffectView()
+        glass.cornerRadius = ClipinChrome.shellCornerRadius
         let host = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
-        host.translatesAutoresizingMaskIntoConstraints = false
-        surface.addSubview(host)
-        NSLayoutConstraint.activate([
-            host.leadingAnchor.constraint(equalTo: surface.leadingAnchor),
-            host.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
-            host.topAnchor.constraint(equalTo: surface.topAnchor),
-            host.bottomAnchor.constraint(equalTo: surface.bottomAnchor)
-        ])
-        panel.contentView = surface
+        glass.contentView = host
+        panel.contentView = glass
         panel.isMovableByWindowBackground = true
         panel.title = ""
         panel.titleVisibility = .hidden
