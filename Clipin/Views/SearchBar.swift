@@ -190,7 +190,7 @@ struct SearchBar: View {
     var onCycleBrowseMode: (Bool) -> Void = { _ in }
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 9) {
             searchGlyph
 
             InterceptingTextFieldView(
@@ -209,32 +209,23 @@ struct SearchBar: View {
             if !query.isEmpty {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 12))
                         .foregroundStyle(ClipinInk.tertiary)
-                        .frame(width: 22, height: 22)
-                        .background(
-                            Circle()
-                                .fill(Color(nsColor: .controlColor))
-                        )
+                        .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.searchCornerRadius)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private var searchGlyph: some View {
-        ZStack {
-            Circle()
-                .fill(Color(nsColor: .controlColor))
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(ClipinInk.secondary)
-                .font(.system(size: 12, weight: .medium))
-        }
-        .frame(width: 24, height: 24)
+        Image(systemName: "magnifyingglass")
+            .foregroundStyle(ClipinInk.secondary)
+            .font(.system(size: 14, weight: .medium))
+            .frame(width: 20, height: 24)
     }
 
     /// 单一 filter chip：当前 mode == all 时极简（只显示一个筛选图标 + Tab 提示），
