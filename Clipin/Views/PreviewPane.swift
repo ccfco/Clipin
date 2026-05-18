@@ -392,8 +392,7 @@ struct PreviewPane: View {
         return PreviewBadgeItem(
             id: "pinned",
             title: NSLocalizedString("Pinned", comment: ""),
-            systemImage: "pin.fill",
-            emphasis: true
+            systemImage: "pin.fill"
         )
     }
 
@@ -457,7 +456,6 @@ struct PreviewPane: View {
         let title: String
         let systemImage: String?
         let icon: NSImage?
-        let emphasis: Bool
         let helpText: String?
 
         init(
@@ -465,14 +463,12 @@ struct PreviewPane: View {
             title: String,
             systemImage: String? = nil,
             icon: NSImage? = nil,
-            emphasis: Bool = false,
             helpText: String? = nil
         ) {
             self.id = id
             self.title = title
             self.systemImage = systemImage
             self.icon = icon
-            self.emphasis = emphasis
             self.helpText = helpText
         }
     }
@@ -710,7 +706,7 @@ private struct PreviewValueBadge: View {
                 .textSelection(.enabled)
         }
         .fixedSize(horizontal: true, vertical: false)
-        .foregroundStyle(item.emphasis ? Color.accentColor : ClipinInk.secondary)
+        .foregroundStyle(ClipinInk.secondary)
         .padding(.horizontal, prominence == .context ? 8 : 9)
         .padding(.vertical, prominence == .context ? 4 : 5)
         .clipinChromeGlass(in: Capsule(style: .continuous))
@@ -734,11 +730,6 @@ private struct PreviewFooterRail: View {
             .padding(.horizontal, 1)
             .padding(.top, 8)
             .padding(.bottom, 1)
-        }
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.primary.opacity(0.10))
-                .frame(height: 0.6)
         }
     }
 }
