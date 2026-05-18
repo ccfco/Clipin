@@ -367,3 +367,5 @@
 "action.pasteAsRTF" = "粘贴为 RTF";
 "Paste as HTML" = "粘贴为 HTML";
 "Paste as RTF" = "粘贴为 RTF";
+"settings.archive.formatCaption" = "归档格式：Clipin Clipboard Archive v2 ·";
+"settings.archive.openSpec" = "查看规范 ↗";

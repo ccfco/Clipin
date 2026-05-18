@@ -573,6 +573,16 @@ struct SettingsView: View {
                     isBusy: activeOperation == .importArchive,
                     action: importArchive
                 )
+
+                HStack(spacing: 4) {
+                    Text("settings.archive.formatCaption")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Link(destination: URL(string: "https://github.com/ccfco/Clipin-archive-format")!) {
+                        Text("settings.archive.openSpec")
+                            .font(.caption)
+                    }
+                }
             }
         }
     }

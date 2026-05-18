@@ -367,3 +367,5 @@
 "action.pasteAsRTF" = "Paste as RTF";
 "Paste as HTML" = "Paste as HTML";
 "Paste as RTF" = "Paste as RTF";
+"settings.archive.formatCaption" = "Archive format: Clipin Clipboard Archive v2 ·";
+"settings.archive.openSpec" = "Open Spec ↗";
