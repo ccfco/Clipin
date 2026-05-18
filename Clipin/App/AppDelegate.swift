@@ -2,25 +2,138 @@ import AppKit
 import SwiftUI
 import Combine
 
-/// NSHostingView 默认 acceptsFirstMouse = false，导致点击普通 NSWindow 里的 SwiftUI 控件
-/// 需要两次点击（第一次激活窗口，第二次才触发动作）。子类化覆盖后，首次点击直接触发动作。
-private final class ClipinHostingView<V: View>: NSHostingView<V> {
+/// 原生 titled/fullSizeContentView 窗口专用 hosting view。
+/// 这类窗口的 frame、圆角、裁切和阴影都交给 AppKit，不在 content layer 再画边/裁切。
+private final class ClipinWindowHostingView<V: View>: NSHostingView<V> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var isOpaque: Bool { false }
+    override var safeAreaInsets: NSEdgeInsets {
+        NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    }
+
+    override func updateLayer() {
+        super.updateLayer()
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.borderWidth = 0
+        layer?.borderColor = nil
+        layer?.masksToBounds = false
+    }
+}
+
+/// borderless 小浮层专用 hosting view。
+/// 没有原生 window frame 的窗口才在 content layer 负责圆角裁切和轻量分离线。
+private final class ClipinBorderlessHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var isOpaque: Bool { false }
     override func updateLayer() {
         super.updateLayer()
         // masksToBounds=true 在 CALayer compositor 层裁掉所有 AppKit subview（含 NSVisualEffectView），
-        // 是根治圆角透明的唯一正确位置——SwiftUI .clipShape() 不进入 AppKit compositor。
+        // 只用于 borderless 浮层；原生 titled 窗口不能走这里，否则会和 NSWindow frame 叠线。
         layer?.backgroundColor = .clear
         layer?.cornerRadius = ClipinChrome.shellCornerRadius
         layer?.cornerCurve = .continuous
         layer?.allowsEdgeAntialiasing = true
+        layer?.borderWidth = 1 / max(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2, 1)
+        layer?.borderColor = separatorLineColor.cgColor
         layer?.masksToBounds = true
         window?.invalidateShadow()
     }
+
+    private var separatorLineColor: NSColor {
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return isDark
+            ? NSColor.white.withAlphaComponent(0.16)
+            : NSColor.black.withAlphaComponent(0.12)
+    }
 }
 
-/// `.borderless` NSPanel 默认 canBecomeKey = false，必须子类化 override，
+/// 主 launcher 使用原生 NSPanel frame/shadow 作为外框，content view 只负责承载 material。
+private final class ClipinPanelChromeView<V: View>: NSView {
+    private let materialView = NSVisualEffectView()
+    private let hostingView: ClipinPanelHostingView<V>
+
+    init(rootView: V, contentSize: NSSize) {
+        self.hostingView = ClipinPanelHostingView(rootView: rootView)
+        super.init(frame: NSRect(origin: .zero, size: contentSize))
+
+        wantsLayer = true
+        setupMaterialView()
+        setupHostingView()
+        updateLayerChrome()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func layout() {
+        super.layout()
+        materialView.frame = bounds
+        hostingView.frame = bounds
+        updateLayerChrome()
+        window?.invalidateShadow()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateLayerChrome()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateLayerChrome()
+        window?.invalidateShadow()
+    }
+
+    private func setupMaterialView() {
+        materialView.frame = bounds
+        materialView.autoresizingMask = [.width, .height]
+        materialView.blendingMode = .behindWindow
+        materialView.material = .contentBackground
+        materialView.state = .active
+        addSubview(materialView)
+    }
+
+    private func setupHostingView() {
+        hostingView.frame = bounds
+        hostingView.autoresizingMask = [.width, .height]
+        addSubview(hostingView)
+    }
+
+    private func updateLayerChrome() {
+        guard let layer else { return }
+        layer.backgroundColor = NSColor.clear.cgColor
+        layer.borderWidth = 0
+        layer.borderColor = nil
+        // 原生 titled/fullSizeContentView window 已经负责圆角 frame 和 clipping。
+        // 这里再做 cornerRadius + masksToBounds 会在 NSVisualEffectView 边缘产生一层
+        // 抗锯齿灰边，和 NSWindow frame hairline 叠成更粗的 outer stroke。
+        layer.masksToBounds = false
+    }
+}
+
+private final class ClipinPanelHostingView<V: View>: NSHostingView<V> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var isOpaque: Bool { false }
+    // `.titled + .fullSizeContentView` 会把隐藏标题栏区域作为 SwiftUI safe area 注入，
+    // 导致 launcher 内容整体下移。主面板 chrome 已由外层 AppKit view 裁切，内容区必须填满 bounds。
+    override var safeAreaInsets: NSEdgeInsets {
+        NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    }
+
+    override func updateLayer() {
+        super.updateLayer()
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.borderWidth = 0
+        layer?.borderColor = nil
+        layer?.masksToBounds = false
+    }
+}
+
+/// launcher 是 nonactivating panel，必须子类化 override，
 /// 否则 makeKeyAndOrderFront 调用后 panel 不是 key window，TextField 无法 focus。
 private final class ClipinPanel: NSPanel {
     override var canBecomeKey: Bool { true }
@@ -95,11 +208,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private enum SettingsWindowMetrics {
-        static let size = NSSize(width: 720, height: 608)
+        static let size = NSSize(width: 748, height: 620)
     }
 
     private enum OnboardingWindowMetrics {
         static let size = NSSize(width: 560, height: 640)
+    }
+
+    private enum PermissionWindowMetrics {
+        static let size = NSSize(width: 430, height: 486)
     }
 
     private enum KeyboardContext {
@@ -301,18 +418,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         self.viewModel = vm
+        let panelSize = NSSize(width: 800, height: 540)
 
         let panel = ClipinPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 540),
-            styleMask: [.borderless, .nonactivatingPanel],
+            contentRect: NSRect(origin: .zero, size: panelSize),
+            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        panel.contentView = ClipinHostingView(rootView: MainPanel(viewModel: vm))
+        panel.contentView = ClipinPanelChromeView(
+            rootView: MainPanel(viewModel: vm),
+            contentSize: panelSize
+        )
         panel.isMovableByWindowBackground = true
+        panel.title = ""
+        panel.titleVisibility = .hidden
+        panel.titlebarAppearsTransparent = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
+        [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+            panel.standardWindowButton(button)?.isHidden = true
+        }
+        // 窗口圆角必须和 SwiftUI 内容 shellCornerRadius 一致，
+        // 否则系统 frame 的默认圆角和内容错位，叠出粗线。
+        panel.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
@@ -1022,7 +1152,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isMovableByWindowBackground = true
             newWindow.hasShadow = true
             newWindow.isReleasedWhenClosed = false
-            newWindow.contentView = ClipinHostingView(
+            // 隐藏交通灯，避免和 .fullSizeContentView 内容重叠
+            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+                newWindow.standardWindowButton(button)?.isHidden = true
+            }
+            // 通过 KVC 设置窗口圆角，让系统 frame 的裁切和 SwiftUI 内容的 shellCornerRadius 对齐
+            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
+            newWindow.contentView = ClipinWindowHostingView(
                 rootView: SettingsView(
                     settings: settings,
                     updateReminder: updateReminder,
@@ -1047,7 +1183,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let window: NSWindow
 
         if let existingWindow = updateReminderWindow {
-            existingWindow.contentView = ClipinHostingView(
+            existingWindow.contentView = ClipinBorderlessHostingView(
                 rootView: UpdateReminderView(
                     settings: settings,
                     release: release,
@@ -1072,7 +1208,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.hidesOnDeactivate = false
             newWindow.collectionBehavior = [.canJoinAllSpaces, .transient]
             newWindow.isReleasedWhenClosed = false
-            newWindow.contentView = ClipinHostingView(
+            newWindow.contentView = ClipinBorderlessHostingView(
                 rootView: UpdateReminderView(
                     settings: settings,
                     release: release,
@@ -1188,9 +1324,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             newWindow.isMovableByWindowBackground = true
             newWindow.isReleasedWhenClosed = false
             newWindow.hasShadow = true
-            // 不设 .floating，让 System Settings 等系统窗口可以自然覆盖在上方
+            // 隐藏交通灯
+            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+                newWindow.standardWindowButton(button)?.isHidden = true
+            }
+            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
             newWindow.delegate = self
-            newWindow.contentView = ClipinHostingView(
+            newWindow.contentView = ClipinWindowHostingView(
                 rootView: OnboardingView(permission: permission, flow: flow)
             )
             onboardingWindow = newWindow
@@ -1244,17 +1384,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window = existingWindow
         } else {
             let newWindow = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 400, height: 460),
+                contentRect: NSRect(origin: .zero, size: PermissionWindowMetrics.size),
                 styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
-            newWindow.contentView = NSHostingView(rootView: PermissionView(
+            newWindow.contentView = ClipinWindowHostingView(rootView: PermissionView(
                 permission: pm,
                 onSkip: { [weak newWindow] in newWindow?.close() }
             ))
             newWindow.titlebarAppearsTransparent = true
             newWindow.titleVisibility = .hidden
+            newWindow.titlebarSeparatorStyle = .none
+            newWindow.backgroundColor = .clear
+            newWindow.isOpaque = false
+            newWindow.isMovableByWindowBackground = true
+            newWindow.hasShadow = true
+            // 隐藏交通灯
+            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+                newWindow.standardWindowButton(button)?.isHidden = true
+            }
+            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
             newWindow.delegate = self
             newWindow.center()
             // 不设 .floating，让 System Settings 可以自然覆盖在权限窗口上方

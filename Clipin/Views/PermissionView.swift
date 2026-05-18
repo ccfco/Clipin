@@ -28,8 +28,6 @@ struct PermissionView: View {
             .padding(ClipinChrome.shellGap)
         }
         .frame(width: 430, height: 486)
-        .shadow(color: .black.opacity(0.16), radius: 48, y: 24)
-        .shadow(color: .black.opacity(0.06), radius: 12, y: 4)
     }
 
     private var topStage: some View {

@@ -34,7 +34,6 @@ struct MainPanel: View {
             bottomBar
         }
         .frame(width: 800, height: 540)
-        .background(ClipinShellBackground(glass: glass, sceneState: sceneState))
         .overlay(alignment: .top) {
             if viewModel.isContinuousPasteEnabled {
                 LinearGradient(

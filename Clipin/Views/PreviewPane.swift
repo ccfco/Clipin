@@ -920,24 +920,31 @@ private struct SelectableTextPreview: NSViewRepresentable {
 
 // MARK: - URL Preview
 
+/// `NSImage` 的 Sendable 包装：actor 已串行化访问，跨线程传递安全。
+private final class SendableImage: @unchecked Sendable {
+    let image: NSImage
+    init(_ image: NSImage) { self.image = image }
+}
+
 /// 远程 favicon 缓存：actor 串行化 + pending dedup，避免列表来回切换时同一 host 重复发请求。
 /// 拿不到就返回 nil，由调用方自己画 globe 占位，不在这里造假数据。
 private actor FaviconCache {
     static let shared = FaviconCache()
-    private var cache: [String: NSImage] = [:]
-    private var pending: [String: Task<NSImage?, Never>] = [:]
+    private var cache: [String: SendableImage] = [:]
+    private var pending: [String: Task<SendableImage?, Never>] = [:]
 
-    func icon(for host: String) async -> NSImage? {
+    func icon(for host: String) async -> SendableImage? {
         if let cached = cache[host] { return cached }
         if let task = pending[host] { return await task.value }
 
-        let task = Task<NSImage?, Never> {
+        let task = Task<SendableImage?, Never> {
             guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=128") else {
                 return nil
             }
             do {
                 let (data, _) = try await URLSession.shared.data(from: url)
-                return NSImage(data: data)
+                guard let img = NSImage(data: data) else { return nil }
+                return SendableImage(img)
             } catch {
                 return nil
             }
@@ -980,7 +987,7 @@ private struct FaviconView: View {
         .task(id: host ?? "") {
             image = nil
             guard let host, !host.isEmpty else { return }
-            image = await FaviconCache.shared.icon(for: host)
+            image = await FaviconCache.shared.icon(for: host)?.image
         }
     }
 }
