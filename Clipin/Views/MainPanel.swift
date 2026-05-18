@@ -4,11 +4,13 @@ import AppKit
 /// 主面板 - 更贴近 macOS 26 的 frosted glass 双栏布局
 struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
-    /// footer hover 展开辅助命令（HTML/RTF/Plain Text/Open/Preview），鼠标移开自动收起。
-    /// 底栏恒为：左 sourceBreadcrumb（选中显来源 app，无选中回退 Clipboard History）/
-    /// 右 Paste CTA(仅选中) + Continuous Paste pill(连续粘贴时) + Actions ⌘K。
-    /// 键盘用户走全局快捷键，不依赖此 hover 状态。
-    @State private var isFooterHovered = false
+    /// hover Paste → 其正上方派生次级动作玻璃胶囊簇(Raycast 式)。命中区必须
+    /// 连续:Paste 与 pills 各自维护 hover,OR 起来;pills 视图底边贴 Paste 顶边
+    /// (视觉 6pt 缝由 pills 内透明 padding 给),鼠标在两者间移动不穿死区。
+    /// 键盘用户走全局快捷键,不依赖此 hover 状态。
+    @State private var isPasteHovered = false
+    @State private var isPillsHovered = false
+    private var showsDerivedPills: Bool { isPasteHovered || isPillsHovered }
 
     private var sceneState: ClipinSceneState {
         ClipinSceneState(
@@ -192,15 +194,23 @@ struct MainPanel: View {
                     )
                 }
                 .buttonStyle(ClipinFooterGlassButtonStyle())
+                .onHover { hovering in
+                    withAnimation(ClipinMotion.commandReveal) { isPasteHovered = hovering }
+                }
                 // hover Paste → 其正上方派生次级粘贴/动作玻璃胶囊簇(真机 Raycast 式:
-                // hover 控件→正上方派生独立玻璃胶囊提示次级快捷键)。alignmentGuide 把
-                // 派生簇底边顶到 Paste 顶边上方 6pt(留缝、无箭头),不占布局、向上浮在
-                // 内容区上(与 Raycast 一致)。键盘用户走全局快捷键,不依赖此层。
+                // hover 控件→正上方派生独立玻璃胶囊提示次级快捷键)。pills 视图带 6pt
+                // 透明 bottom padding,alignmentGuide 用 d[.bottom](不 +6)让 pills
+                // 视图底边正好贴住 Paste 顶边——视觉留 6pt 缝、命中区却连续,鼠标
+                // 从 Paste 上移到 pills 不穿死区。pills 自身 onHover 维持显示。
                 .overlay(alignment: .top) {
-                    if isFooterHovered {
+                    if showsDerivedPills {
                         FooterHoverDerivedPills(pills: hoverPills())
+                            .padding(.bottom, 6)
                             .fixedSize()
-                            .alignmentGuide(.top) { dimension in dimension[.bottom] + 6 }
+                            .alignmentGuide(.top) { dimension in dimension[.bottom] }
+                            .onHover { hovering in
+                                withAnimation(ClipinMotion.commandReveal) { isPillsHovered = hovering }
+                            }
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
@@ -225,12 +235,7 @@ struct MainPanel: View {
         .padding(.horizontal, ClipinChrome.footerContentInset)
         .padding(.vertical, ClipinChrome.footerContentInset)
         .frame(minHeight: ClipinChrome.footerMinHeight)
-        .onHover { hovering in
-            withAnimation(ClipinMotion.commandReveal) {
-                isFooterHovered = hovering
-            }
-        }
-        .animation(ClipinMotion.commandReveal, value: isFooterHovered)
+        .animation(ClipinMotion.commandReveal, value: showsDerivedPills)
         .scaleEffect(sceneState.stripScale)
         .padding(.horizontal, ClipinChrome.shellGap * 2)
         .padding(.bottom, ClipinChrome.shellGap)
@@ -537,7 +542,8 @@ private struct ItemListView: View {
                 selectionStroke: ClipinSelectionInk.stroke,
                 hoverFill: ClipinHoverInk.fill,
                 hoverStroke: ClipinHoverInk.stroke,
-                isPinned: item.isPinned
+                isPinned: item.isPinned,
+                concentric: true
             )
         )
         .padding(.horizontal, ClipinChrome.listRowOuterInset)

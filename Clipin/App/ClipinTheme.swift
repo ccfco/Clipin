@@ -255,19 +255,25 @@ struct ClipinSelectableRowBackground: View {
     let hoverFill: Color
     let hoverStroke: Color
     var isPinned: Bool = false
+    /// 仅 launcher 主面板传 true:它在根部声明了 `.containerShape`,
+    /// ClipinConcentric 才有容器可同心推导。设置侧栏/动作面板无 containerShape,
+    /// 保持 false → 沿用 ClipinChrome.rowCornerRadius(spec 范围纪律:不碰辅助窗口)。
+    var concentric: Bool = false
+
+    @ViewBuilder private var fillShape: some View {
+        let color = isSelected ? selectionFill : (isHovered ? hoverFill : Color.clear)
+        if concentric {
+            // iOS 26 同心圆角:随 MainPanel 根 .containerShape 的 shell 几何
+            // 自动推导,改 shell 一处全联动,不硬编码。
+            ClipinConcentric().fill(color)
+        } else {
+            RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous).fill(color)
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {
-            // 选中/hover 底板 = iOS 26 同心圆角(随 MainPanel 根 .containerShape
-            // 的 shell 几何自动推导,改 shell 一处全联动,不硬编码 rowCornerRadius)。
-            ClipinConcentric()
-                .fill(
-                    isSelected
-                        ? selectionFill
-                        : isHovered
-                            ? hoverFill
-                            : Color.clear
-                )
+            fillShape
 
             // pinned 态 rail:2pt 中性细条(非选中时表达常驻 pin 状态)。
             // 选中态不再画 rail/描边,仅靠中性填充区分。
