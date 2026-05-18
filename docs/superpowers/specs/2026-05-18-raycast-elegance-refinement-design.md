@@ -56,8 +56,10 @@
 ### 单元 1 —— 去外壳玻璃,窗口回到连续 vibrant 实底(根因修复)
 
 - 删除 `MainPanel.body`(`MainPanel.swift:24-37`)的 `GlassEffectContainer { … }.glassEffect(.regular, in: RoundedRectangle(shellCornerRadius))` 外壳玻璃包裹。`MainPanel` 根视图不再自带任何玻璃/背景。
-- 窗口底层材质由**已存在的 AppKit 层 `NSVisualEffectView`(`.popover` material,见 CLAUDE.md 决策)**单独承担——这正是 Raycast/Spotlight 的 vibrant 实底。不在 SwiftUI 层新加任何 `.background(...)`、不新建替代 surface(避免重新长出"外壳"或不透明盒子)。
-- **`NSVisualEffectView` 是 Apple 强制要求的"system material 分隔层",绝不可删**:Apple HIG 明文"controls sit on top of a system material, not directly on content"。底栏玻璃簇与其后内容之间正是靠这层 system material 保证对比度/可读性。它不是单元 2 要删的"内容盒子",删它会直接违反 Apple 规范且 contrast 崩坏。实现者必须区分:删的是 SwiftUI **内容层**的玻璃/盒子,保的是 AppKit **窗口层**的 system material。
+- **前提勘误(Codex 复审抓到的 BLOCKER,留痕):** 本 spec 初稿写"交还给**已存在的** AppKit `NSVisualEffectView`",这是**错的**——核实代码:全仓无任何 `NSVisualEffectView`,`ClipinPanelChromeView` 不存在,panel 是 `backgroundColor=.clear / isOpaque=false`,`ClipinPanelHostingView` 注释自承"chrome 玻璃已移交 SwiftUI 根 GlassEffectContainer"。即:迁移时**故意**把材质全放进 SwiftUI 外壳玻璃、AppKit 层全透明,CLAUDE.md 那条"ClipinPanelChromeView 用 NSVisualEffectView"决策**从未落地**。所以单纯删外壳玻璃会让窗口变透明(=坏)。教训:又一次"凭文档/CLAUDE.md 断言而未核代码",必须代码为准。
+- **单元 1 因此必须同时实现 AppKit system material 基座(不是"交还",是"补建"):** 在 `AppDelegate` 主 panel 创建处,把 `panel.contentView` 由"直接是 `ClipinPanelHostingView(MainPanel)`"改为"`NSVisualEffectView`(`material=.popover`、`blendingMode=.behindWindow`、`state=.active`)作 contentView,`ClipinPanelHostingView(MainPanel)` 作其填满子视图(`autoresizingMask=[.width,.height]`)"。这层 = Raycast/Spotlight 的 vibrant 实底,也是 Apple HIG 明文要求的"controls sit on top of a **system material**, not directly on content"分隔层。SwiftUI 内容层仍**不**加任何 `.background(...)`。
+- **不给 effectView 加 cornerRadius/masksToBounds/border:** 窗口 frame 的 `cornerRadius` KVC(=`shellCornerRadius` 24)已负责圆角;再给 effectView 自己 mask 会与 NSWindow frame hairline 叠成双发丝线(CLAUDE.md 已记此坑)。effectView 方角填满,由 window frame KVC 统一圆角。`hasShadow`、cornerRadius KVC、`.nonactivatingPanel`、safe-area 归零等窗口行为**全部不变**。
+- **`NSVisualEffectView` system material 一旦建好即绝不可删/不可被当内容盒子**:它与单元 2 删的 SwiftUI 内容层 `ClipinContentSurface` 是两个层级——删的是 SwiftUI 内容层盒子,补/保的是 AppKit 窗口层 system material。
 - `panelContent` 仍按 shell 圆角 `clipShape`(保留圆角窗形,这与玻璃层无关),但不再有 `.glassEffect`。圆角值沿用 `ClipinChrome.shellCornerRadius`(窗形裁剪,非玻璃元件,不适用 `.containerConcentric`)。
 
 ### 单元 2 —— 删掉所有内容盒子,内容直接坐实底

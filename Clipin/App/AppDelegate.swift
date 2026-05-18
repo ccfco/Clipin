@@ -362,9 +362,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.contentView = ClipinPanelHostingView(
-            rootView: MainPanel(viewModel: vm)
-        )
+        // AppKit system material 基座(Apple HIG:控件须坐在 system material 上,不能直接贴
+        // 内容;Raycast/Spotlight 同款 vibrant 实底)。SwiftUI 内容层不再自带玻璃/背景。
+        // 不给 effectView 加 cornerRadius/mask/border —— 窗口 frame 的 cornerRadius KVC
+        // 已统一圆角,再 mask 会与 NSWindow frame hairline 叠成双发丝线(CLAUDE.md 已记此坑)。
+        let materialBase = NSVisualEffectView(frame: NSRect(origin: .zero, size: panelSize))
+        materialBase.material = .popover
+        materialBase.blendingMode = .behindWindow
+        materialBase.state = .active
+        let panelHosting = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
+        panelHosting.translatesAutoresizingMaskIntoConstraints = false
+        materialBase.addSubview(panelHosting)
+        NSLayoutConstraint.activate([
+            panelHosting.leadingAnchor.constraint(equalTo: materialBase.leadingAnchor),
+            panelHosting.trailingAnchor.constraint(equalTo: materialBase.trailingAnchor),
+            panelHosting.topAnchor.constraint(equalTo: materialBase.topAnchor),
+            panelHosting.bottomAnchor.constraint(equalTo: materialBase.bottomAnchor)
+        ])
+        panel.contentView = materialBase
         panel.isMovableByWindowBackground = true
         panel.title = ""
         panel.titleVisibility = .hidden

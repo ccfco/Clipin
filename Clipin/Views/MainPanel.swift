@@ -22,9 +22,10 @@ struct MainPanel: View {
 
     var body: some View {
         // 内容层不上玻璃(Apple HIG:Liquid Glass 只属导航/控件层,内容须实底)。
-        // 窗口底材质由 AppKit 层 NSVisualEffectView(.popover,见 CLAUDE.md / ClipinPanelChromeView)
-        // 单独承担——这是 Apple 要求的 system material 分隔层,绝不在 SwiftUI 再加背景。
-        // 仍按 shell 圆角裁剪,保证全宽 top 渐变/notice/ActionPalette overlay 不冲出圆角窗形。
+        // 窗口底材质由 AppKit 层 NSVisualEffectView(.popover/.behindWindow)单独承担——
+        // 见 AppDelegate 主 panel 创建处 materialBase;这是 Apple 要求的 system material
+        // 分隔层,绝不在 SwiftUI 再加背景。仍按 shell 圆角裁剪,保证全宽 top 渐变/notice/
+        // ActionPalette overlay 不冲出圆角窗形。
         panelContent
             .clipShape(
                 RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
