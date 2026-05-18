@@ -2,7 +2,7 @@ name: Clipin
 options:
   bundleIdPrefix: com.ccfco
   deploymentTarget:
-    macOS: "15.0"
+    macOS: "26.0"
   createIntermediateGroups: true
   defaultConfig: Release
 
