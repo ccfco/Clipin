@@ -372,11 +372,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
+        panel.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
         [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
             panel.standardWindowButton(button)?.isHidden = true
         }
-        // 圆角改由 SwiftUI 根部玻璃形状定义（GlassEffectContainer + glassEffect），
-        // 窗口 frame 不再自画圆角，杜绝旧 AppKit material 宿主层抗锯齿边 + frame + 自裁三者叠边。
+        // .titled 窗口始终有系统 window frame：必须用 cornerRadius KVC 把 frame 圆角设成
+        // shellCornerRadius，与 SwiftUI 根 .glassEffect/.clipShape 的 24pt 角对齐，否则
+        // 默认 titled 角会在四角露出 frame 发丝弧（与设置/引导/权限窗口同一处理）。
+        // 旧双发丝线源是已删除的 AppKit material 宿主层抗锯齿边，不是此 KVC。
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
