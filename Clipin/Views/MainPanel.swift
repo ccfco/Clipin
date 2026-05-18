@@ -281,18 +281,30 @@ struct MainPanel: View {
 
     private var sourceBreadcrumb: some View {
         HStack(spacing: 7) {
-            if let item = viewModel.selectedListItem, let name = item.sourceName {
-                if let icon = sourceAppIcon(bundleId: item.sourceApp) {
-                    Image(nsImage: icon).resizable().frame(width: 14, height: 14)
+            if let item = viewModel.selectedListItem {
+                if let name = item.sourceName {
+                    if let icon = sourceAppIcon(bundleId: item.sourceApp) {
+                        Image(nsImage: icon).resizable().frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "doc.on.clipboard")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(ClipinInk.secondary)
+                    }
+                    Text(name)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(ClipinInk.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 } else {
                     Image(systemName: "doc.on.clipboard")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(ClipinInk.secondary)
+                    Text(NSLocalizedString("Unknown Source", comment: ""))
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(ClipinInk.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
-                Text(name)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(ClipinInk.secondary)
-                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
             } else {
                 Image(systemName: "doc.on.clipboard")
                     .font(.system(size: 11, weight: .semibold))
@@ -300,12 +312,14 @@ struct MainPanel: View {
                 Text("Clipboard History")
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(ClipinInk.secondary)
-                    .lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 6)
         .clipinChromeGlass(in: Capsule(style: .continuous))
+        .frame(maxWidth: 220, alignment: .leading)
     }
 
     private var continuousPastePill: some View {

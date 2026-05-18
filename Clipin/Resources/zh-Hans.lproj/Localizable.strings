@@ -62,6 +62,7 @@
 
 /* MainPanel - bottom bar */
 "Clipboard History" = "剪贴板历史";
+"Unknown Source" = "未知来源";
 "No selection" = "未选中";
 "Actions" = "动作";
 "Continuous Paste" = "连续粘贴";
