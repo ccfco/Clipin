@@ -36,8 +36,6 @@ func detectHexColor(in text: String) -> Color? {
 private struct ClipThumbnailImage: View {
     let path: String
     let isSelected: Bool
-    let glass: ClipinGlassPalette
-    let hierarchy: ClipinPanelHierarchy
     @State private var thumbnail: CGImage?
 
     var body: some View {
@@ -49,11 +47,11 @@ private struct ClipThumbnailImage: View {
             } else {
                 Image(systemName: "photo")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isSelected ? hierarchy.selection.ink : hierarchy.support.subduedInk)
+                    .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(isSelected ? hierarchy.selection.badgeFill : glass.keycapTint)
+                            .fill(isSelected ? ClipinSelectionInk.fill : Color(nsColor: .controlColor))
                     )
             }
         }
@@ -78,8 +76,6 @@ struct ClipItemRow: View {
     var isSelected: Bool = false
     var isHovered: Bool = false
     let sceneState: ClipinSceneState
-    let glass: ClipinGlassPalette
-    let hierarchy: ClipinPanelHierarchy
 
     var body: some View {
         HStack(spacing: 9) {
@@ -89,7 +85,7 @@ struct ClipItemRow: View {
 
             Text(highlightedDisplayText)
                 .font(.system(size: 13.5, weight: isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? hierarchy.selection.ink : Color.primary.opacity(0.92))
+                .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.primary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -110,9 +106,7 @@ struct ClipItemRow: View {
            !path.isEmpty {
             ClipThumbnailImage(
                 path: path,
-                isSelected: isSelected,
-                glass: glass,
-                hierarchy: hierarchy
+                isSelected: isSelected
             )
         } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
             ZStack {
@@ -124,21 +118,21 @@ struct ClipItemRow: View {
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(isSelected ? hierarchy.selection.ink : hierarchy.support.subduedInk)
+                .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.secondary)
                 .frame(width: 24, height: 22)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? hierarchy.selection.badgeFill : glass.keycapTint)
+                        .fill(isSelected ? ClipinSelectionInk.fill : Color(nsColor: .controlColor))
                         .overlay(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(
-                                    isSelected ? hierarchy.selection.stroke.opacity(0.72) : glass.hoverStroke.opacity(0.85),
+                                    isSelected ? ClipinSelectionInk.dim : ClipinHoverInk.stroke,
                                     lineWidth: 0.5
                                 )
                         )
                 )
                 .shadow(
-                    color: glass.emphasisStrongFill.opacity(isSelected ? 0.18 * sceneState.stripAccentOpacity : 0),
+                    color: Color.accentColor.opacity(isSelected ? 0.18 * sceneState.stripAccentOpacity : 0),
                     radius: 8,
                     y: 2
                 )
@@ -155,8 +149,8 @@ struct ClipItemRow: View {
                     .font(.system(size: 10.5, weight: .medium, design: .rounded))
                     .foregroundStyle(
                         isSelected
-                            ? hierarchy.selection.dimInk
-                            : hierarchy.support.smallLabelInk
+                            ? ClipinSelectionInk.dim
+                            : ClipinInk.secondary
                     )
                     .opacity(isSelected || isHovered ? 1.0 : 0.42)
                     .animation(ClipinMotion.feedback, value: isHovered)
@@ -166,8 +160,8 @@ struct ClipItemRow: View {
                 .font(.system(size: 10.5, weight: .regular))
                 .foregroundStyle(
                     isSelected
-                        ? hierarchy.selection.dimInk
-                        : hierarchy.support.hintInk
+                        ? ClipinSelectionInk.dim
+                        : ClipinInk.tertiary
                 )
         }
         .padding(.trailing, 2)
@@ -215,7 +209,7 @@ struct ClipItemRow: View {
         while searchStart < text.endIndex,
               let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
             if let attrRange = Range(range, in: result) {
-                result[attrRange].backgroundColor = hierarchy.selection.highlight
+                result[attrRange].backgroundColor = ClipinSelectionInk.highlight
                 result[attrRange].foregroundColor = .primary
             }
             searchStart = range.upperBound

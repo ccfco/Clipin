@@ -48,7 +48,6 @@ struct PaletteAction: Identifiable {
 // 此视图只负责渲染和鼠标交互。
 
 struct ActionPalette: View {
-    @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
     @Binding var isPresented: Bool
     let actions: [PaletteAction]
@@ -56,14 +55,6 @@ struct ActionPalette: View {
     let sceneState: ClipinSceneState
     let onSelect: (Int) -> Void
     @State private var hoveredIndex: Int?
-
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
-    private var hierarchy: ClipinPanelHierarchy {
-        .make(glass: glass, colorScheme: colorScheme)
-    }
 
     private var groupedActionIndices: [[Int]] {
         var groups: [[Int]] = []
@@ -114,22 +105,7 @@ struct ActionPalette: View {
         }
         .padding(12)
         .frame(width: 372, alignment: .leading)
-        .background(
-            ClipinSurfaceBackground(
-                role: .floating,
-                cornerRadius: ClipinChrome.paletteCornerRadius,
-                glass: glass
-            )
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: ClipinChrome.paletteCornerRadius, style: .continuous)
-                .strokeBorder(glass.emphasisStroke.opacity(sceneState.stripAccentOpacity * 0.82), lineWidth: 0.7)
-        }
-        .shadow(
-            color: glass.emphasisStrongFill.opacity(sceneState.stripAccentOpacity * (colorScheme == .dark ? 0.24 : 0.12)),
-            radius: 16,
-            y: 8
-        )
+        .clipinChromeGlass(cornerRadius: ClipinChrome.paletteCornerRadius)
         .scaleEffect(sceneState.paletteScale)
         .offset(y: sceneState.paletteLift)
         .animation(ClipinMotion.commandReveal, value: sceneState)
@@ -140,14 +116,14 @@ struct ActionPalette: View {
         HStack(spacing: 8) {
             Text("Actions")
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
 
             Spacer()
 
             ClipinKeycap(
                 key: "Esc",
-                foreground: hierarchy.support.smallLabelInk,
-                background: glass.keycapTint
+                foreground: ClipinInk.secondary,
+                background: Color(nsColor: .controlColor)
             )
         }
         .padding(.horizontal, 4)
@@ -158,11 +134,11 @@ struct ActionPalette: View {
     private func actionRow(action: PaletteAction, index: Int) -> some View {
         let isSelected = selectedIndex == index
         let isHovered = hoveredIndex == index
-        let selectedFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.18 : 0.12) : hierarchy.selection.fill
-        let selectedStroke = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.30 : 0.22) : hierarchy.selection.stroke
-        let selectedInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.92 : 0.82) : hierarchy.selection.ink
-        let selectedSecondaryInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.72 : 0.64) : hierarchy.selection.secondaryInk
-        let selectedBadgeFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.14 : 0.10) : hierarchy.selection.badgeFill
+        let selectedFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.18 : 0.12) : ClipinSelectionInk.fill
+        let selectedStroke = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.30 : 0.22) : ClipinSelectionInk.stroke
+        let selectedInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.92 : 0.82) : Color.accentColor
+        let selectedSecondaryInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.72 : 0.64) : ClipinInk.secondary
+        let selectedBadgeFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.14 : 0.10) : ClipinSelectionInk.fill
 
         return HStack(spacing: 0) {
             Label {
@@ -177,15 +153,15 @@ struct ActionPalette: View {
             .foregroundStyle(
                 action.isDestructive
                     ? (isSelected ? selectedInk : Color.red)
-                    : (isSelected ? selectedInk : Color.primary)
+                    : (isSelected ? selectedInk : ClipinInk.primary)
             )
 
             Spacer()
 
             ClipinKeycap(
                 key: action.badge,
-                foreground: isSelected ? selectedSecondaryInk : hierarchy.support.smallLabelInk,
-                background: isSelected ? selectedBadgeFill : glass.keycapTint
+                foreground: isSelected ? selectedSecondaryInk : ClipinInk.secondary,
+                background: isSelected ? selectedBadgeFill : Color(nsColor: .controlColor)
             )
         }
         .padding(.horizontal, 12)
@@ -196,8 +172,8 @@ struct ActionPalette: View {
                 isHovered: isHovered,
                 selectionFill: selectedFill,
                 selectionStroke: selectedStroke,
-                hoverFill: glass.hoverFill,
-                hoverStroke: glass.hoverStroke
+                hoverFill: ClipinHoverInk.fill,
+                hoverStroke: ClipinHoverInk.stroke
             )
         )
         .padding(.horizontal, ClipinChrome.listRowOuterInset)
@@ -216,15 +192,15 @@ struct ActionPalette: View {
         VStack(spacing: 8) {
             Image(systemName: "command")
                 .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(hierarchy.support.placeholderInk)
+                .foregroundStyle(ClipinInk.tertiary)
 
             Text("No actions available")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
 
             Text("Press Escape to close.")
                 .font(.system(size: 11))
-                .foregroundStyle(hierarchy.support.hintInk)
+                .foregroundStyle(ClipinInk.tertiary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 220)
         }

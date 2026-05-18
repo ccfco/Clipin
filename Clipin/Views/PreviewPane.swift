@@ -6,20 +6,11 @@ import UniformTypeIdentifiers
 
 /// 右侧预览面板
 struct PreviewPane: View {
-    @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
     let item: ClipItem?
     var searchQuery: String = ""
     let sceneState: ClipinSceneState
     @EnvironmentObject var vm: ClipboardViewModel
-
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
-    private var hierarchy: ClipinPanelHierarchy {
-        .make(glass: glass, colorScheme: colorScheme)
-    }
 
     var body: some View {
         Group {
@@ -58,10 +49,9 @@ struct PreviewPane: View {
             .padding(.vertical, 15)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
-                ClipinSurfaceBackground(
-                    role: .contentStage,
+                ClipinContentSurface(
                     cornerRadius: ClipinChrome.detailStageCornerRadius,
-                    glass: glass
+                    elevated: true
                 )
             )
     }
@@ -69,10 +59,7 @@ struct PreviewPane: View {
     private func previewFooter(for item: ClipItem) -> some View {
         let entries = footerEntries(for: item)
         return PreviewFooterRail(
-            entries: entries,
-            glass: glass,
-            hierarchy: hierarchy,
-            colorScheme: colorScheme
+            entries: entries
         )
         .opacity(sceneState.metadataOpacity)
         .offset(y: sceneState.metadataLift)
@@ -100,10 +87,7 @@ struct PreviewPane: View {
         case .url:
             URLPreviewView(
                 urlString: item.content,
-                searchQuery: searchQuery,
-                glass: glass,
-                hierarchy: hierarchy,
-                colorScheme: colorScheme
+                searchQuery: searchQuery
             )
             .environmentObject(vm)
 
@@ -150,7 +134,7 @@ struct PreviewPane: View {
                     HStack(spacing: 14) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(glass.keycapTint)
+                                .fill(Color(nsColor: .controlColor))
                             Image(nsImage: NSWorkspace.shared.icon(forFile: primaryPath))
                                 .resizable()
                                 .frame(width: 54, height: 54)
@@ -162,7 +146,7 @@ struct PreviewPane: View {
                                 .font(.system(size: 17, weight: .semibold))
                             Text(fileHeaderSubtitle(paths: paths, primaryURL: primaryURL))
                                 .font(.system(size: 12.5))
-                                .foregroundStyle(hierarchy.support.subduedInk)
+                                .foregroundStyle(ClipinInk.secondary)
                                 .textSelection(.enabled)
                         }
                     }
@@ -502,19 +486,20 @@ struct PreviewPane: View {
 
     private func placeholder(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey) -> some View {
         VStack(spacing: 10) {
-            ClipinSymbolOrb(
-                systemImage: icon,
-                glass: glass,
-                hierarchy: hierarchy,
-                size: 56,
-                iconSize: 18,
-                emphasis: 0.55
-            )
+            ZStack {
+                RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
+                    .fill(Color.accentColor.opacity(0.10))
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(Color.accentColor)
+            }
+            .frame(width: 56, height: 56)
+
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
             Text(subtitle)
                 .font(.system(size: 12))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 260)
         }
@@ -524,21 +509,21 @@ struct PreviewPane: View {
     private func unavailableLabel(_ text: LocalizedStringKey, systemImage: String) -> some View {
         Label(text, systemImage: systemImage)
             .font(.system(size: 13))
-            .foregroundStyle(hierarchy.support.subduedInk)
+            .foregroundStyle(ClipinInk.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func mediaCanvas<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous)
-                .fill(glass.previewCanvasTint.opacity(colorScheme == .dark ? 0.74 : 0.58))
+                .fill(Color(nsColor: .controlBackgroundColor))
             content()
                 .padding(16)
         }
         .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous)
-                .strokeBorder(glass.controlStroke.opacity(colorScheme == .dark ? 0.68 : 0.48), lineWidth: 0.6)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.6)
         )
         .shadow(color: .black.opacity(colorScheme == .dark ? 0.12 : 0.06), radius: 8, y: 3)
     }
@@ -551,17 +536,15 @@ struct PreviewPane: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: systemImage)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
 
             content()
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ClipinSurfaceBackground(
-                role: .grouped,
-                cornerRadius: ClipinChrome.detailMetadataCornerRadius,
-                glass: glass
+            ClipinContentSurface(
+                cornerRadius: ClipinChrome.detailMetadataCornerRadius
             )
         )
     }
@@ -631,7 +614,6 @@ struct PreviewPane: View {
 }
 
 private struct ColorSwatchPreview: View {
-    @ObservedObject private var settings = SettingsStore.shared
     @Environment(\.colorScheme) private var colorScheme
     let color: Color
     let originalText: String
@@ -640,20 +622,16 @@ private struct ColorSwatchPreview: View {
         NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
     }
 
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             ZStack {
                 // 浅灰底，当颜色有透明度时可见
-                glass.previewCanvasTint
+                Color(nsColor: .controlBackgroundColor)
                     .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous))
                 RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
                     .fill(color)
                 RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
-                    .strokeBorder(glass.controlStroke, lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             }
             .frame(height: 120)
 
@@ -714,11 +692,6 @@ private enum PreviewBadgeProminence {
 private struct PreviewValueBadge: View {
     let item: PreviewPane.PreviewBadgeItem
     let prominence: PreviewBadgeProminence
-    let glass: ClipinGlassPalette
-    let hierarchy: ClipinPanelHierarchy
-    let colorScheme: ColorScheme
-
-    private var isDark: Bool { colorScheme == .dark }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -737,70 +710,16 @@ private struct PreviewValueBadge: View {
                 .textSelection(.enabled)
         }
         .fixedSize(horizontal: true, vertical: false)
-        .foregroundStyle(foreground)
+        .foregroundStyle(item.emphasis ? Color.accentColor : ClipinInk.secondary)
         .padding(.horizontal, prominence == .context ? 8 : 9)
         .padding(.vertical, prominence == .context ? 4 : 5)
-        .background(
-            Capsule(style: .continuous)
-                .fill(backgroundFill)
-                .overlay(
-                    Capsule(style: .continuous)
-                        .strokeBorder(borderColor, lineWidth: 0.5)
-                )
-        )
-        .shadow(
-            color: .black.opacity(isDark ? 0.0 : (item.emphasis ? 0.032 : 0.024)),
-            radius: isDark ? 0 : 2,
-            y: isDark ? 0 : 1
-        )
+        .clipinChromeGlass(in: Capsule(style: .continuous))
         .help(item.helpText ?? item.title)
-    }
-
-    private var foreground: Color {
-        if item.emphasis {
-            return glass.emphasisInk.opacity(isDark ? 0.92 : 0.82)
-        }
-        return prominence == .context ? hierarchy.support.smallLabelInk : hierarchy.support.subduedInk
-    }
-
-    private var backgroundFill: Color {
-        if item.emphasis {
-            return hierarchy.selection.badgeFill.opacity(isDark ? 0.94 : 0.90)
-        }
-        switch prominence {
-        case .context:
-            return isDark
-                ? glass.keycapTint.opacity(1.0)
-                : Color.white.opacity(0.84)
-        case .supporting:
-            return isDark
-                ? glass.controlFill.opacity(0.76)
-                : Color.white.opacity(0.70)
-        }
-    }
-
-    private var borderColor: Color {
-        if item.emphasis {
-            return hierarchy.selection.stroke.opacity(isDark ? 0.92 : 0.76)
-        }
-        switch prominence {
-        case .context:
-            return isDark
-                ? glass.hoverStroke.opacity(0.85)
-                : Color.primary.opacity(0.12)
-        case .supporting:
-            return isDark
-                ? glass.controlStroke.opacity(0.72)
-                : Color.primary.opacity(0.10)
-        }
     }
 }
 
 private struct PreviewFooterRail: View {
     let entries: [PreviewPane.PreviewRailEntry]
-    let glass: ClipinGlassPalette
-    let hierarchy: ClipinPanelHierarchy
-    let colorScheme: ColorScheme
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -808,10 +727,7 @@ private struct PreviewFooterRail: View {
                 ForEach(entries) { entry in
                     PreviewValueBadge(
                         item: entry.item,
-                        prominence: entry.prominence,
-                        glass: glass,
-                        hierarchy: hierarchy,
-                        colorScheme: colorScheme
+                        prominence: entry.prominence
                     )
                 }
             }
@@ -821,7 +737,7 @@ private struct PreviewFooterRail: View {
         }
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(glass.controlStroke.opacity(colorScheme == .dark ? 0.28 : 0.18))
+                .fill(Color.primary.opacity(0.10))
                 .frame(height: 0.6)
         }
     }
@@ -961,14 +877,12 @@ private actor FaviconCache {
 
 private struct FaviconView: View {
     let host: String?
-    let glass: ClipinGlassPalette
-    let hierarchy: ClipinPanelHierarchy
     @State private var image: NSImage?
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(glass.keycapTint)
+                .fill(Color(nsColor: .controlColor))
             if let image {
                 Image(nsImage: image)
                     .resizable()
@@ -977,12 +891,12 @@ private struct FaviconView: View {
             } else {
                 Image(systemName: "globe")
                     .font(.system(size: 24, weight: .medium))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
             }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(glass.controlStroke.opacity(0.4), lineWidth: 0.6)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.6)
         )
         .task(id: host ?? "") {
             image = nil
@@ -995,9 +909,6 @@ private struct FaviconView: View {
 private struct URLPreviewView: View {
     let urlString: String
     let searchQuery: String
-    let glass: ClipinGlassPalette
-    let hierarchy: ClipinPanelHierarchy
-    let colorScheme: ColorScheme
     @EnvironmentObject var vm: ClipboardViewModel
 
     private var url: URL? { URL(string: urlString) }
@@ -1018,7 +929,7 @@ private struct URLPreviewView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            FaviconView(host: url?.host, glass: glass, hierarchy: hierarchy)
+            FaviconView(host: url?.host)
                 .frame(width: 64, height: 64)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -1031,7 +942,7 @@ private struct URLPreviewView: View {
                 if let subtitle = pathSubtitle {
                     Text(subtitle)
                         .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(hierarchy.support.subduedInk)
+                        .foregroundStyle(ClipinInk.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -1048,15 +959,8 @@ private struct URLPreviewView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(
-                        Capsule()
-                            .fill(hierarchy.selection.badgeFill)
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(hierarchy.selection.stroke.opacity(0.72), lineWidth: 0.6)
-                            )
-                    )
-                    .foregroundStyle(hierarchy.selection.ink)
+                    .foregroundStyle(Color.accentColor)
+                    .clipinChromeGlass(in: Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .help("Open in default browser")
@@ -1095,14 +999,14 @@ private struct URLPreviewView: View {
                     HStack(alignment: .top, spacing: 12) {
                         Text(pair.0)
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundStyle(hierarchy.support.smallLabelInk)
+                            .foregroundStyle(ClipinInk.secondary)
                             .frame(width: 96, alignment: .leading)
                             .lineLimit(1)
                             .truncationMode(.tail)
                             .textSelection(.enabled)
                         Text(pair.1)
                             .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(Color.primary.opacity(0.88))
+                            .foregroundStyle(ClipinInk.primary)
                             .lineLimit(3)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1120,16 +1024,14 @@ private struct URLPreviewView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: systemImage)
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
             content()
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ClipinSurfaceBackground(
-                role: .grouped,
-                cornerRadius: ClipinChrome.detailMetadataCornerRadius,
-                glass: glass
+            ClipinContentSurface(
+                cornerRadius: ClipinChrome.detailMetadataCornerRadius
             )
         )
     }

@@ -874,3 +874,17 @@ enum ClipinInk {
     static let tertiary = Color(nsColor: .tertiaryLabelColor)
     static let quaternary = Color(nsColor: .quaternaryLabelColor)
 }
+
+/// 选中态语义色:列表/动作面板/侧栏共用,改一处调全局(theme-tint 的天然接入缝)。
+enum ClipinSelectionInk {
+    static let fill = Color.accentColor.opacity(0.18)
+    static let stroke = Color.accentColor
+    static let dim = Color.accentColor.opacity(0.72)        // 选中态里弱化的次要文字/⌘N
+    static let highlight = Color.accentColor.opacity(0.22)  // 搜索命中高亮
+}
+
+/// 悬停态语义色:与选中态同一套抓手。
+enum ClipinHoverInk {
+    static let fill = Color.primary.opacity(0.06)
+    static let stroke = Color.primary.opacity(0.12)
+}

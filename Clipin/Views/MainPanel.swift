@@ -3,19 +3,9 @@ import SwiftUI
 /// 主面板 - 更贴近 macOS 26 的 frosted glass 双栏布局
 struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
-    @ObservedObject private var settings = SettingsStore.shared
-    @Environment(\.colorScheme) private var colorScheme
     /// footer hover 展开辅助命令（Plain Text / Open / Preview），鼠标移开自动收起，
     /// 让平时视觉只剩 CTA + ⌘K 两个核心；键盘用户仍然走全局快捷键，不依赖此 hover 状态。
     @State private var isFooterHovered = false
-
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
-    private var hierarchy: ClipinPanelHierarchy {
-        .make(glass: glass, colorScheme: colorScheme)
-    }
 
     private var sceneState: ClipinSceneState {
         ClipinSceneState(
@@ -47,7 +37,7 @@ struct MainPanel: View {
         .overlay(alignment: .top) {
             if viewModel.isContinuousPasteEnabled {
                 LinearGradient(
-                    colors: [glass.emphasisStrongFill, glass.emphasisFill],
+                    colors: [Color.accentColor, Color.accentColor.opacity(0.4)],
                     startPoint: .leading,
                     endPoint: .trailing
                 )
@@ -127,10 +117,8 @@ struct MainPanel: View {
             itemList
                 .frame(width: 292)
                 .background(
-                    ClipinSurfaceBackground(
-                        role: .sidebar,
-                        cornerRadius: ClipinChrome.sectionCornerRadius,
-                        glass: glass
+                    ClipinContentSurface(
+                        cornerRadius: ClipinChrome.sectionCornerRadius
                     )
                 )
                 .scaleEffect(sceneState.isShowingActions ? 0.998 : 1.0)
@@ -232,12 +220,12 @@ struct MainPanel: View {
             } else {
                 Text("Clipboard History")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
 
                 if viewModel.hasActiveFilter {
                     Text("No selection")
                         .font(.system(size: 11))
-                        .foregroundStyle(hierarchy.support.hintInk)
+                        .foregroundStyle(ClipinInk.tertiary)
                         .padding(.leading, 8)
                 }
 
@@ -269,13 +257,7 @@ struct MainPanel: View {
             }
         }
         .animation(ClipinMotion.commandReveal, value: isFooterHovered)
-        .background(
-            ClipinSurfaceBackground(
-                role: .strip,
-                cornerRadius: ClipinChrome.sectionCornerRadius,
-                glass: glass
-            )
-        )
+        .clipinChromeGlass(cornerRadius: ClipinChrome.sectionCornerRadius)
         .scaleEffect(sceneState.stripScale)
         .padding(.horizontal, ClipinChrome.shellGap)
         .padding(.top, ClipinChrome.shellGap)
@@ -288,28 +270,28 @@ struct MainPanel: View {
             HStack(spacing: 7) {
                 Image(systemName: "repeat.circle.fill")
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(glass.emphasisInk)
+                    .foregroundStyle(Color.accentColor)
 
                 Text("Continuous Paste")
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(glass.emphasisInk)
+                    .foregroundStyle(Color.accentColor)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
 
                 ClipinKeycap(
                     key: "Esc",
-                    foreground: glass.emphasisInk.opacity(0.82),
-                    background: glass.controlFill
+                    foreground: Color.accentColor.opacity(0.82),
+                    background: Color(nsColor: .controlColor)
                 )
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
                 RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                    .fill(hierarchy.selection.fill)
+                    .fill(Color.accentColor.opacity(0.18))
                     .overlay(
                         RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                            .strokeBorder(hierarchy.selection.stroke, lineWidth: 0.5)
+                            .strokeBorder(Color.accentColor, lineWidth: 0.5)
                     )
             )
         }
@@ -325,76 +307,59 @@ struct MainPanel: View {
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
-        .background(
-            ClipinSurfaceBackground(
-                role: .grouped,
-                cornerRadius: ClipinChrome.badgeCornerRadius + 2,
-                glass: glass
-            )
-        )
+        .clipinChromeGlass(cornerRadius: ClipinChrome.badgeCornerRadius + 2)
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
         HStack(spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(hierarchy.command.iconFill)
+                    .fill(Color.accentColor)
                 Image(systemName: "arrow.up.forward.app.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(hierarchy.command.iconInk)
+                    .foregroundStyle(Color.white)
             }
             .frame(width: ClipinChrome.footerCalloutIconSize, height: ClipinChrome.footerCalloutIconSize)
 
             Text(label)
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(hierarchy.command.ink)
+                .foregroundStyle(ClipinInk.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
 
             ClipinKeycap(
                 key: key,
-                foreground: hierarchy.command.ink.opacity(0.76),
-                background: hierarchy.command.keycapFill
+                foreground: ClipinInk.secondary,
+                background: Color(nsColor: .controlColor)
             )
         }
         .padding(.leading, ClipinChrome.footerCalloutHorizontalLeading)
         .padding(.trailing, ClipinChrome.footerCalloutHorizontalTrailing)
         .padding(.vertical, ClipinChrome.footerCalloutVerticalInset)
-        .background(
-            ClipinRoundedSurface(
-                cornerRadius: ClipinChrome.primaryBadgeCornerRadius,
-                material: .ultraThinMaterial,
-                tint: hierarchy.command.fill,
-                stroke: hierarchy.command.stroke,
-                highlight: glass.shellHighlight.opacity(colorScheme == .dark ? 0.18 : 0.34),
-                shadowColor: .black.opacity(colorScheme == .dark ? 0.14 : 0.04),
-                shadowRadius: colorScheme == .dark ? 8 : 5,
-                shadowYOffset: colorScheme == .dark ? 3 : 2
-            )
-        )
+        .clipinChromeGlass(cornerRadius: ClipinChrome.primaryBadgeCornerRadius)
     }
 
     private func keyBadge(label: String, key: String, emphasized: Bool = false) -> some View {
         HStack(spacing: 5) {
             Text(LocalizedStringKey(label))
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(emphasized ? glass.emphasisInk : hierarchy.support.subduedInk)
+                .foregroundStyle(emphasized ? Color.accentColor : ClipinInk.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             ClipinKeycap(
                 key: key,
-                foreground: emphasized ? glass.emphasisInk.opacity(0.82) : hierarchy.support.smallLabelInk,
-                background: emphasized ? glass.controlFill : glass.keycapTint
+                foreground: emphasized ? Color.accentColor.opacity(0.82) : ClipinInk.secondary,
+                background: Color(nsColor: .controlColor)
             )
         }
         .padding(.horizontal, emphasized ? 10 : 0)
         .padding(.vertical, emphasized ? 6 : 0)
         .background(
             RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                .fill(emphasized ? hierarchy.selection.fill : Color.clear)
+                .fill(emphasized ? Color.accentColor.opacity(0.18) : Color.clear)
                 .overlay(
                     RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                        .strokeBorder(emphasized ? hierarchy.selection.stroke : Color.clear, lineWidth: 0.5)
+                        .strokeBorder(emphasized ? Color.accentColor : Color.clear, lineWidth: 0.5)
                 )
         )
     }
@@ -407,7 +372,7 @@ struct MainPanel: View {
 
             Text(notice.text)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
                 .lineLimit(2)
 
             if let actionTitle = notice.actionTitle {
@@ -423,7 +388,7 @@ struct MainPanel: View {
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(hierarchy.support.smallLabelInk)
+                    .foregroundStyle(ClipinInk.secondary)
                     .frame(width: 20, height: 20)
             }
             .buttonStyle(.borderless)
@@ -434,18 +399,11 @@ struct MainPanel: View {
         .padding(.trailing, 8)
         .padding(.vertical, 9)
         .frame(maxWidth: 430)
-        .background(
-            ClipinSurfaceBackground(
-                role: .floating,
-                cornerRadius: ClipinChrome.searchCornerRadius,
-                glass: glass
-            )
-        )
+        .clipinChromeGlass(cornerRadius: ClipinChrome.searchCornerRadius)
         .overlay(
             RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
                 .strokeBorder(noticeTint(for: notice.style).opacity(0.22), lineWidth: 0.6)
         )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.10), radius: 14, y: 6)
     }
 
     private func noticeIcon(for style: LauncherNoticeStyle) -> String {
@@ -459,7 +417,7 @@ struct MainPanel: View {
 
     private func noticeTint(for style: LauncherNoticeStyle) -> Color {
         switch style {
-        case .info: return glass.emphasisInk
+        case .info: return Color.accentColor
         case .success: return .green
         case .warning: return .orange
         case .error: return .red
@@ -477,8 +435,6 @@ private struct PrimaryFooterButtonStyle: ButtonStyle {
 }
 
 private struct ItemListView: View {
-    @ObservedObject private var settings = SettingsStore.shared
-    @Environment(\.colorScheme) private var colorScheme
     let sections: [ClipSection]
     /// ViewModel 预计算的 ⌘1-9 序列（按当前可见列表；搜索结果可包含 pinned 项）
     let shortcutOrder: [ClipListItem]
@@ -495,14 +451,6 @@ private struct ItemListView: View {
     let onLoadMore: () -> Void
 
     @State private var hoveredID: String?
-
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
-    private var hierarchy: ClipinPanelHierarchy {
-        .make(glass: glass, colorScheme: colorScheme)
-    }
 
     /// 预计算 id -> ⌘N 序号，直接从 ViewModel 的 shortcutOrder 构建
     /// ⌘1-9 始终映射当前可见列表中的前 9 项
@@ -551,7 +499,7 @@ private struct ItemListView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(hierarchy.support.smallLabelInk)
+            .foregroundStyle(ClipinInk.secondary)
             .tracking(0.35)
             .padding(.horizontal, ClipinChrome.listRowOuterInset)
             .padding(.top, 14)
@@ -570,9 +518,7 @@ private struct ItemListView: View {
             searchQuery: searchQuery,
             isSelected: isSelected,
             isHovered: isHovered,
-            sceneState: sceneState,
-            glass: glass,
-            hierarchy: hierarchy
+            sceneState: sceneState
         )
         .padding(.vertical, 2)
         .id(item.id)
@@ -580,10 +526,10 @@ private struct ItemListView: View {
             ClipinSelectableRowBackground(
                 isSelected: isSelected,
                 isHovered: isHovered,
-                selectionFill: hierarchy.selection.fill,
-                selectionStroke: hierarchy.selection.stroke,
-                hoverFill: glass.hoverFill,
-                hoverStroke: glass.hoverStroke,
+                selectionFill: ClipinSelectionInk.fill,
+                selectionStroke: ClipinSelectionInk.stroke,
+                hoverFill: ClipinHoverInk.fill,
+                hoverStroke: ClipinHoverInk.stroke,
                 showsSelectionAccent: true,
                 isPinned: item.isPinned
             )
@@ -610,17 +556,17 @@ private struct ItemListView: View {
         VStack(spacing: 8) {
             Image(systemName: hasActiveFilter ? "magnifyingglass" : "clipboard")
                 .font(.system(size: 24))
-                .foregroundStyle(hierarchy.support.placeholderInk)
+                .foregroundStyle(ClipinInk.tertiary)
 
             Text(hasActiveFilter ? LocalizedStringKey("No results") : LocalizedStringKey("No history yet"))
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
 
             Text(hasActiveFilter
                  ? LocalizedStringKey("Try a different search term, or press Command-K for actions.")
                  : LocalizedStringKey("Copy something and it will appear here. Command-K still opens actions."))
                 .font(.system(size: 11))
-                .foregroundStyle(hierarchy.support.hintInk)
+                .foregroundStyle(ClipinInk.tertiary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 200)
 
@@ -628,7 +574,7 @@ private struct ItemListView: View {
                 badgeCapsule("⌘K")
                 Text(hasActiveFilter ? LocalizedStringKey("Actions") : LocalizedStringKey("Actions & Settings"))
                     .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(hierarchy.support.subduedInk)
+                    .foregroundStyle(ClipinInk.secondary)
             }
             .padding(.top, 4)
 
@@ -648,8 +594,8 @@ private struct ItemListView: View {
     private func badgeCapsule(_ key: String) -> some View {
         ClipinKeycap(
             key: key,
-            foreground: hierarchy.support.smallLabelInk,
-            background: glass.keycapTint
+            foreground: ClipinInk.secondary,
+            background: Color(nsColor: .controlColor)
         )
     }
 }

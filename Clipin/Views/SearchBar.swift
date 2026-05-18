@@ -181,8 +181,6 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
 
 /// 搜索框 + 内嵌类型过滤 pill tabs（含固定视图 pill）
 struct SearchBar: View {
-    @ObservedObject private var settings = SettingsStore.shared
-    @Environment(\.colorScheme) private var colorScheme
     @Binding var query: String
     @Binding var browseMode: LauncherBrowseMode
     let sceneState: ClipinSceneState
@@ -190,18 +188,6 @@ struct SearchBar: View {
     var onSubmit: () -> Void = {}
     var onEscape: () -> Void = {}
     var onCycleBrowseMode: (Bool) -> Void = { _ in }
-
-    private var glass: ClipinGlassPalette {
-        .make(theme: settings.visualTheme, colorScheme: colorScheme)
-    }
-
-    private var hierarchy: ClipinPanelHierarchy {
-        .make(glass: glass, colorScheme: colorScheme)
-    }
-
-    private var idlePillStroke: Color {
-        glass.hoverStroke.opacity(colorScheme == .dark ? 0.95 : 0.75)
-    }
 
     var body: some View {
         HStack(spacing: 7) {
@@ -224,11 +210,11 @@ struct SearchBar: View {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 10.5))
-                        .foregroundStyle(hierarchy.support.hintInk)
+                        .foregroundStyle(ClipinInk.tertiary)
                         .frame(width: 22, height: 22)
                         .background(
                             Circle()
-                                .fill(glass.keycapTint.opacity(colorScheme == .dark ? 0.86 : 0.94))
+                                .fill(Color(nsColor: .controlColor))
                         )
                 }
                 .buttonStyle(.plain)
@@ -236,22 +222,16 @@ struct SearchBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
-        .background(
-            ClipinSurfaceBackground(
-                role: .control,
-                cornerRadius: ClipinChrome.searchCornerRadius,
-                glass: glass
-            )
-        )
+        .clipinChromeGlass(cornerRadius: ClipinChrome.searchCornerRadius)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private var searchGlyph: some View {
         ZStack {
             Circle()
-                .fill(glass.keycapTint.opacity(colorScheme == .dark ? 0.92 : 1.0))
+                .fill(Color(nsColor: .controlColor))
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(hierarchy.support.subduedInk)
+                .foregroundStyle(ClipinInk.secondary)
                 .font(.system(size: 12, weight: .medium))
         }
         .frame(width: 24, height: 24)
@@ -276,29 +256,29 @@ struct SearchBar: View {
             HStack(spacing: 5) {
                 Image(systemName: iconName(for: displayedMode))
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(isAll ? hierarchy.support.subduedInk : hierarchy.scope.ink)
+                    .foregroundStyle(isAll ? ClipinInk.secondary : Color.accentColor)
 
                 if !isAll {
                     Text(chipLabel(for: displayedMode))
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(hierarchy.scope.ink)
+                        .foregroundStyle(Color.accentColor)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
                 }
 
                 Text("⇥")
                     .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(isAll ? hierarchy.support.hintInk : hierarchy.scope.shortcutInk)
+                    .foregroundStyle(isAll ? ClipinInk.tertiary : ClipinSelectionInk.dim)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(isAll ? Color.clear : hierarchy.scope.fill)
+                    .fill(isAll ? Color.clear : Color.accentColor.opacity(0.14))
                     .overlay(
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .strokeBorder(
-                                isAll ? idlePillStroke : hierarchy.scope.stroke,
+                                isAll ? ClipinHoverInk.stroke : Color.accentColor.opacity(0.40),
                                 lineWidth: 0.5
                             )
                     )
