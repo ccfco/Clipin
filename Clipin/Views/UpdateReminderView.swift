@@ -53,15 +53,15 @@ struct UpdateReminderView: View {
 
                 HStack(spacing: 8) {
                     Button("Later", action: onLater)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
 
                     Button("View Release", action: onViewRelease)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.glass)
 
                     Spacer(minLength: 0)
 
                     Button("Download Latest", action: onDownload)
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.glassProminent)
                 }
             }
             .padding(18)

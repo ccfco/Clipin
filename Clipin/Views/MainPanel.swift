@@ -19,7 +19,13 @@ struct MainPanel: View {
 
     var body: some View {
         GlassEffectContainer {
+            // .glassEffect(in:) 不裁剪子视图，AppKit host 又 masksToBounds=false，
+            // 全宽 top 渐变/notice/ActionPalette overlay 会冲出 24pt 圆角 shell。
+            // 先按 shell 形状裁掉内容+overlay，再让 GlassEffectContainer 渲染 shell 玻璃材质。
             panelContent
+                .clipShape(
+                    RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
+                )
         }
         .glassEffect(
             .regular,
@@ -166,7 +172,7 @@ struct MainPanel: View {
                         key: "↵"
                     )
                 }
-                .buttonStyle(PrimaryFooterButtonStyle())
+                .buttonStyle(.glassProminent)
 
                 // hover 展开的辅助命令簇。平时不占视觉重量，鼠标到 footer 时浮现，
                 // 离开 footer 自动收起；键盘用户走全局快捷键不依赖此入口。
@@ -331,10 +337,11 @@ struct MainPanel: View {
                 foreground: ClipinInk.secondary
             )
         }
+        // .glassProminent 自身提供 prominent 玻璃胶囊与材质，
+        // 这里只保留 label 内容与轻量内边距，不再自绘玻璃背景（防双层玻璃）。
         .padding(.leading, ClipinChrome.footerCalloutHorizontalLeading)
         .padding(.trailing, ClipinChrome.footerCalloutHorizontalTrailing)
         .padding(.vertical, ClipinChrome.footerCalloutVerticalInset)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.primaryBadgeCornerRadius)
     }
 
     private func keyBadge(label: String, key: String, emphasized: Bool = false) -> some View {
@@ -419,15 +426,6 @@ struct MainPanel: View {
         case .warning: return .orange
         case .error: return .red
         }
-    }
-}
-
-private struct PrimaryFooterButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .brightness(configuration.isPressed ? -0.02 : 0)
-            .animation(ClipinMotion.feedback, value: configuration.isPressed)
     }
 }
 

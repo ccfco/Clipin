@@ -27,7 +27,7 @@ private final class ClipinBorderlessHostingView<V: View>: NSHostingView<V> {
     override var isOpaque: Bool { false }
     override func updateLayer() {
         super.updateLayer()
-        // masksToBounds=true 在 CALayer compositor 层裁掉所有 AppKit subview（含 NSVisualEffectView），
+        // masksToBounds=true 在 CALayer compositor 层裁掉所有 AppKit subview（含旧 AppKit 毛玻璃 material 子视图），
         // 只用于 borderless 浮层；原生 titled 窗口不能走这里，否则会和 NSWindow frame 叠线。
         layer?.backgroundColor = .clear
         layer?.cornerRadius = ClipinChrome.shellCornerRadius
@@ -376,7 +376,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             panel.standardWindowButton(button)?.isHidden = true
         }
         // 圆角改由 SwiftUI 根部玻璃形状定义（GlassEffectContainer + glassEffect），
-        // 窗口 frame 不再自画圆角，杜绝 NSVisualEffectView 抗锯齿边 + frame + 自裁三者叠边。
+        // 窗口 frame 不再自画圆角，杜绝旧 AppKit material 宿主层抗锯齿边 + frame + 自裁三者叠边。
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false

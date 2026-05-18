@@ -2,13 +2,35 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-struct ShortcutRecorder: NSViewRepresentable {
+struct ShortcutRecorder: View {
     @Binding var shortcut: HotKeyShortcut
+    @State private var isCapturing = false
+
+    var body: some View {
+        ShortcutRecorderRepresentable(shortcut: $shortcut, isCapturing: $isCapturing)
+            .frame(minHeight: 26)
+            .clipinChromeGlass(cornerRadius: ClipinChrome.searchCornerRadius)
+            // 录制激活态原先靠 AppKit accent 边框表达，迁移后改由 SwiftUI 侧
+            // accent 描边覆盖，不再回到 CALayer chrome。
+            .overlay(
+                RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(isCapturing ? 0.55 : 0), lineWidth: 1)
+            )
+            .animation(ClipinMotion.feedback, value: isCapturing)
+    }
+}
+
+private struct ShortcutRecorderRepresentable: NSViewRepresentable {
+    @Binding var shortcut: HotKeyShortcut
+    @Binding var isCapturing: Bool
 
     func makeNSView(context: Context) -> ShortcutRecorderField {
         let field = ShortcutRecorderField()
         field.onShortcutChange = { newShortcut in
             shortcut = newShortcut
+        }
+        field.onCapturingChange = { capturing in
+            isCapturing = capturing
         }
         field.update(shortcut: shortcut)
         return field
@@ -18,21 +40,24 @@ struct ShortcutRecorder: NSViewRepresentable {
         nsView.onShortcutChange = { newShortcut in
             shortcut = newShortcut
         }
+        nsView.onCapturingChange = { capturing in
+            isCapturing = capturing
+        }
         nsView.update(shortcut: shortcut)
     }
 }
 
 final class ShortcutRecorderField: NSTextField {
     var onShortcutChange: ((HotKeyShortcut) -> Void)?
+    var onCapturingChange: ((Bool) -> Void)?
     private var currentDisplayString = ""
-    private var idleBorderColor = NSColor.separatorColor.withAlphaComponent(0.5)
-    private var activeBorderColor = NSColor.controlAccentColor.withAlphaComponent(0.38)
-    private var idleBackgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.72)
-    private var activeBackgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08)
     private var idleTextColor = NSColor.secondaryLabelColor
     private var activeTextColor = NSColor.labelColor
     private var isCapturing = false {
-        didSet { updateAppearance() }
+        didSet {
+            updateAppearance()
+            onCapturingChange?(isCapturing)
+        }
     }
 
     override var acceptsFirstResponder: Bool { true }
@@ -42,8 +67,11 @@ final class ShortcutRecorderField: NSTextField {
 
         isEditable = false
         isSelectable = false
+        // 字段本身完全透明无边框：玻璃与录制激活态描边交由 SwiftUI 侧负责，
+        // 不再在 CALayer 自绘 chrome（否则会与外层玻璃叠边、属半迁移态）。
         isBordered = false
         drawsBackground = false
+        backgroundColor = .clear
         focusRingType = .none
         alignment = .center
         font = .monospacedSystemFont(ofSize: 13, weight: .medium)
@@ -107,13 +135,7 @@ final class ShortcutRecorderField: NSTextField {
     }
 
     private func updateAppearance() {
-        guard let layer else { return }
-
-        layer.cornerRadius = 8
-        layer.cornerCurve = .continuous
-        layer.borderWidth = 1
+        // 仅保留文字可读性的前景色变化；边框/背景等 chrome 已下放到 SwiftUI 玻璃层。
         textColor = isCapturing ? activeTextColor : idleTextColor
-        layer.borderColor = (isCapturing ? activeBorderColor : idleBorderColor).cgColor
-        layer.backgroundColor = (isCapturing ? activeBackgroundColor : idleBackgroundColor).cgColor
     }
 }
