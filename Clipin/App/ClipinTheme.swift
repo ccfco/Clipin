@@ -171,7 +171,9 @@ struct ClipinKeycap: View {
             .padding(.horizontal, 5)
             .padding(.vertical, 2.5)
             .background(
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                // iOS 26 键帽 = 小 Capsule(对齐真机 Raycast 底栏键帽片),
+                // 不再硬编码 cornerRadius 魔数。
+                Capsule(style: .continuous)
                     .fill(Color.primary.opacity(0.06))
             )
     }
@@ -256,7 +258,9 @@ struct ClipinSelectableRowBackground: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+            // 选中/hover 底板 = iOS 26 同心圆角(随 MainPanel 根 .containerShape
+            // 的 shell 几何自动推导,改 shell 一处全联动,不硬编码 rowCornerRadius)。
+            ClipinConcentric()
                 .fill(
                     isSelected
                         ? selectionFill

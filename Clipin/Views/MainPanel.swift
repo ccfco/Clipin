@@ -21,12 +21,18 @@ struct MainPanel: View {
     }
 
     var body: some View {
-        // 内容层不自带玻璃。窗面是 macOS 26 原生 Liquid Glass(Spotlight 那种),
-        // 由 AppDelegate 主 panel 创建处的 NSGlassEffectView(glassSurface)承担,
-        // 内容浮其上。SwiftUI 不再加任何背景。仍按 shell 圆角裁剪,保证全宽 top
-        // 渐变/notice/ActionPalette overlay 不冲出圆角窗形。
+        // 内容层不自带玻璃。窗面是 macOS 26 原生整窗 Liquid Glass(导航层,
+        // Spotlight/Raycast 那种),由 AppDelegate 主 panel 的 NSGlassEffectView
+        // 承担,内容靠 vibrancy 直接坐其上、不套盒子。SwiftUI 不加任何背景。
+        // 仍按 shell 圆角裁剪,保证全宽 top 渐变/notice/ActionPalette overlay
+        // 不冲出圆角窗形。
         panelContent
             .clipShape(
+                RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
+            )
+            // iOS 26 同心圆角根:声明一次 shell 容器几何,内部所有 ClipinConcentric()
+            // (选中底板等)curvature 自动随此推导。改 shellCornerRadius 一处全联动。
+            .containerShape(
                 RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
             )
     }
@@ -411,9 +417,10 @@ struct MainPanel: View {
         .padding(.trailing, 8)
         .padding(.vertical, 9)
         .frame(maxWidth: 430)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.searchCornerRadius)
+        // 浮动 notice = iOS 26 玻璃 Capsule toast(不硬编码 searchCornerRadius)。
+        .clipinChromeGlass(in: Capsule(style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+            Capsule(style: .continuous)
                 .strokeBorder(noticeTint(for: notice.style).opacity(0.22), lineWidth: 0.6)
         )
     }
