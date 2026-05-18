@@ -94,6 +94,13 @@ enum ArchiveService {
                     imagePath = nil
                 }
 
+                // base64-decode 失败的 rep 用 compactMap 静默丢弃：单条 rep 损坏
+                // 不应让整个 archive 导入失败。
+                let coreReps: [ClipRepresentation] = (item.representations ?? []).compactMap { rep in
+                    guard let data = Data(base64Encoded: rep.dataBase64) else { return nil }
+                    return ClipRepresentation(uti: rep.uti, data: data)
+                }
+
                 let didImport: Bool
                 do {
                     didImport = try core.importItemIfMissing(
@@ -104,7 +111,7 @@ enum ArchiveService {
                         imagePath: imagePath,
                         isPinned: item.isPinned,
                         createdAt: item.createdAt,
-                        representations: []   // Task 5.3 接通时改为真实数据
+                        representations: coreReps
                     )
                 } catch {
                     if let imagePath {
