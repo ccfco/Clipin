@@ -44,9 +44,9 @@
 
 ## 硬约束:不兜底 / 不遗留(CLAUDE.md #7)
 
-- 被删结构(外壳 `.glassEffect` / 内容 `ClipinContentSurface` 盒子 / 底栏手绘 accent 实色块)**彻底删除**,不留 compat / fallback / 死代码。
+- 被删结构(外壳 `.glassEffect` / **主面板内容层**的 `ClipinContentSurface` 调用点 / 底栏手绘 accent 实色块)**彻底删除**,不留 compat / fallback / 死代码。
 - 不写 `@available` 兜底分支(已 26+ only)。
-- 不遗留 = 无悬空引用 + 无半转换态:被删符号(`ClipinContentSurface`、外壳玻璃、手绘 accent shape)全仓引用 100% 清完,不允许"一部分新一部分旧"进主干。
+- 不遗留 = 无悬空引用 + 无半转换态:主面板内删除的调用点 100% 清完(`MainPanel.swift` / `PreviewPane.swift` 内不再出现 `ClipinContentSurface`),不允许"一部分新一部分旧"进主干。**注意**:`struct ClipinContentSurface` 本体及辅助窗口调用点是预期保留,**不是**遗留——区分"主面板退役"与"struct 全删"。
 - 异常/缺失值暴露,不 `try?` 吞、不占位兜底。
 - **无障碍澄清(Apple 验证)**:原生 `.glassEffect` 在 Reduce Transparency / Increase Contrast / Reduce Motion 下由系统**自动**降级,开发者不写手动适配。本 spec 的"不兜底"指**不写业务 fallback**,**绝不**等于关闭/覆盖系统无障碍适配——不得为了"统一外观"加 `.accessibilityReduceTransparency` 判定后强制 `.identity` 或自绘替代;系统行为原样保留即正确。
 - **动效克制(Apple "let glass rest in steady states")**:本次**不新增**任何动效。现有 `sceneState` 的 `selectedRowScale / selectedRowLift / listRestingOpacity / stripScale / headerLift` 等缩放/位移/整列变透明动效,在原生玻璃语境下属"过度动效"的非原生风险点,列为 **Codex 收尾 + 真机验收观察项**;但本次范围是结构纠正,**不主动重构动效**以免扩大范围,除非用户在验收时明确要求再单独立项。
@@ -63,8 +63,9 @@
 ### 单元 2 —— 删掉所有内容盒子,内容直接坐实底
 
 - **列表**:删除 `MainPanel.swift:130-134` `itemList.background(ClipinContentSurface(cornerRadius: sectionCornerRadius))`。列表行直接坐在窗口 vibrant 实底上,无 292pt 不透明大框。
-- **预览**:删除 `PreviewPane` 内所有 `ClipinContentSurface`(contentStage / metadata / `elevated:true` 抬起卡)。预览内容与横滚胶囊条直接坐在实底上,**无背景容器、无投影抬起卡**。横滚胶囊条形态/数据保留,只是不再被盒子包裹。
-- **`ClipinContentSurface` 整体退役**:全仓不再有任何调用点后,删除该 struct 本体(`ClipinTheme.swift:292-310`)。grep 引用必须为 0。
+- **预览(用户已定 Option A:去文本块底、留媒体框)**:删除 `PreviewPane` 的 3 处 `ClipinContentSurface`——`:52` 包裹整预览的 `elevated:true` 大卡、`:543` `supportingBlock`(OCR/文件路径文本块底)、`:1025` `urlInfoBlock`(Full URL / Query 文本块底)。文本内容与横滚胶囊条直接坐实底,**无背景容器、无投影抬起卡**。
+  - **明确保留(媒体呈现,非容器,本次不动)**:`mediaCanvas`(图片预览框,`PreviewPane.swift:513-526`)、文件图标块(`:136-143` `ZStack` + `RoundedRectangle(controlColor)`)、`FaviconView` 图标框(`:874-892`)、`ColorSwatchPreview` 色块(`:623-633`)、`placeholder` orb(`:486-493`)。这些是媒体/图标呈现,Raycast 预览同样有框,**不属"容器套娃",实现者不得顺手删**。
+- **`ClipinContentSurface` 仅从主面板内容层移除,struct 本体保留**:`ClipinContentSurface` 还被辅助窗口共用——`SettingsView`(3)、`UpdateReminderView`、`PermissionView`(2)、`OnboardingView`。那些是本次**非目标、未被否、属标准 macOS grouped 面**的窗口,绝不牵连。本单元只删**主面板内容层**的调用点:`MainPanel.swift:131`(列表 box)、`PreviewPane.swift:52`(包裹整预览的 `elevated:true` 大卡)、`PreviewPane.swift:543`(`supportingBlock`:OCR/文件路径文本块底)、`PreviewPane.swift:1025`(`urlInfoBlock`:Full URL / Query 参数块底)。**`struct ClipinContentSurface` 本体不删**(辅助窗口仍依赖)。grep 门相应收窄(见验证)。
 - 选中态(Q2 已锁:Raycast 式轻高亮)现在直接坐在 vibrant 实底上。`ClipinSelectionInk.fill` 维持 v1 的中性极淡圆角填充,但需在真机 vibrant 实底上**仍清晰可辨**(验收项专项);hover 仍弱于选中;选中变化清空 `hoveredID` 防残留(沿用既有根因机制)。不画描边、不画整块容器,背景贴内容不贴满宽(`listRowOuterInset` gutter 保留)。
 
 ### 单元 3 —— 底栏归一为单个原生 Liquid Glass 簇
@@ -82,6 +83,7 @@
 - **borderless 搜索**(原单元 C):`SearchBar` 无玻璃框、glyph+输入直接坐面上、`InterceptingTextField`/IME 字节不变 —— 保留。
 - **Raycast 式轻高亮选中**(Q2 锁定):中性极淡圆角填充、无 rail/描边/加粗/变色 —— 保留,仅验证其在 vibrant 实底上的可辨性。
 - **横滚胶囊条数据 + 胶囊形态**:`footerEntries / *Badge` 数据层与胶囊外观保留,仅脱掉外层盒子。
+  - **已知并刻意保留的例外(诚实记录)**:`PreviewValueBadge`(`PreviewPane.swift:713`)的胶囊用 `.clipinChromeGlass(in: Capsule)` = 真 `.glassEffect`,即"内容区里有玻璃小胶囊"。这与本 spec 核心原则"玻璃只在控件层"相抵,但**用户多次明确要求横滚胶囊条原样不动**——按指令优先级(用户指令 > 规范推导),这是**用户优先的有意例外**,不是 spec 违规。Codex/复审/真机验收**不得**以"内容区有玻璃"判它不合规;它脱掉外层 `ClipinContentSurface` 大卡后,直接浮在 `NSVisualEffectView` system material 上(玻璃采样 system material,非 glass-on-glass),可接受。
 - **accent 收敛**(原单元 E):全窗 accent 仅余 Paste 主键帽语义(由 `.glassProminent` 表达),其余中性。
 
 ## 验证方式(可执行;材质验收以真机为准)
@@ -98,7 +100,7 @@ xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release \
 无悬空引用门(grep,期望全部为 0):
 
 ```
-grep -rn "ClipinContentSurface" Clipin/ --include='*.swift' | wc -l            # 期望 0(struct + 全调用点删净)
+grep -rn "ClipinContentSurface" Clipin/Views/MainPanel.swift Clipin/Views/PreviewPane.swift | wc -l   # 期望 0(主面板内容层调用点删净;struct 本体与辅助窗口调用点预期保留,不在此门)
 grep -rn "showsSelectionAccent" Clipin/ --include='*.swift' | wc -l            # 期望 0(v1 已退役,保持)
 grep -rn "@available(macOS" Clipin/ --include='*.swift' | wc -l                # 期望 0(无兜底门)
 grep -rn "Circle()" Clipin/Views/MainPanel.swift | wc -l                       # 期望 0(Paste 内手绘 accent 圆删净;当前仅此一处 Circle)
@@ -109,7 +111,7 @@ grep -rn "strokeBorder(Color.accentColor" Clipin/Views/MainPanel.swift | wc -l #
 
 视觉逐项核查(**真机截图为准,mock 不算验收**):
 
-1. 窗口是一块连续 vibrant 实底,**列表行与预览内容直接坐其上,没有任何内层盒子/大框/抬起卡**。
+1. 窗口是一块连续 vibrant 实底;列表行直接坐其上无 292pt 大框;预览**无包裹整体的 `ClipinContentSurface` 大卡、无 OCR/URL/Query 文本块底**,文本直接坐实底。媒体框(图片预览框/文件·网站图标块/颜色色块/placeholder orb)按 Option A **预期保留**,不算违规。
 2. 唯一玻璃 = 底部命令簇,作为一个内聚整体浮在内容上(不是 5 个拼块,不是玻璃叠玻璃)。
 3. 底栏无手绘 accent 实色方块/圆;Paste 的强调来自 `.glassProminent` 自身,不是手绘 Circle。
 4. 选中 = 单一极淡中性填充,在 vibrant 实底上仍清晰可辨,无 rail/描边/加粗/变色;任意时刻不会"多行同时选中"。
@@ -127,7 +129,7 @@ grep -rn "strokeBorder(Color.accentColor" Clipin/Views/MainPanel.swift | wc -l #
 - 连续粘贴夺焦恢复、`.nonactivatingPanel`
 - Quick Look session、IME 实时搜索(preedit)
 
-收尾:实现完成后交 Codex 无偏见 review,重点查:`ClipinContentSurface` 退役是否全仓清净、底栏 `GlassEffectContainer` 归一后无手绘 accent 残留、遮挡 inset 计算、外壳玻璃删除后无悬空背景引用、**NSVisualEffectView system material 未被误删**、**玻璃元件圆角是否用 `.containerConcentric` 而非硬编码**、**无障碍适配未被代码覆盖**。**最终以用户真机视觉验收为准,不达标不并 main(绝不带病合并)。**
+收尾:实现完成后交 Codex 无偏见 review,重点查:主面板 `ClipinContentSurface` 调用点是否清净(`struct` 本体与辅助窗口调用点为**预期保留**,不得误删)、底栏 `GlassEffectContainer` 归一后无手绘 accent 残留、遮挡 inset 计算、外壳玻璃删除后无悬空背景引用、**NSVisualEffectView system material 未被误删**、**玻璃元件圆角是否用 `.containerConcentric` 而非硬编码**、**无障碍适配未被代码覆盖**。**最终以用户真机视觉验收为准,不达标不并 main(绝不带病合并)。**
 
 ## 风险与缓解
 
@@ -141,7 +143,8 @@ grep -rn "strokeBorder(Color.accentColor" Clipin/Views/MainPanel.swift | wc -l #
 
 ## 文件影响面
 
-- `Clipin/App/ClipinTheme.swift` —— 删除 `ClipinContentSurface` struct(全调用点清净后);`ClipinSelectionInk` 维持 v1 中性化(必要时仅微调 fill 不透明度)。
+- `Clipin/App/ClipinTheme.swift` —— **`ClipinContentSurface` struct 本体保留不删**(辅助窗口仍依赖);仅当选中态可辨性需要时微调 `ClipinSelectionInk.fill` 不透明度,否则本文件可不改。
+- `Clipin/Views/SettingsView.swift` / `UpdateReminderView.swift` / `PermissionView.swift` / `OnboardingView.swift` —— **不改**(`ClipinContentSurface` 在此为标准 grouped 面,本次非目标)。
 - `Clipin/Views/MainPanel.swift` —— 单元 1:删外壳 `GlassEffectContainer`+`.glassEffect`;单元 2:删 `itemList` 的 `ClipinContentSurface` background;单元 3:`bottomBar` 归一为单个 `GlassEffectContainer`,删 `pasteCallToAction` 内手绘 `Circle().fill(accentColor)`、删 `continuousPastePill`/`keyBadge(emphasized:)` 手绘 accent 实色块。
 - `Clipin/Views/PreviewPane.swift` —— 删所有 `ClipinContentSurface`(contentStage/metadata/elevated 抬起卡);横滚胶囊条数据/形态保留,脱盒直接坐实底;遮挡留白靠 bottom padding。
 - `Clipin/Views/SearchBar.swift` —— **不改**(borderless 已对,字节不变)。
