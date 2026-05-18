@@ -1085,6 +1085,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case KeyCode.letterL where flags == [.command, .shift]:
             vm.toggleContinuousPaste()
             return nil
+        case KeyCode.letterH where flags == .option:
+            if vm.selectedRepresentationUTIs.contains("public.html") {
+                vm.pasteRepresentationSelected(uti: "public.html")
+            }
+            return nil
+        case KeyCode.letterR where flags == .option:
+            if vm.selectedRepresentationUTIs.contains("public.rtf") {
+                vm.pasteRepresentationSelected(uti: "public.rtf")
+            }
+            return nil
         default:
             if flags == .command,
                let char = event.charactersIgnoringModifiers,
