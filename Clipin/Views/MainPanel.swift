@@ -159,13 +159,13 @@ struct MainPanel: View {
     }
 
     private var bottomBar: some View {
-        // macOS 26 原生 Liquid Glass 命令条:悬浮在内容上,内容从玻璃后淡淡透出。
-        // 命令按钮 = ClipinFooterGlassButtonStyle:原生 .regular.interactive() 圆角矩形
-        // (~12pt,对齐 Raycast 实测——是「角的弧度」非整颗药丸),静息即可见、自带系统
-        // 原生 hover/press。装进 GlassEffectContainer 统一融合采样(glass 不能采样 glass)。
-        // 不用 .buttonStyle(.glass)(Apple 静息近隐形,深面上看不见,永远到不了 Raycast 感)。
-        GlassEffectContainer {
-        HStack(spacing: 8) {
+        // macOS 26 标准做法(ChatGPT 等同款):GlassEffectContainer 内放多颗
+        // .glassEffect(.regular.interactive(), in: Capsule) 元件——容器把相邻胶囊
+        // 「融合」成一条连续液态玻璃,四周一圈共享 rim;.interactive() 提供鼠标悬停
+        // 时那层灰色高亮(看得见单个按钮轮廓),press 也由系统原生给。
+        // 关键前提:每颗 chip 必须先有内边距(body),否则玻璃缩成发丝=看不见。
+        GlassEffectContainer(spacing: 6) {
+        HStack(spacing: 6) {
             // 底栏恒为左对齐的来源面包屑：选中时显条目来源 app，无选中回退 Clipboard History。
             sourceBreadcrumb
 
@@ -313,10 +313,11 @@ struct MainPanel: View {
                     .truncationMode(.tail)
             }
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 6)
-        // 来源面包屑与命令胶囊同语:圆角矩形(~12pt)原生 glass,对齐 Raycast 静息可见 chip。
-        .clipinChromeGlass(cornerRadius: ClipinChrome.footerChipCornerRadius)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        // 来源面包屑与命令胶囊同语:同为 Capsule 原生 glass,放进同一 GlassEffectContainer
+        // 后与命令胶囊融合成一条连续液态玻璃(共享四周 rim)。它不是按钮故不 interactive。
+        .glassEffect(.regular, in: Capsule(style: .continuous))
         .frame(maxWidth: 220, alignment: .leading)
     }
 
@@ -367,8 +368,8 @@ struct MainPanel: View {
     private func keyBadge(label: String, key: String) -> some View {
         HStack(spacing: 5) {
             Text(LocalizedStringKey(label))
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(ClipinInk.secondary)
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(ClipinInk.primary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             ClipinKeycap(key: key, foreground: ClipinInk.secondary)

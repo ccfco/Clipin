@@ -362,15 +362,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        // macOS 26 原生 Liquid Glass 窗面(Spotlight/Raycast 那种"整窗即玻璃、内容浮其上"):
-        // NSGlassEffectView 是 .glassEffect 的 AppKit 对应,contentView 自动用 Auto Layout
-        // 绑定几何。launcher 整体即导航层,整面玻璃合法。cornerRadius 与 shell 一致;窗口
-        // frame cornerRadius KVC 在 macOS 26 会自动 concentric 框住玻璃,不手动 mask/border
-        // (避免与 NSWindow frame hairline 叠双发丝线 —— CLAUDE.md 旧坑)。
-        let glassSurface = NSGlassEffectView()
-        glassSurface.cornerRadius = ClipinChrome.shellCornerRadius
-        glassSurface.contentView = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
-        panel.contentView = glassSurface
+        // 单玻璃层架构(Raycast/ChatGPT 真实做法):窗口本体 = 实心深色面,
+        // 不再用 NSGlassEffectView「整窗玻璃」、也不用 .behindWindow vibrant
+        // (会把桌面/终端内容透进来,反复返工真因之一)。Apple 硬限制「玻璃不能
+        // 采样玻璃」——底栏那颗悬浮液态玻璃胶囊必须背后有「实体」才折射得出 rim /
+        // hover 灰。Raycast 的窗口本身就是一块实心深色板,玻璃只在底栏那一颗。
+        // 这里用一块不透明深色 layer 当底(无桌面穿透),圆角仍由下方 panel frame
+        // cornerRadius KVC 统一框(不手动 masksToBounds,避免与 frame hairline 叠
+        // 双发丝线 —— CLAUDE.md 旧坑)。
+        let surface = NSView()
+        surface.wantsLayer = true
+        surface.layer?.backgroundColor = NSColor(srgbRed: 0.118, green: 0.118, blue: 0.129, alpha: 1).cgColor
+        let host = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
+        host.translatesAutoresizingMaskIntoConstraints = false
+        surface.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(equalTo: surface.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
+            host.topAnchor.constraint(equalTo: surface.topAnchor),
+            host.bottomAnchor.constraint(equalTo: surface.bottomAnchor)
+        ])
+        panel.contentView = surface
         panel.isMovableByWindowBackground = true
         panel.title = ""
         panel.titleVisibility = .hidden

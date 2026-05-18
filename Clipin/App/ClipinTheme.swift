@@ -295,29 +295,21 @@ extension View {
     }
 }
 
-/// 底栏命令按钮样式:对齐 Raycast 实测——静息即可见的「圆角矩形」原生 Liquid Glass 胶囊。
-/// 用与来源面包屑同一个 `.regular` 原生 glass 物料(真机截图证实 `.regular` 静息可见,
-/// 而 `.regular.interactive()` 与 `.buttonStyle(.glass)` 都是 Apple「静息近隐形」设计,
-/// 在我们这种深色玻璃面上等于看不见,永远到不了 Raycast 那种静息可见的胶囊感)。
-/// 按下时叠一层极轻 press 反馈;不是 `.glassProminent`(不透明)、不是手搓扁平条——
-/// 只把原生 glass 物料封装成可复用 style,全底栏 chip 同语。
+/// 底栏命令按钮样式 = macOS 26 标准 Liquid Glass 按钮(ChatGPT 等同款)。
+/// 配方三件套,缺一就翻车:
+/// ① 先内边距给 chip「身体」——glass 只在当前 bounds 内渲染,label 不留 padding
+///    时 bounds≈文字紧贴框,玻璃缩成一条发丝、看着像没有(之前反复翻车的真因)。
+/// ② `.regular.interactive()` 原生交互玻璃——鼠标悬停给那层灰色高亮(露出单个按钮
+///    轮廓)、按下给原生 press,无需手搓 hover/scale。
+/// ③ `Capsule` 胶囊形——配合外层 GlassEffectContainer 把相邻胶囊「融合」成一条
+///    连续液态玻璃,四周一圈共享 rim(用户要的「椭圆形、一圈玻璃边」)。
+/// 不是 `.glassProminent`(不透明)、不是手搓扁平条。
 struct ClipinFooterGlassButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        // 关键:先给 label 内边距再上 glass。glass 物料在「当前 bounds 内」渲染,
-        // label 不留 padding 时 bounds≈文字紧贴框,玻璃只剩一条发丝、看着像没有。
-        // 来源面包屑可见正因它先 padding 再 glass——这里与之同语,胶囊才有「身体」。
         configuration.label
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
-            .glassEffect(
-                .regular,
-                in: RoundedRectangle(
-                    cornerRadius: ClipinChrome.footerChipCornerRadius,
-                    style: .continuous
-                )
-            )
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
     }
 }
 
