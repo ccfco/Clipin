@@ -159,6 +159,7 @@ struct MainPanel: View {
     }
 
     private var bottomBar: some View {
+        GlassEffectContainer {
         HStack(spacing: 8) {
             // 底栏恒为左对齐的来源面包屑：选中时显条目来源 app，无选中回退 Clipboard History。
             sourceBreadcrumb
@@ -259,6 +260,7 @@ struct MainPanel: View {
         .padding(.horizontal, ClipinChrome.shellGap * 2)
         .padding(.bottom, ClipinChrome.shellGap)
         .animation(ClipinMotion.focusShift, value: sceneState)
+        }
     }
 
     /// 来源 app 图标:按 bundle id 解析(镜像 PreviewPane.sourceAppIcon,来源 app 未运行也可用)
@@ -317,29 +319,20 @@ struct MainPanel: View {
             HStack(spacing: 7) {
                 Image(systemName: "repeat.circle.fill")
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
 
                 Text("Continuous Paste")
                     .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(Color.accentColor)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
 
                 ClipinKeycap(
                     key: "Esc",
-                    foreground: Color.accentColor.opacity(0.82)
+                    foreground: ClipinInk.secondary
                 )
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.18))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                            .strokeBorder(Color.accentColor, lineWidth: 0.5)
-                    )
-            )
+            .glassEffect(.regular.tint(Color.accentColor), in: Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
         .help(NSLocalizedString("Press Esc to exit Continuous Paste.", comment: ""))
@@ -357,19 +350,9 @@ struct MainPanel: View {
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
-        HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(Color.accentColor)
-                Image(systemName: "arrow.up.forward.app.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.white)
-            }
-            .frame(width: ClipinChrome.footerCalloutIconSize, height: ClipinChrome.footerCalloutIconSize)
-
+        HStack(spacing: 8) {
             Text(label)
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(ClipinInk.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
 
@@ -378,35 +361,20 @@ struct MainPanel: View {
                 foreground: ClipinInk.secondary
             )
         }
-        // .glassProminent 自身提供 prominent 玻璃胶囊与材质，
-        // 这里只保留 label 内容与轻量内边距，不再自绘玻璃背景（防双层玻璃）。
         .padding(.leading, ClipinChrome.footerCalloutHorizontalLeading)
         .padding(.trailing, ClipinChrome.footerCalloutHorizontalTrailing)
         .padding(.vertical, ClipinChrome.footerCalloutVerticalInset)
     }
 
-    private func keyBadge(label: String, key: String, emphasized: Bool = false) -> some View {
+    private func keyBadge(label: String, key: String) -> some View {
         HStack(spacing: 5) {
             Text(LocalizedStringKey(label))
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(emphasized ? Color.accentColor : ClipinInk.secondary)
+                .foregroundStyle(ClipinInk.secondary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-            ClipinKeycap(
-                key: key,
-                foreground: emphasized ? Color.accentColor.opacity(0.82) : ClipinInk.secondary
-            )
+            ClipinKeycap(key: key, foreground: ClipinInk.secondary)
         }
-        .padding(.horizontal, emphasized ? 10 : 0)
-        .padding(.vertical, emphasized ? 6 : 0)
-        .background(
-            RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                .fill(emphasized ? Color.accentColor.opacity(0.18) : Color.clear)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ClipinChrome.badgeCornerRadius, style: .continuous)
-                        .strokeBorder(emphasized ? Color.accentColor : Color.clear, lineWidth: 0.5)
-                )
-        )
     }
 
     private func launcherNoticeBanner(_ notice: LauncherNotice) -> some View {
