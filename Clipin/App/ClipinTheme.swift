@@ -359,3 +359,11 @@ enum ClipinHoverInk {
     static let fill = Color.primary.opacity(0.035)
     static let stroke = Color.clear
 }
+
+/// iOS/macOS 26 同心圆角形状(已对 Xcode 26.5 / macOS SDK 26 编译核验,Task 1)。
+/// curvature 随最近 `.containerShape(...)` 自动推导,不硬编码圆角魔数 ——
+/// 这是 iOS 26 原生做法,实测 API 是 `ConcentricRectangle` 形状(非
+/// `RoundedRectangle(cornerRadius: .containerConcentric)`)。
+/// 用法:玻璃容器根部 `.containerShape(RoundedRectangle(cornerRadius: shell, style: .continuous))`,
+/// 内部子形状/选中底板用 `ClipinConcentric()`,改 shell 一处全联动。
+typealias ClipinConcentric = ConcentricRectangle
