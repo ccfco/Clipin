@@ -234,6 +234,13 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(lastLauncherBrowseMode.rawValue, forKey: Keys.lastLauncherBrowseMode) }
     }
 
+    /// 富文本粘贴保留格式的教育性提示已展示次数。
+    /// 用计数而非 Bool：首次粘贴富文本时提示"格式已保留"，展示 3 次后永久静默，
+    /// 避免对已经理解该行为的用户持续打扰。
+    @Published var richPasteNoticeCountSeen: Int {
+        didSet { defaults.set(richPasteNoticeCountSeen, forKey: Keys.richPasteNoticeCountSeen) }
+    }
+
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var launchAtLoginNote: String?
 
@@ -262,6 +269,7 @@ final class SettingsStore: ObservableObject {
         static let pinnedItemsPresentation = "settings.pinnedItemsPresentation"
         static let launcherDefaultView = "settings.launcherDefaultView"
         static let lastLauncherBrowseMode = "settings.lastLauncherBrowseMode"
+        static let richPasteNoticeCountSeen = "settings.richPasteNoticeCountSeen"
         static let onboardingVersion = "settings.onboardingVersion"
         static let onboardingCohort = "settings.onboardingCohort"
     }
@@ -328,6 +336,7 @@ final class SettingsStore: ObservableObject {
         self.pinnedItemsPresentation = storedPinnedItemsPresentation
         self.launcherDefaultView = storedLauncherDefaultView
         self.lastLauncherBrowseMode = storedLastLauncherBrowseMode
+        self.richPasteNoticeCountSeen = defaults.object(forKey: Keys.richPasteNoticeCountSeen) as? Int ?? 0
         self.onboardingVersion = storedOnboardingVersion
         self.onboardingCohort = storedOnboardingCohort
         // init 赋值不触发 didSet，需手动同步确保 AppleLanguages 和持久化值一致
