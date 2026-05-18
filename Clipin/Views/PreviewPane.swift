@@ -48,12 +48,6 @@ struct PreviewPane: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 15)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(
-                ClipinContentSurface(
-                    cornerRadius: ClipinChrome.detailStageCornerRadius,
-                    elevated: true
-                )
-            )
             .padding(.bottom, ClipinChrome.floatingFooterBand)
     }
 
@@ -539,11 +533,6 @@ struct PreviewPane: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            ClipinContentSurface(
-                cornerRadius: ClipinChrome.detailMetadataCornerRadius
-            )
-        )
     }
 
     private func isImageFile(_ path: String) -> Bool {
@@ -1021,10 +1010,5 @@ private struct URLPreviewView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            ClipinContentSurface(
-                cornerRadius: ClipinChrome.detailMetadataCornerRadius
-            )
-        )
     }
 }

@@ -122,11 +122,6 @@ struct MainPanel: View {
         HStack(spacing: ClipinChrome.shellGap) {
             itemList
                 .frame(width: 292)
-                .background(
-                    ClipinContentSurface(
-                        cornerRadius: ClipinChrome.sectionCornerRadius
-                    )
-                )
                 .scaleEffect(sceneState.isShowingActions ? 0.998 : 1.0)
                 .opacity(sceneState.listRestingOpacity)
 
