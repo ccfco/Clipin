@@ -28,6 +28,16 @@ struct MainPanel: View {
     }
 
     var body: some View {
+        GlassEffectContainer {
+            panelContent
+        }
+        .glassEffect(
+            .regular,
+            in: RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
+        )
+    }
+
+    private var panelContent: some View {
         VStack(spacing: 0) {
             headerBar
             contentArea

@@ -47,79 +47,15 @@ private final class ClipinBorderlessHostingView<V: View>: NSHostingView<V> {
     }
 }
 
-/// 主 launcher 使用原生 NSPanel frame/shadow 作为外框，content view 只负责承载 material。
-private final class ClipinPanelChromeView<V: View>: NSView {
-    private let materialView = NSVisualEffectView()
-    private let hostingView: ClipinPanelHostingView<V>
-
-    init(rootView: V, contentSize: NSSize) {
-        self.hostingView = ClipinPanelHostingView(rootView: rootView)
-        super.init(frame: NSRect(origin: .zero, size: contentSize))
-
-        wantsLayer = true
-        setupMaterialView()
-        setupHostingView()
-        updateLayerChrome()
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var isOpaque: Bool { false }
-
-    override func layout() {
-        super.layout()
-        materialView.frame = bounds
-        hostingView.frame = bounds
-        updateLayerChrome()
-        window?.invalidateShadow()
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        updateLayerChrome()
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        updateLayerChrome()
-        window?.invalidateShadow()
-    }
-
-    private func setupMaterialView() {
-        materialView.frame = bounds
-        materialView.autoresizingMask = [.width, .height]
-        materialView.blendingMode = .behindWindow
-        materialView.material = .contentBackground
-        materialView.state = .active
-        addSubview(materialView)
-    }
-
-    private func setupHostingView() {
-        hostingView.frame = bounds
-        hostingView.autoresizingMask = [.width, .height]
-        addSubview(hostingView)
-    }
-
-    private func updateLayerChrome() {
-        guard let layer else { return }
-        layer.backgroundColor = NSColor.clear.cgColor
-        layer.borderWidth = 0
-        layer.borderColor = nil
-        // 原生 titled/fullSizeContentView window 已经负责圆角 frame 和 clipping。
-        // 这里再做 cornerRadius + masksToBounds 会在 NSVisualEffectView 边缘产生一层
-        // 抗锯齿灰边，和 NSWindow frame hairline 叠成更粗的 outer stroke。
-        layer.masksToBounds = false
-    }
-}
-
+/// 主 launcher 专用 hosting view。
+/// chrome 玻璃已移交 SwiftUI 根 `GlassEffectContainer`，
+/// 这里只保留正确的窗口行为：zero safeAreaInsets / clear layer / 不 mask。
 private final class ClipinPanelHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var isOpaque: Bool { false }
     // `.titled + .fullSizeContentView` 会把隐藏标题栏区域作为 SwiftUI safe area 注入，
-    // 导致 launcher 内容整体下移。主面板 chrome 已由外层 AppKit view 裁切，内容区必须填满 bounds。
+    // 导致 launcher 内容整体下移。chrome 玻璃与圆角已由 SwiftUI 根 GlassEffectContainer +
+    // .glassEffect 负责，这里只需归零 safe area 让内容填满 bounds。
     override var safeAreaInsets: NSEdgeInsets {
         NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
     }
@@ -426,9 +362,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.contentView = ClipinPanelChromeView(
-            rootView: MainPanel(viewModel: vm),
-            contentSize: panelSize
+        panel.contentView = ClipinPanelHostingView(
+            rootView: MainPanel(viewModel: vm)
         )
         panel.isMovableByWindowBackground = true
         panel.title = ""
@@ -440,9 +375,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
             panel.standardWindowButton(button)?.isHidden = true
         }
-        // 窗口圆角必须和 SwiftUI 内容 shellCornerRadius 一致，
-        // 否则系统 frame 的默认圆角和内容错位，叠出粗线。
-        panel.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
+        // 圆角改由 SwiftUI 根部玻璃形状定义（GlassEffectContainer + glassEffect），
+        // 窗口 frame 不再自画圆角，杜绝 NSVisualEffectView 抗锯齿边 + frame + 自裁三者叠边。
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
