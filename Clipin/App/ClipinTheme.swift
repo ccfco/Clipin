@@ -158,14 +158,19 @@ struct ClipinKeycap: View {
     let foreground: Color
 
     var body: some View {
+        // Raycast 式扁平键帽:低调中性圆角块,不上玻璃(窗面已是 Liquid Glass,
+        // 键帽再上玻璃就成玻璃叠玻璃)。
         Text(key)
             .font(.system(size: 10.5, weight: .medium, design: .rounded))
             .foregroundStyle(foreground)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .clipinChromeGlass(in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2.5)
+            .background(
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
+            )
     }
 }
 
