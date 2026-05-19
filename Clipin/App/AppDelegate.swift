@@ -365,9 +365,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.viewModel = vm
         let panelSize = NSSize(width: 800, height: 540)
 
+        // QA hover 自检:nonactivating panel + 失焦自关导致合成鼠标无法触发真
+        // hover(效果② 内缩灰高亮 / 派生簇)。仅当显式 env `CLIPIN_QA_HOVERABLE=1`
+        // 时去掉 .nonactivatingPanel 并跳过失焦自关,让 screencapture 前能用
+        // 合成鼠标驱动真 hover。默认无此 env → 行为零变化(显式 opt-in 测试钩子)。
+        let qaHoverable = ProcessInfo.processInfo.environment["CLIPIN_QA_HOVERABLE"] == "1"
+        let panelStyle: NSWindow.StyleMask = qaHoverable
+            ? [.titled, .fullSizeContentView]
+            : [.titled, .fullSizeContentView, .nonactivatingPanel]
         let panel = ClipinPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: [.titled, .fullSizeContentView, .nonactivatingPanel],
+            styleMask: panelStyle,
             backing: .buffered,
             defer: false
         )
@@ -410,6 +418,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.collectionBehavior = [.moveToActiveSpace, .transient, .fullScreenAuxiliary]
         panel.becomesKeyOnlyIfNeeded = false
         panel.onResignKey = { [weak self] in
+            // QA hover 模式:不因失焦自关,保证 screencapture 前面板常驻可被合成鼠标 hover。
+            if qaHoverable { return }
             self?.handlePanelResignKey()
         }
         panel.delegate = self
