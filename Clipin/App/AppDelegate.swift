@@ -178,6 +178,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateReminder.start()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()
+        // QA 视觉自检插桩:仅当显式 env `CLIPIN_QA_SHOW_PANEL=1` 时,启动即显主面板,
+        // 让自截图验收环路不依赖全局热键 / TCC Accessibility / 状态栏管理器(ad-hoc
+        // 重构建会丢 TCC 授权使热键失效)。无此 env 时行为零变化 —— 这是显式 opt-in
+        // 测试钩子,不是静默兜底(CLAUDE.md #7)。
+        if ProcessInfo.processInfo.environment["CLIPIN_QA_SHOW_PANEL"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                self?.togglePanel()
+            }
+        }
     }
 
     // MARK: - Menu Bar
@@ -382,6 +391,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
+        // 锁定深色外观:用户参照是 Raycast / Spotlight-dark 那种深色 Liquid Glass。
+        // NSGlassEffectView + SwiftUI 默认跟随系统外观,用户系统在 Light 模式时会
+        // 渲染成浅灰发白(非目标)。强制 .darkAqua 让整窗玻璃恒为深色玻璃,与参照一致,
+        // 不随用户明暗模式漂移(自截图验收发现的真机问题)。
+        panel.appearance = NSAppearance(named: .darkAqua)
         panel.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
         [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
             panel.standardWindowButton(button)?.isHidden = true
