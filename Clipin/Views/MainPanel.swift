@@ -24,12 +24,9 @@ struct MainPanel: View {
     /// 底栏右侧动作簇共享玻璃命名空间:Paste / Actions 用同一 union id 并成
     /// **一条连续玻璃胶囊**(Raycast 参照效果①),每颗仍各自 .interactive() hover(②)。
     @Namespace private var footerGlassNS
-    /// QA 视觉自检:仅当显式 env `CLIPIN_QA_SHOW_PILLS=1` 时强制常显派生簇,
-    /// 让自截图能确定性核对(合成鼠标对 nonactivating panel 的 .onHover 不可靠)。
-    /// 默认无此 env → 零行为变化(显式 opt-in 测试钩子,非兜底)。
+    /// hover Paste 或 pills 时显示派生簇;QA 钩子可强制常显(语义见 QAFlags)。
     private var showsDerivedPills: Bool {
-        isPasteHovered || isPillsHovered
-            || ProcessInfo.processInfo.environment["CLIPIN_QA_SHOW_PILLS"] == "1"
+        isPasteHovered || isPillsHovered || QAFlags.alwaysShowDerivedPills
     }
 
     private var sceneState: ClipinSceneState {
@@ -212,12 +209,15 @@ struct MainPanel: View {
     }
 
     private var bottomBar: some View {
-        // macOS 26 标准做法(ChatGPT 等同款):GlassEffectContainer 内放多颗
-        // .glassEffect(.regular.interactive(), in: Capsule) 元件——容器把相邻胶囊
-        // 「融合」成一条连续液态玻璃,四周一圈共享 rim;.interactive() 提供鼠标悬停
-        // 时那层灰色高亮(看得见单个按钮轮廓),press 也由系统原生给。
-        // 关键前提:每颗 chip 必须先有内边距(body),否则玻璃缩成发丝=看不见。
+        // macOS 26 标准:GlassEffectContainer 把相邻 .glassEffect(.regular.interactive(),
+        // in: Capsule) 元件融成一条连续液态玻璃(共享 rim),hover/press 由系统原生给。
+        // 前提:每颗 chip 必须先有内边距(见 ClipinFooterGlassButtonStyle),否则玻璃缩成发丝。
         GlassEffectContainer(spacing: 6) {
+            bottomBarRow
+        }
+    }
+
+    private var bottomBarRow: some View {
         HStack(spacing: 6) {
             // 左侧来源面包屑:独立一颗玻璃胶囊(Raycast 左侧 `图标+Clipboard History` 同位)。
             sourceBreadcrumb
@@ -231,11 +231,9 @@ struct MainPanel: View {
 
             Spacer()
 
-            // 右侧动作簇:Paste +(连续粘贴态)+ Actions 紧挨,间距 = 外层
-            // GlassEffectContainer 的 spacing(6)→ 系统把它们融成**一条连续
-            // 深色玻璃胶囊**、共享一圈 rim(Raycast 参照效果①);每颗仍
-            // `.glassEffect(.regular.interactive())`→ hover 单颗内缩灰高亮+微浮
-            // (效果②)。中间不放 Spacer / 不加 padding,否则间距 >spacing 就裂开。
+            // 右侧动作簇:Paste +(连续粘贴态)+ Actions 共用 union id,系统融成一条
+            // 连续胶囊(效果①);每颗仍 .interactive() 各自 hover 高亮+微浮(效果②)。
+            // 中间不放 Spacer / 不加 padding,否则间距 >spacing 就裂开。
             HStack(spacing: 6) {
                 if viewModel.selectedListItem != nil {
                     Button { viewModel.pasteSelected() } label: {
@@ -274,7 +272,6 @@ struct MainPanel: View {
         .padding(.horizontal, ClipinChrome.shellGap * 2)
         .padding(.bottom, ClipinChrome.shellGap)
         .animation(ClipinMotion.focusShift, value: sceneState)
-        }
     }
 
     /// 来源 app 图标:按 bundle id 解析(镜像 PreviewPane.sourceAppIcon,来源 app 未运行也可用)
@@ -285,42 +282,40 @@ struct MainPanel: View {
         return NSWorkspace.shared.icon(forFile: url.path)
     }
 
+    /// 选中项有 app icon 时优先用它,否则统一回退 doc.on.clipboard 符号。
+    /// 三种状态(具名来源 / 未知来源 / 无选中)只在 icon 与 label 上有差异,合并避免三段重复。
+    @ViewBuilder private var sourceBreadcrumbIcon: some View {
+        if let item = viewModel.selectedListItem,
+           item.sourceName != nil,
+           let icon = sourceAppIcon(bundleId: item.sourceApp) {
+            Image(nsImage: icon).resizable().frame(width: 14, height: 14)
+        } else {
+            Image(systemName: "doc.on.clipboard")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ClipinInk.secondary)
+        }
+    }
+
+    /// "Clipboard History" 是字面 LocalizedStringKey,"Unknown Source" 走 NSLocalizedString,
+    /// 具名来源用原始字符串——三者本地化路径不同,必须各自保留对应 Text 初始化器。
+    private var sourceBreadcrumbLabel: Text {
+        guard let item = viewModel.selectedListItem else {
+            return Text("Clipboard History")
+        }
+        guard let name = item.sourceName else {
+            return Text(NSLocalizedString("Unknown Source", comment: ""))
+        }
+        return Text(name)
+    }
+
     private var sourceBreadcrumb: some View {
         HStack(spacing: 7) {
-            if let item = viewModel.selectedListItem {
-                if let name = item.sourceName {
-                    if let icon = sourceAppIcon(bundleId: item.sourceApp) {
-                        Image(nsImage: icon).resizable().frame(width: 14, height: 14)
-                    } else {
-                        Image(systemName: "doc.on.clipboard")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(ClipinInk.secondary)
-                    }
-                    Text(name)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(ClipinInk.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                } else {
-                    Image(systemName: "doc.on.clipboard")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(ClipinInk.secondary)
-                    Text(NSLocalizedString("Unknown Source", comment: ""))
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(ClipinInk.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-            } else {
-                Image(systemName: "doc.on.clipboard")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(ClipinInk.secondary)
-                Text("Clipboard History")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(ClipinInk.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
+            sourceBreadcrumbIcon
+            sourceBreadcrumbLabel
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(ClipinInk.secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)

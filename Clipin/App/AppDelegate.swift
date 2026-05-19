@@ -178,11 +178,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateReminder.start()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()
-        // QA 视觉自检插桩:仅当显式 env `CLIPIN_QA_SHOW_PANEL=1` 时,启动即显主面板,
-        // 让自截图验收环路不依赖全局热键 / TCC Accessibility / 状态栏管理器(ad-hoc
-        // 重构建会丢 TCC 授权使热键失效)。无此 env 时行为零变化 —— 这是显式 opt-in
-        // 测试钩子,不是静默兜底(CLAUDE.md #7)。
-        if ProcessInfo.processInfo.environment["CLIPIN_QA_SHOW_PANEL"] == "1" {
+        // QA 自截图钩子(语义见 QAFlags)。
+        if QAFlags.showPanelOnLaunch {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
                 self?.togglePanel()
             }
@@ -365,11 +362,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.viewModel = vm
         let panelSize = NSSize(width: 800, height: 540)
 
-        // QA hover 自检:nonactivating panel + 失焦自关导致合成鼠标无法触发真
-        // hover(效果② 内缩灰高亮 / 派生簇)。仅当显式 env `CLIPIN_QA_HOVERABLE=1`
-        // 时去掉 .nonactivatingPanel 并跳过失焦自关,让 screencapture 前能用
-        // 合成鼠标驱动真 hover。默认无此 env → 行为零变化(显式 opt-in 测试钩子)。
-        let qaHoverable = ProcessInfo.processInfo.environment["CLIPIN_QA_HOVERABLE"] == "1"
+        // QA hover 钩子:去掉 .nonactivatingPanel + 跳过失焦自关,
+        // 让合成鼠标能触发真 hover(语义见 QAFlags)。
+        let qaHoverable = QAFlags.hoverablePanel
         let panelStyle: NSWindow.StyleMask = qaHoverable
             ? [.titled, .fullSizeContentView]
             : [.titled, .fullSizeContentView, .nonactivatingPanel]
@@ -379,14 +374,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        // 窗面回归 macOS 26 原生整窗 Liquid Glass(导航层;Spotlight/Raycast 同款)。
-        // v2 的「实心深色 NSView」被用户多轮真机否决:不够原生、非聚焦那种。
-        // NSGlassEffectView 是 .glassEffect 的 AppKit 对应:contentView 放内容、
-        // cornerRadius 设圆角,几何由系统绑定到 contentView。launcher 整窗即导航
-        // 层,整面玻璃合法(非文档内容)。底栏命令簇是独立 GlassEffectContainer
-        // 浮其上(Apple 文档化的控件玻璃浮导航玻璃模式,非禁止的无序 glass-on-glass)。
-        // 圆角仍由下方 panel frame cornerRadius KVC 统一框(不手动 masksToBounds,
-        // 避免与 frame hairline 叠双发丝线 —— CLAUDE.md 旧坑)。
+        // 窗面 = macOS 26 原生整窗 Liquid Glass(导航层,Spotlight/Raycast 同款)。
+        // NSGlassEffectView 是 .glassEffect 的 AppKit 对应,几何绑定到 contentView;
+        // launcher 整窗即导航层,整面玻璃合法,底栏命令簇是其上独立 GlassEffectContainer
+        // (Apple 文档化的控件玻璃浮导航玻璃,非禁止的无序 glass-on-glass)。跟随系统
+        // 外观自适应,不锁 dark——旧"发白发平"是内容铺不透明底压平玻璃,非明暗问题。
+        // 决策留痕:v2 的「实心深色 NSView」被用户多轮真机否决(不够原生)。
         let glass = NSGlassEffectView()
         glass.cornerRadius = ClipinChrome.shellCornerRadius
         let host = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
@@ -399,18 +392,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        // 大面板 = macOS 26 聚焦(Spotlight)那种浅色强通透 Liquid Glass:跟随系统
-        // 外观自适应(Spotlight 本身就是自适应,Light 模式即浅色通透),不强制 dark。
-        // 之前"发白发平"是玻璃质量问题(内容不透光把玻璃压平),非明暗问题——
-        // 由 NSGlassEffectView 原生材质 + 内容不铺不透明底解决,不靠锁外观掩盖。
+        // .titled 窗口始终有系统 frame:用 cornerRadius KVC 把 frame 圆角对齐 shell 24pt
+        // (同设置/引导/权限窗口),否则默认 titled 角会在四角露 frame 发丝弧。不手动
+        // masksToBounds——旧双发丝线源是已删除的 AppKit material 宿主层抗锯齿边,踩过坑。
         panel.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
         [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
             panel.standardWindowButton(button)?.isHidden = true
         }
-        // .titled 窗口始终有系统 window frame：必须用 cornerRadius KVC 把 frame 圆角设成
-        // shellCornerRadius，与 SwiftUI 根 .glassEffect/.clipShape 的 24pt 角对齐，否则
-        // 默认 titled 角会在四角露出 frame 发丝弧（与设置/引导/权限窗口同一处理）。
-        // 旧双发丝线源是已删除的 AppKit material 宿主层抗锯齿边，不是此 KVC。
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
