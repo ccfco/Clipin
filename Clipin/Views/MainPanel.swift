@@ -10,6 +10,9 @@ struct MainPanel: View {
     /// 键盘用户走全局快捷键,不依赖此 hover 状态。
     @State private var isPasteHovered = false
     @State private var isPillsHovered = false
+    /// 底栏右侧动作簇共享玻璃命名空间:Paste / Actions 用同一 union id 并成
+    /// **一条连续玻璃胶囊**(Raycast 参照效果①),每颗仍各自 .interactive() hover(②)。
+    @Namespace private var footerGlassNS
     /// QA 视觉自检:仅当显式 env `CLIPIN_QA_SHOW_PILLS=1` 时强制常显派生簇,
     /// 让自截图能确定性核对(合成鼠标对 nonactivating panel 的 .onHover 不可靠)。
     /// 默认无此 env → 零行为变化(显式 opt-in 测试钩子,非兜底)。
@@ -197,7 +200,7 @@ struct MainPanel: View {
         // 关键前提:每颗 chip 必须先有内边距(body),否则玻璃缩成发丝=看不见。
         GlassEffectContainer(spacing: 6) {
         HStack(spacing: 6) {
-            // 底栏恒为左对齐的来源面包屑：选中时显条目来源 app，无选中回退 Clipboard History。
+            // 左侧来源面包屑:独立一颗玻璃胶囊(Raycast 左侧 `图标+Clipboard History` 同位)。
             sourceBreadcrumb
 
             if viewModel.hasActiveFilter && viewModel.selectedListItem == nil {
@@ -209,34 +212,39 @@ struct MainPanel: View {
 
             Spacer()
 
-            if viewModel.selectedListItem != nil {
-                Button { viewModel.pasteSelected() } label: {
-                    pasteCallToAction(
-                        label: viewModel.targetAppName.map { String(format: NSLocalizedString("Paste to %@", comment: ""), $0) } ?? NSLocalizedString("Paste", comment: ""),
-                        key: "↵"
-                    )
+            // 右侧动作簇:Paste +(连续粘贴态)+ Actions 紧挨,间距 = 外层
+            // GlassEffectContainer 的 spacing(6)→ 系统把它们融成**一条连续
+            // 深色玻璃胶囊**、共享一圈 rim(Raycast 参照效果①);每颗仍
+            // `.glassEffect(.regular.interactive())`→ hover 单颗内缩灰高亮+微浮
+            // (效果②)。中间不放 Spacer / 不加 padding,否则间距 >spacing 就裂开。
+            HStack(spacing: 6) {
+                if viewModel.selectedListItem != nil {
+                    Button { viewModel.pasteSelected() } label: {
+                        pasteCallToAction(
+                            label: viewModel.targetAppName.map { String(format: NSLocalizedString("Paste to %@", comment: ""), $0) } ?? NSLocalizedString("Paste", comment: ""),
+                            key: "↵"
+                        )
+                    }
+                    .buttonStyle(ClipinFooterGlassButtonStyle())
+                    .glassEffectUnion(id: "footerActions", namespace: footerGlassNS)
+                    .onHover { hovering in
+                        withAnimation(ClipinMotion.commandReveal) { isPasteHovered = hovering }
+                    }
                 }
-                .buttonStyle(ClipinFooterGlassButtonStyle())
-                .onHover { hovering in
-                    withAnimation(ClipinMotion.commandReveal) { isPasteHovered = hovering }
+
+                if viewModel.isContinuousPasteEnabled {
+                    continuousPastePill
+                        .glassEffectUnion(id: "footerActions", namespace: footerGlassNS)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
-            }
 
-            if viewModel.isContinuousPasteEnabled {
-                continuousPastePill
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-            }
-
-            // footer 右侧常驻命令簇只保留 ⌘K Actions 作为全局入口。
-            // 设置入口、Continuous Paste 开关、Plain Text/Open/Preview 已经在 ⌘K 面板内可触达，
-            // 不再在 footer 里重复展示，避免命令条信息过载。
-            commandCluster {
+                // ⌘K Actions 作为全局入口常驻;与 Paste 同 union id → 融成一条连续胶囊。
                 Button { viewModel.toggleActionsPalette() } label: {
                     keyBadge(label: "Actions", key: "⌘K")
                 }
                 .buttonStyle(ClipinFooterGlassButtonStyle())
+                .glassEffectUnion(id: "footerActions", namespace: footerGlassNS)
             }
-            .padding(.leading, 10)
         }
         .padding(.horizontal, ClipinChrome.footerContentInset)
         .padding(.vertical, ClipinChrome.footerContentInset)
@@ -323,13 +331,6 @@ struct MainPanel: View {
         .help(NSLocalizedString("Press Esc to exit Continuous Paste.", comment: ""))
         .accessibilityLabel(Text("Continuous Paste"))
         .accessibilityHint(Text("Press Esc to exit Continuous Paste."))
-    }
-
-    private func commandCluster<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        // Raycast 式扁平命令组:仅排布,不再套玻璃胶囊。
-        HStack(spacing: 8) {
-            content()
-        }
     }
 
     /// hover Paste 时其正上方派生的次级动作胶囊数据(随选中条目能力动态)。
