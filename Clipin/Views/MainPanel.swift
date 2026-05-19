@@ -10,7 +10,13 @@ struct MainPanel: View {
     /// 键盘用户走全局快捷键,不依赖此 hover 状态。
     @State private var isPasteHovered = false
     @State private var isPillsHovered = false
-    private var showsDerivedPills: Bool { isPasteHovered || isPillsHovered }
+    /// QA 视觉自检:仅当显式 env `CLIPIN_QA_SHOW_PILLS=1` 时强制常显派生簇,
+    /// 让自截图能确定性核对(合成鼠标对 nonactivating panel 的 .onHover 不可靠)。
+    /// 默认无此 env → 零行为变化(显式 opt-in 测试钩子,非兜底)。
+    private var showsDerivedPills: Bool {
+        isPasteHovered || isPillsHovered
+            || ProcessInfo.processInfo.environment["CLIPIN_QA_SHOW_PILLS"] == "1"
+    }
 
     private var sceneState: ClipinSceneState {
         ClipinSceneState(
@@ -59,6 +65,23 @@ struct MainPanel: View {
         .overlay(alignment: .bottom) {
             bottomBar
         }
+        // hover Paste → 其正上方派生次级动作玻璃胶囊簇(真机 Raycast 式)。
+        // 必须挂 panelContent 顶层而非底栏内部:底栏是 ~44pt 高的
+        // GlassEffectContainer,挂里面会被容器裁掉(自截图实证)。这里浮在
+        // floatingFooterBand 之上、靠右与 Paste 大致对齐,不被裁。
+        .overlay(alignment: .bottomTrailing) {
+            if showsDerivedPills && viewModel.selectedListItem != nil {
+                FooterHoverDerivedPills(pills: hoverPills())
+                    .fixedSize()
+                    .padding(.trailing, 132)
+                    .padding(.bottom, ClipinChrome.floatingFooterBand + ClipinChrome.shellGap)
+                    .onHover { hovering in
+                        withAnimation(ClipinMotion.commandReveal) { isPillsHovered = hovering }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .animation(ClipinMotion.commandReveal, value: showsDerivedPills)
         .overlay(alignment: .bottom) {
             if let notice = viewModel.launcherNotice {
                 launcherNoticeBanner(notice)
@@ -196,23 +219,6 @@ struct MainPanel: View {
                 .buttonStyle(ClipinFooterGlassButtonStyle())
                 .onHover { hovering in
                     withAnimation(ClipinMotion.commandReveal) { isPasteHovered = hovering }
-                }
-                // hover Paste → 其正上方派生次级粘贴/动作玻璃胶囊簇(真机 Raycast 式:
-                // hover 控件→正上方派生独立玻璃胶囊提示次级快捷键)。pills 视图带 6pt
-                // 透明 bottom padding,alignmentGuide 用 d[.bottom](不 +6)让 pills
-                // 视图底边正好贴住 Paste 顶边——视觉留 6pt 缝、命中区却连续,鼠标
-                // 从 Paste 上移到 pills 不穿死区。pills 自身 onHover 维持显示。
-                .overlay(alignment: .top) {
-                    if showsDerivedPills {
-                        FooterHoverDerivedPills(pills: hoverPills())
-                            .padding(.bottom, 6)
-                            .fixedSize()
-                            .alignmentGuide(.top) { dimension in dimension[.bottom] }
-                            .onHover { hovering in
-                                withAnimation(ClipinMotion.commandReveal) { isPillsHovered = hovering }
-                            }
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
                 }
             }
 
