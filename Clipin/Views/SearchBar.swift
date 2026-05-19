@@ -221,10 +221,15 @@ struct SearchBar: View {
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
+    /// 搜索栏最左 = app 身份图标(Raycast/Spotlight 同位),取代原放大镜符号。
+    /// 用 `NSApplication.applicationIconImage` 复用现有 AppIcon 资源,不新增图片;
+    /// 搜索可发现性由占位符 "Search clipboard history…" 承担。
     private var searchGlyph: some View {
-        Image(systemName: "magnifyingglass")
-            .foregroundStyle(ClipinInk.secondary)
-            .font(.system(size: 14, weight: .medium))
+        Image(nsImage: NSApplication.shared.applicationIconImage)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 18, height: 18)
             .frame(width: 20, height: 24)
     }
 

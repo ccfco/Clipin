@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 
 /// 发布 Paste 按钮在面板坐标系的 bounds,供派生簇精确锚定其正上方
 /// (替代硬编码偏移——Paste 文案随目标 app 名/本地化变宽,固定偏移会漂移)。
@@ -211,16 +210,8 @@ struct MainPanel: View {
 
     private var bottomBarRow: some View {
         HStack(spacing: 6) {
-            // 左侧来源面包屑:独立一颗玻璃胶囊(Raycast 左侧 `图标+Clipboard History` 同位)。
-            sourceBreadcrumb
-
-            if viewModel.hasActiveFilter && viewModel.selectedListItem == nil {
-                Text("No selection")
-                    .font(.system(size: 11))
-                    .foregroundStyle(ClipinInk.tertiary)
-                    .padding(.leading, 8)
-            }
-
+            // 左侧留空:app 身份已上移到搜索栏左侧图标,条目来源在右侧预览 metadata
+            // rail 已显示,底栏只承担右对齐命令簇(去掉伪按钮式来源胶囊)。
             Spacer()
 
             // 右侧动作簇:整簇共用**一块**连续玻璃 Capsule(Raycast 效果①);
@@ -264,56 +255,6 @@ struct MainPanel: View {
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
-    /// 来源 app 图标:按 bundle id 解析(镜像 PreviewPane.sourceAppIcon,来源 app 未运行也可用)
-    private func sourceAppIcon(bundleId: String?) -> NSImage? {
-        guard let bundleId,
-              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
-        else { return nil }
-        return NSWorkspace.shared.icon(forFile: url.path)
-    }
-
-    /// 选中项有 app icon 时优先用它,否则统一回退 doc.on.clipboard 符号。
-    /// 三种状态(具名来源 / 未知来源 / 无选中)只在 icon 与 label 上有差异,合并避免三段重复。
-    @ViewBuilder private var sourceBreadcrumbIcon: some View {
-        if let item = viewModel.selectedListItem,
-           item.sourceName != nil,
-           let icon = sourceAppIcon(bundleId: item.sourceApp) {
-            Image(nsImage: icon).resizable().frame(width: 14, height: 14)
-        } else {
-            Image(systemName: "doc.on.clipboard")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(ClipinInk.secondary)
-        }
-    }
-
-    /// "Clipboard History" 是字面 LocalizedStringKey,"Unknown Source" 走 NSLocalizedString,
-    /// 具名来源用原始字符串——三者本地化路径不同,必须各自保留对应 Text 初始化器。
-    private var sourceBreadcrumbLabel: Text {
-        guard let item = viewModel.selectedListItem else {
-            return Text("Clipboard History")
-        }
-        guard let name = item.sourceName else {
-            return Text(NSLocalizedString("Unknown Source", comment: ""))
-        }
-        return Text(name)
-    }
-
-    private var sourceBreadcrumb: some View {
-        HStack(spacing: 7) {
-            sourceBreadcrumbIcon
-            sourceBreadcrumbLabel
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(ClipinInk.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        // 来源面包屑与命令胶囊同语:同为 Capsule 原生 glass,放进同一 GlassEffectContainer
-        // 后与命令胶囊融合成一条连续液态玻璃(共享四周 rim)。它不是按钮故不 interactive。
-        .glassEffect(.regular, in: Capsule(style: .continuous))
-        .frame(maxWidth: 220, alignment: .leading)
-    }
 
     private var continuousPastePill: some View {
         Button { viewModel.toggleContinuousPaste() } label: {
@@ -340,6 +281,8 @@ struct MainPanel: View {
 
     /// hover Paste 时其正上方派生的次级动作胶囊数据(随选中条目能力动态)。
     /// 动作与旧"横向展开簇"字节不变,仅呈现位置从"Paste 左侧横排"改"Paste 正上方派生"。
+    /// 不变量:每个 pill 的 `label+shortcut` 必须全局唯一——FooterDerivedPill.id 由二者拼成,
+    /// 重复会让 ForEach 把不同动作当同一元素、hover/过渡整组重建闪动(故勿加同名项)。
     private func hoverPills() -> [FooterDerivedPill] {
         var pills: [FooterDerivedPill] = []
         if viewModel.selectedRepresentationUTIs.contains("public.html") {

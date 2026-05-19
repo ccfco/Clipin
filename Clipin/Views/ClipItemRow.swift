@@ -127,10 +127,6 @@ struct ClipItemRow: View {
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color(nsColor: .controlColor))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(ClipinHoverInk.stroke, lineWidth: 0.5)
-                        )
                 )
         }
     }

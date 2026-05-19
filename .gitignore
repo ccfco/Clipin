@@ -25,3 +25,6 @@ AGENTS.md
 
 # superpowers brainstorm visual companion
 .superpowers/
+
+# coverage / profiling 产物
+*.profraw

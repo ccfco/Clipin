@@ -20,28 +20,21 @@ enum QAFlags {
     static var forceSegmentHover: Bool { on("CLIPIN_QA_FORCE_HOVER") }
 }
 
-enum VisualTheme: String, CaseIterable {
+/// 主题 tint 已在 Liquid Glass 迁移中下线(单 native 无 tint,见 SettingsView 注释)。
+/// 枚举与 rawValue 仅为 `SettingsStore.visualTheme` 持久化保留,防止破坏既有用户偏好的迁移;
+/// 渲染层不再读其值。原 `displayName` / `CaseIterable`(给已删的主题 picker 用)已随之移除。
+enum VisualTheme: String {
     case native = "native"
     case mist = "mist"
     case graphite = "graphite"
     case sunrise = "sunrise"
-
-    var displayName: String {
-        switch self {
-        case .native:
-            return NSLocalizedString("Native", comment: "")
-        case .mist:
-            return NSLocalizedString("Mist", comment: "")
-        case .graphite:
-            return NSLocalizedString("Graphite", comment: "")
-        case .sunrise:
-            return NSLocalizedString("Sunrise", comment: "")
-        }
-    }
 }
 
 enum ClipinChrome {
-    // 圆角层级：shell 24 → section 16 → contentStage/field 14 → metadata 12 → row 12 → badge 10/7
+    // 主圆角层级（嵌套依次递减）：shell 24 → section 16 → contentStage/field 14 → metadata 12 → row 12 → badge 10/7
+    // 链外两个独立量级（不参与嵌套递减，按用途单列）：
+    //   card 18 —— 辅助窗口（引导/权限/更新）里 ClipinContentSurface 的 grouped 卡片，介于 section 与 shell 之间
+    //   palette 26 —— 动作面板浮在最顶层，刻意比 shell 略大以强调悬浮层级
     static let shellCornerRadius: CGFloat = 24
     static let sectionCornerRadius: CGFloat = 16
     static let cardCornerRadius: CGFloat = 18
@@ -332,6 +325,12 @@ extension View {
 /// ③ `Capsule` 胶囊形——配合外层 GlassEffectContainer 把相邻胶囊「融合」成一条
 ///    连续液态玻璃,四周一圈共享 rim(用户要的「椭圆形、一圈玻璃边」)。
 /// 不是 `.glassProminent`(不透明)、不是手搓扁平条。
+///
+/// 与 `ClipinFooterSegmentStyle` 的分工(底栏两套 hover 机制,改底栏前先读):
+/// - 本样式 = **独立**胶囊(派生簇 FooterHoverDerivedPills),每颗自带 `.regular.interactive()`
+///   原生玻璃 + 系统 hover;
+/// - SegmentStyle = **融合**胶囊内的分段(bottomBar 命令簇),整簇共用一块组级玻璃,
+///   hover 自绘。二者不可混用:组级玻璃会杀掉 per-button `.interactive()`。
 struct ClipinFooterGlassButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -348,26 +347,38 @@ struct ClipinFooterGlassButtonStyle: ButtonStyle {
 /// 灰色形状、按钮像浮起来")。`glassEffectUnion` 会把多颗玻璃并成静态一块、
 /// 杀掉 per-button `.interactive()` hover——故改自绘,既得连续胶囊又得逐颗 hover。
 /// 高亮用 `Color.primary.opacity` 自适应:Light=压暗、Dark=提亮,夜间自动统一。
+///
+/// `@State` 必须放在内嵌 `SegmentBody: View` 上,不能直接挂 `ButtonStyle`:
+/// `ButtonStyle` 不是 `View`,SwiftUI 不为其安装 `@State` 存储,直接挂会让
+/// `isHovered` 变更不回写/不触发重绘(hover 高亮失效)。而 QA 的
+/// `forceSegmentHover` 旁路恰好短路了 `isHovered`,自截图永远验不出这个 bug。
 struct ClipinFooterSegmentStyle: ButtonStyle {
-    @State private var isHovered = false
-
     func makeBody(configuration: Configuration) -> some View {
-        let pressed = configuration.isPressed
-        let highlighted = isHovered || QAFlags.forceSegmentHover
-        return configuration.label
-            .padding(.horizontal, 13)
-            .padding(.vertical, 8)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
-                    .padding(2) // 内缩一圈:高亮比按钮小一圈,露出外层连续玻璃
-            )
-            .scaleEffect(pressed ? 0.97 : 1)
-            .contentShape(Capsule(style: .continuous))
-            .onHover { hovering in
-                withAnimation(ClipinMotion.feedback) { isHovered = hovering }
-            }
-            .animation(ClipinMotion.feedback, value: pressed)
+        SegmentBody(configuration: configuration)
+    }
+
+    private struct SegmentBody: View {
+        let configuration: Configuration
+        @State private var isHovered = false
+
+        var body: some View {
+            let pressed = configuration.isPressed
+            let highlighted = isHovered || QAFlags.forceSegmentHover
+            return configuration.label
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
+                        .padding(2) // 内缩一圈:高亮比按钮小一圈,露出外层连续玻璃
+                )
+                .scaleEffect(pressed ? 0.97 : 1)
+                .contentShape(Capsule(style: .continuous))
+                .onHover { hovering in
+                    withAnimation(ClipinMotion.feedback) { isHovered = hovering }
+                }
+                .animation(ClipinMotion.feedback, value: pressed)
+        }
     }
 }
 
