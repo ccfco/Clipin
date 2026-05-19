@@ -195,7 +195,9 @@ struct ClipItemRow: View {
               let range = text.range(of: query, options: .caseInsensitive, range: searchStart..<text.endIndex) {
             if let attrRange = Range(range, in: result) {
                 result[attrRange].backgroundColor = ClipinSelectionInk.highlight
-                result[attrRange].foregroundColor = .primary
+                // 命中词前景必须跟随选中态:选中行标题走 accent,这里若硬写 .primary
+                // 会让命中字在选中行不变蓝(Codex 复审抓到)。
+                result[attrRange].foregroundColor = isSelected ? .accentColor : .primary
             }
             searchStart = range.upperBound
         }

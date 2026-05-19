@@ -9,10 +9,12 @@ import SwiftUI
 /// 取代旧实现"横向展开在 Paste 左侧"的 `isFooterHovered` 簇。纯鼠标可发现性
 /// 增强;键盘用户走全局快捷键,不依赖此层(行为字节不变,仅呈现位置改)。
 struct FooterDerivedPill: Identifiable {
-    let id = UUID()
     let label: String
     let shortcut: String
     let action: () -> Void
+    /// 稳定 id(label+shortcut):hoverPills() 每次 body 重算会新建数组,
+    /// 用 UUID 会让 ForEach 把同一动作当全新元素→hover/过渡整组重建闪动。
+    var id: String { label + "\u{1}" + shortcut }
 }
 
 struct FooterHoverDerivedPills: View {

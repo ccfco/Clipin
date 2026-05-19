@@ -1,6 +1,15 @@
 import SwiftUI
 import AppKit
 
+/// 发布 Paste 按钮在面板坐标系的 bounds,供派生簇精确锚定其正上方
+/// (替代硬编码偏移——Paste 文案随目标 app 名/本地化变宽,固定偏移会漂移)。
+private struct PasteButtonAnchorKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 /// 主面板 - 更贴近 macOS 26 的 frosted glass 双栏布局
 struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
@@ -10,6 +19,8 @@ struct MainPanel: View {
     /// 键盘用户走全局快捷键,不依赖此 hover 状态。
     @State private var isPasteHovered = false
     @State private var isPillsHovered = false
+    /// 派生簇尺寸(用于按 Paste 真实 bounds 精确定位,替代脆弱的硬编码偏移)。
+    @State private var derivedPillsSize: CGSize = .zero
     /// 底栏右侧动作簇共享玻璃命名空间:Paste / Actions 用同一 union id 并成
     /// **一条连续玻璃胶囊**(Raycast 参照效果①),每颗仍各自 .interactive() hover(②)。
     @Namespace private var footerGlassNS
@@ -70,18 +81,26 @@ struct MainPanel: View {
         }
         // hover Paste → 其正上方派生次级动作玻璃胶囊簇(真机 Raycast 式)。
         // 必须挂 panelContent 顶层而非底栏内部:底栏是 ~44pt 高的
-        // GlassEffectContainer,挂里面会被容器裁掉(自截图实证)。这里浮在
-        // floatingFooterBand 之上、靠右与 Paste 大致对齐,不被裁。
-        .overlay(alignment: .bottomTrailing) {
-            if showsDerivedPills && viewModel.selectedListItem != nil {
-                FooterHoverDerivedPills(pills: hoverPills())
-                    .fixedSize()
-                    .padding(.trailing, 132)
-                    .padding(.bottom, ClipinChrome.floatingFooterBand + ClipinChrome.shellGap)
-                    .onHover { hovering in
-                        withAnimation(ClipinMotion.commandReveal) { isPillsHovered = hovering }
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+        // GlassEffectContainer,挂里面会被容器裁掉(自截图实证)。用
+        // PasteButtonAnchorKey 读 Paste 真实 bounds 精确锚定其正上方,
+        // 替代会随文案宽度漂移的硬编码偏移(Codex 复审抓到)。
+        .overlayPreferenceValue(PasteButtonAnchorKey.self) { anchor in
+            GeometryReader { proxy in
+                if showsDerivedPills, viewModel.selectedListItem != nil, let anchor {
+                    let pasteRect = proxy[anchor]
+                    FooterHoverDerivedPills(pills: hoverPills())
+                        .fixedSize()
+                        .onGeometryChange(for: CGSize.self) { $0.size } action: { derivedPillsSize = $0 }
+                        .onHover { hovering in
+                            withAnimation(ClipinMotion.commandReveal) { isPillsHovered = hovering }
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        // 右缘对齐 Paste 右缘、底边距 Paste 顶边 6pt(视觉留缝)。
+                        .offset(
+                            x: pasteRect.maxX - derivedPillsSize.width,
+                            y: pasteRect.minY - derivedPillsSize.height - 6
+                        )
+                }
             }
         }
         .animation(ClipinMotion.commandReveal, value: showsDerivedPills)
@@ -230,6 +249,7 @@ struct MainPanel: View {
                     .onHover { hovering in
                         withAnimation(ClipinMotion.commandReveal) { isPasteHovered = hovering }
                     }
+                    .anchorPreference(key: PasteButtonAnchorKey.self, value: .bounds) { $0 }
                 }
 
                 if viewModel.isContinuousPasteEnabled {
