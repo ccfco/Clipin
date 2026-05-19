@@ -21,9 +21,6 @@ struct MainPanel: View {
     @State private var isPillsHovered = false
     /// 派生簇尺寸(用于按 Paste 真实 bounds 精确定位,替代脆弱的硬编码偏移)。
     @State private var derivedPillsSize: CGSize = .zero
-    /// 底栏右侧动作簇共享玻璃命名空间:Paste / Actions 用同一 union id 并成
-    /// **一条连续玻璃胶囊**(Raycast 参照效果①),每颗仍各自 .interactive() hover(②)。
-    @Namespace private var footerGlassNS
     /// hover Paste 或 pills 时显示派生簇;QA 钩子可强制常显(语义见 QAFlags)。
     private var showsDerivedPills: Bool {
         isPasteHovered || isPillsHovered || QAFlags.alwaysShowDerivedPills
@@ -231,10 +228,11 @@ struct MainPanel: View {
 
             Spacer()
 
-            // 右侧动作簇:Paste +(连续粘贴态)+ Actions 共用 union id,系统融成一条
-            // 连续胶囊(效果①);每颗仍 .interactive() 各自 hover 高亮+微浮(效果②)。
-            // 中间不放 Spacer / 不加 padding,否则间距 >spacing 就裂开。
-            HStack(spacing: 6) {
+            // 右侧动作簇:整簇共用**一块**连续玻璃 Capsule(Raycast 效果①);
+            // 每颗按钮用 ClipinFooterSegmentStyle 自绘内缩灰高亮+微缩放(效果②)。
+            // 不再 per-button glass + glassEffectUnion(union 会把玻璃并成静态一块、
+            // 杀掉逐颗 hover,二者只能取一——故改组级玻璃 + 自绘 hover)。
+            HStack(spacing: 4) {
                 if viewModel.selectedListItem != nil {
                     Button { viewModel.pasteSelected() } label: {
                         pasteCallToAction(
@@ -242,8 +240,7 @@ struct MainPanel: View {
                             key: "↵"
                         )
                     }
-                    .buttonStyle(ClipinFooterGlassButtonStyle())
-                    .glassEffectUnion(id: "footerActions", namespace: footerGlassNS)
+                    .buttonStyle(ClipinFooterSegmentStyle())
                     .onHover { hovering in
                         withAnimation(ClipinMotion.commandReveal) { isPasteHovered = hovering }
                     }
@@ -252,17 +249,15 @@ struct MainPanel: View {
 
                 if viewModel.isContinuousPasteEnabled {
                     continuousPastePill
-                        .glassEffectUnion(id: "footerActions", namespace: footerGlassNS)
                         .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
 
-                // ⌘K Actions 作为全局入口常驻;与 Paste 同 union id → 融成一条连续胶囊。
                 Button { viewModel.toggleActionsPalette() } label: {
                     keyBadge(label: "Actions", key: "⌘K")
                 }
-                .buttonStyle(ClipinFooterGlassButtonStyle())
-                .glassEffectUnion(id: "footerActions", namespace: footerGlassNS)
+                .buttonStyle(ClipinFooterSegmentStyle())
             }
+            .glassEffect(.regular, in: Capsule(style: .continuous))
         }
         .padding(.horizontal, ClipinChrome.footerContentInset)
         .padding(.vertical, ClipinChrome.footerContentInset)
@@ -342,7 +337,7 @@ struct MainPanel: View {
                 )
             }
         }
-        .buttonStyle(ClipinFooterGlassButtonStyle())
+        .buttonStyle(ClipinFooterSegmentStyle())
         .help(NSLocalizedString("Press Esc to exit Continuous Paste.", comment: ""))
         .accessibilityLabel(Text("Continuous Paste"))
         .accessibilityHint(Text("Press Esc to exit Continuous Paste."))
@@ -381,7 +376,9 @@ struct MainPanel: View {
     private func pasteCallToAction(label: String, key: String) -> some View {
         HStack(spacing: 8) {
             Text(label)
-                .font(.system(size: 13, weight: .semibold))
+                // 治"底栏按钮字太黑":纯 label 在玻璃上过黑,降透明 + medium 即柔。
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(0.82))
                 .lineLimit(1)
                 .truncationMode(.tail)
 
@@ -395,8 +392,8 @@ struct MainPanel: View {
     private func keyBadge(label: String, key: String) -> some View {
         HStack(spacing: 5) {
             Text(LocalizedStringKey(label))
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(ClipinInk.primary)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.primary.opacity(0.82))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
             ClipinKeycap(key: key, foreground: ClipinInk.secondary)

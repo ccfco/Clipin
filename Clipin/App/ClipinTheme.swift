@@ -15,6 +15,9 @@ enum QAFlags {
     static var hoverablePanel: Bool { on("CLIPIN_QA_HOVERABLE") }
     /// 强制常显派生簇(合成鼠标对 nonactivating panel 的 .onHover 不可靠)。
     static var alwaysShowDerivedPills: Bool { on("CLIPIN_QA_SHOW_PILLS") }
+    /// 强制底栏分段 hover 高亮态(同上:合成 hover run-to-run 不稳,
+    /// 用此确定性自截图核对效果②内缩高亮的视觉/明暗;真机真鼠标走标准 .onHover)。
+    static var forceSegmentHover: Bool { on("CLIPIN_QA_FORCE_HOVER") }
 }
 
 enum VisualTheme: String, CaseIterable {
@@ -343,6 +346,35 @@ struct ClipinFooterGlassButtonStyle: ButtonStyle {
             .padding(.horizontal, 13)
             .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
+    }
+}
+
+/// 底栏融合胶囊内的「分段按钮」样式:整簇共用**一块**玻璃 Capsule(连续胶囊=
+/// Raycast 效果①),分段本身不再各自上玻璃。hover/press 由本样式**自绘**一个
+/// 比按钮小一圈的内缩高亮 + 微缩放(Raycast 效果②:"内部一个比外玻璃小一圈的
+/// 灰色形状、按钮像浮起来")。`glassEffectUnion` 会把多颗玻璃并成静态一块、
+/// 杀掉 per-button `.interactive()` hover——故改自绘,既得连续胶囊又得逐颗 hover。
+/// 高亮用 `Color.primary.opacity` 自适应:Light=压暗、Dark=提亮,夜间自动统一。
+struct ClipinFooterSegmentStyle: ButtonStyle {
+    @State private var isHovered = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
+        let highlighted = isHovered || QAFlags.forceSegmentHover
+        return configuration.label
+            .padding(.horizontal, 13)
+            .padding(.vertical, 8)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
+                    .padding(2) // 内缩一圈:高亮比按钮小一圈,露出外层连续玻璃
+            )
+            .scaleEffect(pressed ? 0.97 : 1)
+            .contentShape(Capsule(style: .continuous))
+            .onHover { hovering in
+                withAnimation(ClipinMotion.feedback) { isHovered = hovering }
+            }
+            .animation(ClipinMotion.feedback, value: pressed)
     }
 }
 
