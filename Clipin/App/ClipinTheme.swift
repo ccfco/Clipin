@@ -317,8 +317,9 @@ extension View {
 struct ClipinFooterGlassButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            // 边距向 Raycast 底栏胶囊的舒适比例靠(原 12/7 偏紧)。
+            .padding(.horizontal, 13)
+            .padding(.vertical, 8)
             .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
     }
 }

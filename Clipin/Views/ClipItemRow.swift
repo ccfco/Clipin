@@ -83,8 +83,12 @@ struct ClipItemRow: View {
                 .animation(ClipinMotion.feedback, value: isHovered)
 
             Text(highlightedDisplayText)
-                .font(.system(size: 13.5, weight: .medium))
-                .foregroundStyle(ClipinInk.primary)
+                // 选中 → accent(蓝),对齐 Spotlight 选中高亮的 accent 心智(用户明确要求);
+                // 未选 → 字重 .regular(原 .medium 在玻璃上显"太黑",降重即变柔,不动系统 label 色)。
+                .font(.system(size: 13.5, weight: isSelected ? .semibold : .regular))
+                // 未选标题用柔化 primary(用户反馈纯 label 在玻璃上"太黑");
+                // 选中走 accent(蓝)。
+                .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.82)))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 

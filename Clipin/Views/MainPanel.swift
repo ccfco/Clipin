@@ -366,7 +366,7 @@ struct MainPanel: View {
     private func pasteCallToAction(label: String, key: String) -> some View {
         HStack(spacing: 8) {
             Text(label)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
 
@@ -380,7 +380,7 @@ struct MainPanel: View {
     private func keyBadge(label: String, key: String) -> some View {
         HStack(spacing: 5) {
             Text(LocalizedStringKey(label))
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(ClipinInk.primary)
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
