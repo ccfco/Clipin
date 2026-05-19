@@ -391,11 +391,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        // 锁定深色外观:用户参照是 Raycast / Spotlight-dark 那种深色 Liquid Glass。
-        // NSGlassEffectView + SwiftUI 默认跟随系统外观,用户系统在 Light 模式时会
-        // 渲染成浅灰发白(非目标)。强制 .darkAqua 让整窗玻璃恒为深色玻璃,与参照一致,
-        // 不随用户明暗模式漂移(自截图验收发现的真机问题)。
-        panel.appearance = NSAppearance(named: .darkAqua)
+        // 大面板 = macOS 26 聚焦(Spotlight)那种浅色强通透 Liquid Glass:跟随系统
+        // 外观自适应(Spotlight 本身就是自适应,Light 模式即浅色通透),不强制 dark。
+        // 之前"发白发平"是玻璃质量问题(内容不透光把玻璃压平),非明暗问题——
+        // 由 NSGlassEffectView 原生材质 + 内容不铺不透明底解决,不靠锁外观掩盖。
         panel.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
         [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
             panel.standardWindowButton(button)?.isHidden = true
