@@ -46,11 +46,6 @@ struct MainPanel: View {
             .clipShape(
                 RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
             )
-            // iOS 26 同心圆角根:声明一次 shell 容器几何,内部所有 ClipinConcentric()
-            // (选中底板等)curvature 自动随此推导。改 shellCornerRadius 一处全联动。
-            .containerShape(
-                RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
-            )
     }
 
     private var panelContent: some View {
@@ -561,8 +556,7 @@ private struct ItemListView: View {
                 selectionStroke: ClipinSelectionInk.stroke,
                 hoverFill: ClipinHoverInk.fill,
                 hoverStroke: ClipinHoverInk.stroke,
-                isPinned: item.isPinned,
-                concentric: true
+                isPinned: item.isPinned
             )
         )
         .padding(.horizontal, ClipinChrome.listRowOuterInset)

@@ -274,10 +274,6 @@ struct ClipinSelectableRowBackground: View {
     let hoverFill: Color
     let hoverStroke: Color
     var isPinned: Bool = false
-    /// 仅 launcher 主面板传 true:它在根部声明了 `.containerShape`,
-    /// ClipinConcentric 才有容器可同心推导。设置侧栏/动作面板无 containerShape,
-    /// 保持 false → 沿用 ClipinChrome.rowCornerRadius(spec 范围纪律:不碰辅助窗口)。
-    var concentric: Bool = false
 
     private var fillColor: Color {
         if isSelected { return selectionFill }
@@ -285,15 +281,12 @@ struct ClipinSelectableRowBackground: View {
         return .clear
     }
 
-    @ViewBuilder private var fillShape: some View {
-        let color = fillColor
-        if concentric {
-            // iOS 26 同心圆角:随 MainPanel 根 .containerShape 的 shell 几何
-            // 自动推导,改 shell 一处全联动,不硬编码。
-            ClipinConcentric().fill(color)
-        } else {
-            RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous).fill(color)
-        }
+    /// 选中/hover 底板恒为固定圆角矩形(12pt continuous),与整体圆角风格一致。
+    /// 不用 ConcentricRectangle:同心半径 = 容器半径 − 到容器边距离,列表中部的
+    /// 行离 shell 边很远 → 半径被算成 ~0 = **尖角**(用户实测 bug)。固定 rounded 才对。
+    private var fillShape: some View {
+        RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+            .fill(fillColor)
     }
 
     var body: some View {
@@ -425,10 +418,3 @@ enum ClipinHoverInk {
     static let stroke = Color.clear
 }
 
-/// iOS/macOS 26 同心圆角形状(已对 Xcode 26.5 / macOS SDK 26 编译核验,Task 1)。
-/// curvature 随最近 `.containerShape(...)` 自动推导,不硬编码圆角魔数 ——
-/// 这是 iOS 26 原生做法,实测 API 是 `ConcentricRectangle` 形状(非
-/// `RoundedRectangle(cornerRadius: .containerConcentric)`)。
-/// 用法:玻璃容器根部 `.containerShape(RoundedRectangle(cornerRadius: shell, style: .continuous))`,
-/// 内部子形状/选中底板用 `ClipinConcentric()`,改 shell 一处全联动。
-typealias ClipinConcentric = ConcentricRectangle
