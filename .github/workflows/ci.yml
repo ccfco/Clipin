@@ -3,8 +3,11 @@ name: CI
 on:
   pull_request:
   push:
+    # 改成所有 branch 兜底：历史上只跟 main，feature branch push 不触发，
+    # PR 触发也长期未生效（见 PR#3 review 期间排查）。
+    # release tag push 默认不在 branches 范围内，不会重复跑。
     branches:
-      - main
+      - '**'
 
 jobs:
   test:
