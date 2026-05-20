@@ -39,6 +39,11 @@ final class ClipboardMonitor: ObservableObject {
     private var timer: Timer?
     private var lastChangeCount: Int
     private var isPaused = false
+    /// 持有所有正在跑的 persist task，stop() 时统一取消。
+    /// 旧实现 Task.detached 启动后没有持有引用，监控停止/进程退出时正在跑的图片 OCR
+    /// 仍会继续 Vision 调用并发通知，破坏 launcher 关闭后"什么都不再变"的语义。
+    /// 取消不会 abort 已经开始的 SQLite write，但 OCR 段（recognizeText）会响应。
+    private var inflightPersists: Set<Task<Void, Never>> = []
 
     init(core: ClipinCore, settings: SettingsStore) {
         self.core = core
@@ -58,6 +63,9 @@ final class ClipboardMonitor: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        let pending = inflightPersists
+        inflightPersists.removeAll()
+        pending.forEach { $0.cancel() }
     }
 
     /// 暂停监控（粘贴时用，避免把自己写入的内容又存一遍）
@@ -113,7 +121,22 @@ final class ClipboardMonitor: ObservableObject {
     private func persist(_ payload: ClipboardPayload) {
         let core = self.core
 
-        Task.detached(priority: .utility) { [weak self] in
+        // 自引用 box：task body 完成时回主线程从 inflightPersists 移除自己，避免集合无限增长。
+        // 用 Box<Task?> 是因为 Task 创建时还没拿到自身引用——先建 box、Task 内闭包持有 box、
+        // Task 创建后写入 box，闭包 defer 时通过 box 拿到 task 引用。
+        let box = TaskBox()
+        let task = Task.detached(priority: .utility) { [weak self] in
+            defer {
+                // 显式把 weak self 重新 capture 进 inner Task：Swift 6 严格 isolation 下
+                // 直接在 detached body 的 defer 里捕获外层 weak self 会被判为跨 actor
+                // 边界 send 引用（即使 Monitor 是 @MainActor 也不行）。重 capture 后就是
+                // 一次普通的 MainActor 任务调度。
+                let monitor = self
+                Task { @MainActor in
+                    guard let task = box.task else { return }
+                    monitor?.inflightPersists.remove(task)
+                }
+            }
             do {
                 switch payload {
                 case let .text(content, sourceApp, sourceName, reps):
@@ -164,10 +187,15 @@ final class ClipboardMonitor: ObservableObject {
                     guard let self else { return }
                     await self.notifyNewItem()
 
+                    // stop() 取消后，DB 已经写完不能撤销，但 OCR/通知都跳过，
+                    // 避免 launcher 关闭后还冒出"OCR 完成"广播。
+                    if Task.isCancelled { return }
+
                     // OCR 在同一后台 Task 内串行执行，完成后二次刷新显示文字
                     // 无论是否识别到文字都写回（NULL=未处理，""=处理过但无文字，避免重复 backfill）
                     let itemId = saved.id
                     let ocrText = await OcrService.recognizeText(at: path)
+                    if Task.isCancelled { return }
                     do {
                         try core.updateOcrText(id: itemId, ocrText: ocrText)
                         if !ocrText.isEmpty {
@@ -190,6 +218,8 @@ final class ClipboardMonitor: ObservableObject {
                 print("⚠️ Failed to persist clipboard item: \(error)")
             }
         }
+        box.task = task
+        inflightPersists.insert(task)
     }
 
     private func shouldPersistContents(of pasteboard: NSPasteboard) -> Bool {
@@ -275,4 +305,11 @@ final class ClipboardMonitor: ObservableObject {
 private enum ClipboardMonitorError: Error {
     case invalidImageData
     case failedToEncodePNG
+}
+
+/// 给 Task body 一个延迟回填 task 引用的容器：Task 创建时拿不到自己的 handle，
+/// 但 body defer 时需要它来从 inflightPersists 移除——typed box 避开循环引用陷阱。
+@MainActor
+private final class TaskBox {
+    var task: Task<Void, Never>?
 }

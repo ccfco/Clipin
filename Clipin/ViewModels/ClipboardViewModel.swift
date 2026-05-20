@@ -412,25 +412,33 @@ final class ClipboardViewModel: ObservableObject {
         let neighborItemLimit = Self.previewNeighborItemLimit
         isPreparingPreview = true
         previewTask = Task { @MainActor [weak self] in
-            let session = await Task.detached(priority: .userInitiated) {
-                ClipPreviewResolver.resolveSession(
-                    items: itemsSnapshot,
-                    selectedItemID: selectedItemID,
-                    neighborItemLimit: neighborItemLimit
-                ) { id in
-                    if selectedSnapshot?.id == id {
-                        return selectedSnapshot
-                    }
-                    // Quick Look 的"邻近条目"语义允许 partial（被删/损坏时少几项可接受），
-                    // 但失败仍要 log——之前裸 try? 静默丢弃，用户只看到 session 少项无法
-                    // 反查根因。当前选中项失败由外层 session == nil 分支显式 notice。
-                    do { return try core.getItem(id: id) }
-                    catch {
-                        print("⚠️ preview neighbor getItem failed (id=\(id)): \(error)")
-                        return nil
+            // 旧实现用 Task.detached 切断了结构化 cancellation 链——外层 previewTask.cancel()
+            // 只会让 wrapper 抛 CancellationError，detached 内的 resolveSession 仍然继续扫
+            // 邻近 item，旧 session 后台跑完才丢弃。改成 withTaskGroup 后 cancel 沿子任务下传，
+            // closure 内 Task.isCancelled 检查能在邻近 item 之间短路。
+            let session = await withTaskGroup(of: ClipPreviewSession?.self) { group in
+                group.addTask(priority: .userInitiated) {
+                    ClipPreviewResolver.resolveSession(
+                        items: itemsSnapshot,
+                        selectedItemID: selectedItemID,
+                        neighborItemLimit: neighborItemLimit
+                    ) { id in
+                        if Task.isCancelled { return nil }
+                        if selectedSnapshot?.id == id {
+                            return selectedSnapshot
+                        }
+                        // Quick Look 的"邻近条目"语义允许 partial（被删/损坏时少几项可接受），
+                        // 但失败仍要 log——之前裸 try? 静默丢弃无法反查根因。
+                        // 当前选中项失败由外层 session == nil 分支显式 notice。
+                        do { return try core.getItem(id: id) }
+                        catch {
+                            print("⚠️ preview neighbor getItem failed (id=\(id)): \(error)")
+                            return nil
+                        }
                     }
                 }
-            }.value
+                return await group.next() ?? nil
+            }
 
             guard !Task.isCancelled, let self, self.selectedItemID == selectedItemID else { return }
             self.previewTask = nil

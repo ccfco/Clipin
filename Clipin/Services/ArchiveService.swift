@@ -65,88 +65,105 @@ enum ArchiveService {
     }
 
     /// 导入指定 URL，不弹出文件面板。重活在后台执行，避免阻塞设置窗口。
+    ///
+    /// 旧实现用 `Task.detached(priority: .utility)` 切断了结构化并发 cancellation 链：
+    /// SettingsView 持有的 activeOperation cancel 只能让 wrapper task 抛 CancellationError，
+    /// detached 内部循环虽然有 `Task.checkCancellation()` 也收不到信号。改成
+    /// `withThrowingTaskGroup` 后取消会沿链路下传——与 writeArchive 同一套模式。
     static func importArchive(from url: URL, core: ClipinCore) async throws -> ArchiveImportResult {
-        try await Task.detached(priority: .utility) {
-            let data = try Data(contentsOf: url)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let archive = try decoder.decode(ClipboardArchive.self, from: data)
+        try Task.checkCancellation()
+        return try await withThrowingTaskGroup(of: ArchiveImportResult.self) { group in
+            group.addTask(priority: .utility) {
+                try Self.runImport(from: url, core: core)
+            }
+            guard let result = try await group.next() else {
+                throw ArchiveError.cancelled
+            }
+            return result
+        }
+    }
 
-            let imageDirURL = URL(fileURLWithPath: core.imageDir(), isDirectory: true)
-            try FileManager.default.createDirectory(at: imageDirURL, withIntermediateDirectories: true)
+    private static func runImport(from url: URL, core: ClipinCore) throws -> ArchiveImportResult {
+        try Task.checkCancellation()
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let archive = try decoder.decode(ClipboardArchive.self, from: data)
 
-            var importedCount = 0
-            var skippedMissingImageCount = 0
-            var skippedDuplicateCount = 0
-            var failedRepresentationCount = 0
+        let imageDirURL = URL(fileURLWithPath: core.imageDir(), isDirectory: true)
+        try FileManager.default.createDirectory(at: imageDirURL, withIntermediateDirectories: true)
 
-            for item in archive.items {
-                try Task.checkCancellation()
-                let clipType = runtimeType(for: item.clipType)
+        var importedCount = 0
+        var skippedMissingImageCount = 0
+        var skippedDuplicateCount = 0
+        var failedRepresentationCount = 0
 
-                let imagePath: String?
-                if clipType == .image {
-                    guard let imageDataBase64 = item.imageDataBase64,
-                          let imageData = Data(base64Encoded: imageDataBase64) else {
-                        skippedMissingImageCount += 1
-                        continue
-                    }
+        for item in archive.items {
+            try Task.checkCancellation()
+            let clipType = runtimeType(for: item.clipType)
 
-                    let destinationURL = imageDirURL.appendingPathComponent(UUID().uuidString + ".png")
-                    try imageData.write(to: destinationURL, options: .atomic)
-                    imagePath = destinationURL.path
-                } else {
-                    imagePath = nil
+            let imagePath: String?
+            if clipType == .image {
+                guard let imageDataBase64 = item.imageDataBase64,
+                      let imageData = Data(base64Encoded: imageDataBase64) else {
+                    skippedMissingImageCount += 1
+                    continue
                 }
 
-                // base64 解码失败的单条 rep 丢弃但计数：item 本体仍可导入，
-                // 不让整个 archive 失败；同时把损坏暴露给调用方上报，而非纯静默。
-                var coreReps: [ClipRepresentation] = []
-                for rep in item.representations ?? [] {
-                    guard let data = Data(base64Encoded: rep.dataBase64) else {
-                        failedRepresentationCount += 1
-                        continue
-                    }
-                    coreReps.append(ClipRepresentation(uti: rep.uti, data: data))
-                }
-
-                let didImport: Bool
-                do {
-                    didImport = try core.importItemIfMissing(
-                        content: item.content,
-                        clipType: clipType,
-                        sourceApp: item.sourceApp,
-                        sourceName: item.sourceName,
-                        imagePath: imagePath,
-                        isPinned: item.isPinned,
-                        createdAt: item.createdAt,
-                        representations: coreReps
-                    )
-                } catch {
-                    if let imagePath {
-                        try? FileManager.default.removeItem(atPath: imagePath)
-                    }
-                    throw error
-                }
-
-                if didImport {
-                    importedCount += 1
-                } else {
-                    skippedDuplicateCount += 1
-                    if let imagePath {
-                        try? FileManager.default.removeItem(atPath: imagePath)
-                    }
-                }
+                let destinationURL = imageDirURL.appendingPathComponent(UUID().uuidString + ".png")
+                try imageData.write(to: destinationURL, options: .atomic)
+                imagePath = destinationURL.path
+            } else {
+                imagePath = nil
             }
 
-            return ArchiveImportResult(
-                url: url,
-                importedCount: importedCount,
-                skippedMissingImageCount: skippedMissingImageCount,
-                skippedDuplicateCount: skippedDuplicateCount,
-                failedRepresentationCount: failedRepresentationCount
-            )
-        }.value
+            // base64 解码失败的单条 rep 丢弃但计数：item 本体仍可导入，
+            // 不让整个 archive 失败；同时把损坏暴露给调用方上报，而非纯静默。
+            var coreReps: [ClipRepresentation] = []
+            for rep in item.representations ?? [] {
+                guard let data = Data(base64Encoded: rep.dataBase64) else {
+                    failedRepresentationCount += 1
+                    continue
+                }
+                coreReps.append(ClipRepresentation(uti: rep.uti, data: data))
+            }
+
+            let didImport: Bool
+            do {
+                didImport = try core.importItemIfMissing(
+                    content: item.content,
+                    clipType: clipType,
+                    sourceApp: item.sourceApp,
+                    sourceName: item.sourceName,
+                    imagePath: imagePath,
+                    isPinned: item.isPinned,
+                    createdAt: item.createdAt,
+                    representations: coreReps
+                )
+            } catch {
+                if let imagePath {
+                    try? FileManager.default.removeItem(atPath: imagePath)
+                }
+                throw error
+            }
+
+            if didImport {
+                importedCount += 1
+            } else {
+                skippedDuplicateCount += 1
+                if let imagePath {
+                    try? FileManager.default.removeItem(atPath: imagePath)
+                }
+            }
+            }
+
+        return ArchiveImportResult(
+            url: url,
+            importedCount: importedCount,
+            skippedMissingImageCount: skippedMissingImageCount,
+            skippedDuplicateCount: skippedDuplicateCount,
+            failedRepresentationCount: failedRepresentationCount
+        )
     }
 
     /// 将全部条目写入指定 URL，不弹出文件面板，供自动备份复用。
