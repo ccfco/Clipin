@@ -357,6 +357,7 @@
 "Pinned." = "已固定。";
 "Unpinned." = "已取消固定。";
 "Item no longer exists." = "这条记录已不存在。";
+"Item could not be read." = "无法读取这条记录。";
 "Item deleted." = "已删除记录。";
 "Undo" = "撤销";
 "Deletion undone." = "已撤销删除。";

@@ -357,6 +357,7 @@
 "Pinned." = "Pinned.";
 "Unpinned." = "Unpinned.";
 "Item no longer exists." = "Item no longer exists.";
+"Item could not be read." = "Item could not be read.";
 "Item deleted." = "Item deleted.";
 "Undo" = "Undo";
 "Deletion undone." = "Deletion undone.";

@@ -283,32 +283,24 @@ final class ClipboardViewModel: ObservableObject {
     /// 按 ⌘1-9 快捷键序列的第 index 项（0-based）直接粘贴
     func pasteItemAt(index: Int) {
         guard index >= 0, index < shortcutOrder.count else { return }
-        let id = shortcutOrder[index].id
-        guard let item = try? core.getItem(id: id) else { return }
-        try? core.touchItem(id: id)
+        guard let item = loadItem(id: shortcutOrder[index].id, touch: true) else { return }
         onPasteRequested?(item)
     }
 
     // MARK: - Actions
 
     func pasteSelected() {
-        guard let selectedItemID else { return }
-        guard let item = try? core.getItem(id: selectedItemID) else { return }
-        try? core.touchItem(id: selectedItemID)
+        guard let id = selectedItemID, let item = loadItem(id: id, touch: true) else { return }
         onPasteRequested?(item)
     }
 
     func pastePlainSelected() {
-        guard let selectedItemID else { return }
-        guard let item = try? core.getItem(id: selectedItemID) else { return }
-        try? core.touchItem(id: selectedItemID)
+        guard let id = selectedItemID, let item = loadItem(id: id, touch: true) else { return }
         onPastePlainRequested?(item)
     }
 
     func pasteRepresentationSelected(uti: String) {
-        guard let selectedItemID else { return }
-        guard let item = try? core.getItem(id: selectedItemID) else { return }
-        try? core.touchItem(id: selectedItemID)
+        guard let id = selectedItemID, let item = loadItem(id: id, touch: true) else { return }
         onPasteRepresentationRequested?(item, uti)
     }
 
@@ -343,13 +335,12 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func copySelected() {
-        guard let selectedItemID else { return }
-        guard let item = try? core.getItem(id: selectedItemID) else { return }
+        guard let id = selectedItemID, let item = loadItem(id: id) else { return }
         onCopyRequested?(item)
     }
 
     func openSelected() {
-        guard let item = currentSelectedItem() else { return }
+        guard let id = selectedItemID, let item = loadItem(id: id) else { return }
         switch item.clipType {
         case .url:
             if let url = URL(string: item.content), NSWorkspace.shared.open(url) {
@@ -618,6 +609,21 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     // MARK: - Private
+
+    /// 把"取条目 + 可选 touch + 失败时给出用户可见反馈"收口到一处。
+    /// 旧实现散落 6 处 `try? core.getItem` 把 SQLite 错误静默吞掉——用户按 Return / ⌘O
+    /// 没反应也无反馈，违反 CLAUDE.md "不兜底"原则。所有用户主动触发的取数据动作走此入口。
+    /// `currentSelectedItem()` 是只读查询 helper（用于 hint 计算等非动作上下文），仍保留 silent。
+    private func loadItem(id: String, touch: Bool = false) -> ClipItem? {
+        do {
+            let item = try core.getItem(id: id)
+            if touch { try? core.touchItem(id: id) }
+            return item
+        } catch {
+            showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+            return nil
+        }
+    }
 
     func currentSelectedItem() -> ClipItem? {
         guard let selectedItemID else { return nil }
