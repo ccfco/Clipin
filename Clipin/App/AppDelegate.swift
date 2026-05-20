@@ -895,7 +895,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         viewModel?.finalizePendingDeletion()
         backfillTask?.cancel()
+        tearDownEventObservers()
+    }
+
+    /// 统一清理本类持有的所有 event observer / monitor / service。
+    /// 旧的 willTerminate 只关 backfill + activeSpace observer——进程退出虽然会被
+    /// 系统强制回收，但语义不完整：hide/quit 路径不一致，未来若改成 LSUIElement
+    /// "切到后台保留进程" 的形态，遗漏的 observer 会变成真实泄漏。这里收口成单一入口。
+    private func tearDownEventObservers() {
         stopActiveSpaceObserver()
+        stopAppSwitchObserver()
+        stopClickOutsideMonitor()
+        if let monitor = keyMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyMonitor = nil
+        }
+        monitor?.stop()
+        hotKey.stop()
     }
 
     private func runCleanupAndReload(selectLatest: Bool = false) {
@@ -968,6 +984,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handlePaletteKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {
+        // 与 handlePanelKeyEvent 对齐：IME 组词期间（搜索框正在拼音输入时按 ⌘K 打开
+        // palette），方向/回车/字符/空格/Esc 全部归还给系统让 IME 继续选字。
+        // 旧实现 palette 分支没做此检查，导致 IME 字符被 palette 截走、选字面板异常。
+        if isIMEComposingInPanel() {
+            switch event.keyCode {
+            case KeyCode.tab, KeyCode.arrowUp, KeyCode.arrowDown,
+                 KeyCode.returnKey, KeyCode.space, KeyCode.escape:
+                return event
+            default:
+                break
+            }
+        }
+
         if let shortcut = PaletteActionShortcut.matching(keyCode: event.keyCode, flags: flags),
            vm.executePaletteShortcut(shortcut) {
             return nil

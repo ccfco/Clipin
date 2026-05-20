@@ -373,3 +373,10 @@
 "Paste as RTF" = "Paste as RTF";
 "settings.archive.formatCaption" = "Archive format: Clipin Clipboard Archive v2 ·";
 "settings.archive.openSpec" = "Open Spec ↗";
+
+/* SearchBar / PreviewPane —— Codex review 指出的缺失 key */
+"Search clipboard history…" = "Search clipboard history…";
+"Filter by type — press Tab to cycle" = "Filter by type — press Tab to cycle";
+"Open in default browser" = "Open in default browser";
+"Full URL" = "Full URL";
+"Query parameters" = "Query parameters";

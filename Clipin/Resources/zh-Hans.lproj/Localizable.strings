@@ -373,3 +373,10 @@
 "Paste as RTF" = "粘贴为 RTF";
 "settings.archive.formatCaption" = "归档格式：Clipin Clipboard Archive v2 ·";
 "settings.archive.openSpec" = "查看规范 ↗";
+
+/* SearchBar / PreviewPane —— Codex review 指出的缺失 key */
+"Search clipboard history…" = "搜索剪贴板历史…";
+"Filter by type — press Tab to cycle" = "按类型筛选 — 按 Tab 循环切换";
+"Open in default browser" = "在默认浏览器中打开";
+"Full URL" = "完整 URL";
+"Query parameters" = "查询参数";

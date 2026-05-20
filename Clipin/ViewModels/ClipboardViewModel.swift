@@ -705,9 +705,13 @@ final class ClipboardViewModel: ObservableObject {
         return ClipPreviewResolver.resolve(item: item)
     }
 
+    /// section 标题用的简短月日格式。旧实现硬编码 "M月d日"，英文环境也会显示中文，
+    /// 违反 "用户可见文案走本地化" 约束。改用 dateFormat(fromTemplate:) 让 macOS 按当前
+    /// locale 自动选择合适的 month/day 排序（en: "May 20", zh: "5月20日"）。
     private static let dateFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "M月d日"
+        f.locale = Locale.autoupdatingCurrent
+        f.setLocalizedDateFormatFromTemplate("Md")
         return f
     }()
 

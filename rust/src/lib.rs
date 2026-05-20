@@ -67,16 +67,6 @@ impl ClipinCore {
         self.storage.load_representations(&id)
     }
 
-    /// 获取历史记录（分页，可按类型过滤）
-    pub fn get_items(
-        &self,
-        limit: i32,
-        offset: i32,
-        type_filter: Option<ClipType>,
-    ) -> Result<Vec<ClipItem>, ClipinError> {
-        self.storage.get_items(limit, offset, type_filter.as_ref())
-    }
-
     /// 导出专用快照，原子性见 `Storage::export_archive_snapshot`。
     pub fn export_archive_snapshot(&self) -> Result<Vec<ArchiveSnapshotItem>, ClipinError> {
         self.storage.export_archive_snapshot()
@@ -115,15 +105,6 @@ impl ClipinCore {
             .get_unpinned_list_items(limit, offset, type_filter.as_ref())
     }
 
-    /// 搜索历史记录
-    pub fn search(
-        &self,
-        query: String,
-        type_filter: Option<ClipType>,
-    ) -> Result<Vec<ClipItem>, ClipinError> {
-        self.storage.search(&query, type_filter.as_ref())
-    }
-
     /// 搜索轻量列表项
     pub fn search_list_items(
         &self,
@@ -151,28 +132,6 @@ impl ClipinCore {
     /// 更新条目的时间戳，使其浮到列表顶部（粘贴时调用）
     pub fn touch_item(&self, id: String) -> Result<(), ClipinError> {
         self.storage.touch_item(&id)
-    }
-
-    /// 导入一条记录（保留原始时间戳和 pin 状态，用于跨设备迁移）
-    pub fn import_item(
-        &self,
-        content: String,
-        clip_type: ClipType,
-        source_app: Option<String>,
-        source_name: Option<String>,
-        image_path: Option<String>,
-        is_pinned: bool,
-        created_at: i64,
-    ) -> Result<ClipItem, ClipinError> {
-        self.storage.import_item(
-            &content,
-            &clip_type,
-            source_app.as_deref(),
-            source_name.as_deref(),
-            image_path.as_deref(),
-            is_pinned,
-            created_at,
-        )
     }
 
     /// 导入一条记录；若同内容已存在则跳过，不重置现有条目的使用信号
@@ -227,6 +186,49 @@ impl ClipinCore {
     /// 获取图片存储目录
     pub fn image_dir(&self) -> String {
         self.storage.image_dir().to_string()
+    }
+}
+
+/// 非 UniFFI 暴露的 API：只服务 Rust 单元测试与迁移工具，避免污染 Swift binding 表
+/// 和 UniFFI checksum。曾经误暴露给 Swift 但生产代码从未调用——下架后 binding 体积
+/// 缩小、跨层契约面更小。如未来需要 Swift 端调用，把对应方法移回上面的 `impl` 块即可。
+impl ClipinCore {
+    pub fn get_items(
+        &self,
+        limit: i32,
+        offset: i32,
+        type_filter: Option<ClipType>,
+    ) -> Result<Vec<ClipItem>, ClipinError> {
+        self.storage.get_items(limit, offset, type_filter.as_ref())
+    }
+
+    pub fn search(
+        &self,
+        query: String,
+        type_filter: Option<ClipType>,
+    ) -> Result<Vec<ClipItem>, ClipinError> {
+        self.storage.search(&query, type_filter.as_ref())
+    }
+
+    pub fn import_item(
+        &self,
+        content: String,
+        clip_type: ClipType,
+        source_app: Option<String>,
+        source_name: Option<String>,
+        image_path: Option<String>,
+        is_pinned: bool,
+        created_at: i64,
+    ) -> Result<ClipItem, ClipinError> {
+        self.storage.import_item(
+            &content,
+            &clip_type,
+            source_app.as_deref(),
+            source_name.as_deref(),
+            image_path.as_deref(),
+            is_pinned,
+            created_at,
+        )
     }
 }
 
