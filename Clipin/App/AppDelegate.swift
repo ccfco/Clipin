@@ -1080,6 +1080,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
     }
 
+    /// 三个辅助窗口（设置 / 引导 / 权限）共享的 chrome 安装器。
+    /// 透明 titlebar + 隐藏交通灯 + shell 圆角 + 原生阴影 + 不释放即关，
+    /// 收口前各处自行重复约 30 行配置；调用方仍保留窗口子类与 contentView 的控制权。
+    private func applyAuxiliaryChrome(_ window: NSWindow, title: String) {
+        window.title = title
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.titlebarSeparatorStyle = .none
+        window.backgroundColor = .clear
+        window.isOpaque = false
+        window.isMovableByWindowBackground = true
+        window.hasShadow = true
+        window.isReleasedWhenClosed = false
+        // 隐藏交通灯，避免和 .fullSizeContentView 内容重叠
+        [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
+            window.standardWindowButton(button)?.isHidden = true
+        }
+        // 通过 KVC 设置窗口圆角，让系统 frame 的裁切和 SwiftUI 内容的 shellCornerRadius 对齐
+        window.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
+    }
+
     private func openSettingsWindow(select tab: SettingsTab? = nil) {
         let window: NSWindow
         let isNew: Bool
@@ -1100,22 +1121,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            newWindow.title = "Clipin Settings"
-            newWindow.titlebarAppearsTransparent = true
-            newWindow.titleVisibility = .hidden
-            newWindow.titlebarSeparatorStyle = .none
+            applyAuxiliaryChrome(newWindow, title: "Clipin Settings")
             newWindow.toolbarStyle = .preference
-            newWindow.backgroundColor = .clear
-            newWindow.isOpaque = false
-            newWindow.isMovableByWindowBackground = true
-            newWindow.hasShadow = true
-            newWindow.isReleasedWhenClosed = false
-            // 隐藏交通灯，避免和 .fullSizeContentView 内容重叠
-            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
-                newWindow.standardWindowButton(button)?.isHidden = true
-            }
-            // 通过 KVC 设置窗口圆角，让系统 frame 的裁切和 SwiftUI 内容的 shellCornerRadius 对齐
-            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
             newWindow.contentView = ClipinWindowHostingView(
                 rootView: SettingsView(
                     settings: settings,
@@ -1273,20 +1280,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
-            newWindow.title = "Welcome to Clipin"
-            newWindow.titlebarAppearsTransparent = true
-            newWindow.titleVisibility = .hidden
-            newWindow.titlebarSeparatorStyle = .none
-            newWindow.backgroundColor = .clear
-            newWindow.isOpaque = false
-            newWindow.isMovableByWindowBackground = true
-            newWindow.isReleasedWhenClosed = false
-            newWindow.hasShadow = true
-            // 隐藏交通灯
-            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
-                newWindow.standardWindowButton(button)?.isHidden = true
-            }
-            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
+            applyAuxiliaryChrome(newWindow, title: "Welcome to Clipin")
             newWindow.delegate = self
             newWindow.contentView = ClipinWindowHostingView(
                 rootView: OnboardingView(permission: permission, flow: flow)
@@ -1347,23 +1341,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 backing: .buffered,
                 defer: false
             )
+            applyAuxiliaryChrome(newWindow, title: "")
+            newWindow.delegate = self
             newWindow.contentView = ClipinWindowHostingView(rootView: PermissionView(
                 permission: pm,
                 onSkip: { [weak newWindow] in newWindow?.close() }
             ))
-            newWindow.titlebarAppearsTransparent = true
-            newWindow.titleVisibility = .hidden
-            newWindow.titlebarSeparatorStyle = .none
-            newWindow.backgroundColor = .clear
-            newWindow.isOpaque = false
-            newWindow.isMovableByWindowBackground = true
-            newWindow.hasShadow = true
-            // 隐藏交通灯
-            [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
-                newWindow.standardWindowButton(button)?.isHidden = true
-            }
-            newWindow.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
-            newWindow.delegate = self
             newWindow.center()
             // 不设 .floating，让 System Settings 可以自然覆盖在权限窗口上方
             permissionWindow = newWindow

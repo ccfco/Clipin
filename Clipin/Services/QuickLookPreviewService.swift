@@ -104,12 +104,12 @@ extension QuickLookPreviewService: QLPreviewPanelDelegate {
         guard significantFlags.isEmpty else { return false }
 
         switch event.keyCode {
-        case 0x7B, 0x7E:
+        case KeyCode.arrowLeft, KeyCode.arrowUp:
             Task { @MainActor [weak self] in
                 self?.stepPreview(delta: -1, in: panel)
             }
             return true
-        case 0x7C, 0x7D:
+        case KeyCode.arrowRight, KeyCode.arrowDown:
             Task { @MainActor [weak self] in
                 self?.stepPreview(delta: 1, in: panel)
             }

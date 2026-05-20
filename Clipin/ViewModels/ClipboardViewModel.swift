@@ -25,7 +25,10 @@ struct LauncherNotice: Identifiable {
 
 @MainActor
 final class ClipboardViewModel: ObservableObject {
-    @Published var selectedItem: ClipItem?
+    /// `selectedItem` 是"异步加载的完整 payload"，与同步设值的 `selectedItemID` 形成双轨流。
+    /// 强制 private(set) 让外部只能通过 `selectItem(id:)` 改变选中状态，杜绝绕过 ID-match guard
+    /// 的可能；消费者一律走 `displayedItem` 读取，由编译器替注释把关。
+    @Published private(set) var selectedItem: ClipItem?
     @Published var selectedItemID: String?
 
     /// PreviewPane 等"右侧 payload 消费者"的唯一入口：仅在 ID 匹配时返回 selectedItem。
