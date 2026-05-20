@@ -128,6 +128,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
     private var appSwitchObserver: Any?
     private var activeSpaceObserver: Any?
+    /// 连续粘贴模式下抑制 resignKey 自动夺回的 80ms 窗口。
+    /// `executePasteFlow` 激活目标 app 时会导致 panel 立刻失去 key window，
+    /// 若不抑制，handlePanelResignKey 会在 +150ms 排一次重新夺回，又和粘贴
+    /// 完成后 +150ms 的回调重复排一次，造成"失焦立刻夺回 / 粘贴后再夺回"
+    /// 双触发。维持此 flag 让焦点恢复路径仍是单一入口。
+    private var suppressResignKey = false
     private var hideGeneration: Int = 0
     private var savedPanelOrigin: NSPoint?
     private var isProgrammaticMove = false
@@ -643,6 +649,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.hideActionsPalette()
         viewModel?.cancelPreviewPreparation()
         QuickLookPreviewService.shared.dismiss()
+        suppressResignKey = false
         stopClickOutsideMonitor()
         stopAppSwitchObserver()
 
@@ -730,7 +737,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// 连续粘贴回焦的前置条件：面板可见、连续粘贴开启、设置/权限/Quick Look 都不在抢焦点。
     /// resignKey 入口和 150ms 后的延迟入口都用这个判断，避免重复条件漂移。
     private var canRestoreContinuousPasteFocus: Bool {
-        !QuickLookPreviewService.shared.isPresenting
+        !suppressResignKey
+            && !QuickLookPreviewService.shared.isPresenting
             && viewModel?.isContinuousPasteEnabled == true
             && settingsWindow?.isVisible != true
             && permissionWindow?.isVisible != true
@@ -1462,6 +1470,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false
         let targetApp = resolveTargetApp()
 
+        // 粘贴流程中抑制 resignKey 自动夺回，避免和下面的手动夺回竞争
+        if continuousPasteEnabled { suppressResignKey = true }
+
         if !continuousPasteEnabled {
             hidePanel()
         }
@@ -1478,6 +1489,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.monitor?.resume()
 
             if continuousPasteEnabled {
+                self?.suppressResignKey = false
                 self?.scheduleContinuousPasteFocusRestore(after: 0.15)
             }
         }

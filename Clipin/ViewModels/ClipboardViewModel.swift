@@ -617,6 +617,10 @@ final class ClipboardViewModel: ObservableObject {
     /// 旧实现散落 6 处 `try? core.getItem` 把 SQLite 错误静默吞掉——用户按 Return / ⌘O
     /// 没反应也无反馈，违反 CLAUDE.md "不兜底"原则。所有用户主动触发的取数据动作走此入口。
     /// `currentSelectedItem()` 是只读查询 helper（用于 hint 计算等非动作上下文），仍保留 silent。
+    ///
+    /// 失败后必须刷新候选集：cleanup / import / 自动清理可能在 DB 删了条目，
+    /// 但内存里的 selectedItemID / shortcutOrder 仍指向旧 id。如果不刷新，
+    /// 用户连按 Return/⌘O/⌘C 会重复 toast；刷新后 selection 自动落到相邻有效项。
     private func loadItem(id: String, touch: Bool = false) -> ClipItem? {
         do {
             let item = try core.getItem(id: id)
@@ -624,6 +628,9 @@ final class ClipboardViewModel: ObservableObject {
             return item
         } catch {
             showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+            if selectedItemID == id || shortcutOrder.contains(where: { $0.id == id }) {
+                loadItems()
+            }
             return nil
         }
     }
