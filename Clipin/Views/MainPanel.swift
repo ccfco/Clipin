@@ -166,7 +166,7 @@ struct MainPanel: View {
                 .scaleEffect(sceneState.isShowingActions ? 0.998 : 1.0)
                 .opacity(sceneState.listRestingOpacity)
 
-            PreviewPane(item: viewModel.selectedItem, searchQuery: viewModel.searchQuery, sceneState: sceneState)
+            PreviewPane(item: viewModel.displayedItem, searchQuery: viewModel.searchQuery, sceneState: sceneState)
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

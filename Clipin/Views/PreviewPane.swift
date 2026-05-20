@@ -15,6 +15,15 @@ struct PreviewPane: View {
         Group {
             if let item {
                 contentStage(for: item)
+            } else if vm.selectedListItem != nil {
+                // 已有选中行，但完整 ClipItem 还在后台 SQLite 读取中（或 ID-match guard
+                // 拒绝了上一次选中的陈旧数据）。显式给一个安静的加载态，避免出现
+                // "有内容 → 空占位 → 新内容" 的闪烁；正常路径 <16ms 看不到 spinner。
+                contentStage {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             } else {
                 contentStage {
                     placeholder(

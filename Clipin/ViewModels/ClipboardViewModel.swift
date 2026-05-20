@@ -27,6 +27,15 @@ struct LauncherNotice: Identifiable {
 final class ClipboardViewModel: ObservableObject {
     @Published var selectedItem: ClipItem?
     @Published var selectedItemID: String?
+
+    /// PreviewPane 等"右侧 payload 消费者"的唯一入口：仅在 ID 匹配时返回 selectedItem。
+    /// `selectItem(id:)` 同步切换 selectedItemID、异步加载完整 ClipItem，这中间存在时间窗口；
+    /// 直读 selectedItem 会在窗口内显示上一次选中项的数据（"左选 A、右显 B"）。
+    /// 该 guard 与异步回调里的 `self.selectedItemID == capturedId` 同源，把规则收口到消费侧。
+    var displayedItem: ClipItem? {
+        guard let selectedItemID, selectedItem?.id == selectedItemID else { return nil }
+        return selectedItem
+    }
     @Published var searchQuery: String = ""
     @Published var browseMode: LauncherBrowseMode = .all
     @Published private(set) var sections: [ClipSection] = []
