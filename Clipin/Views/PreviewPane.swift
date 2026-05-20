@@ -97,12 +97,11 @@ struct PreviewPane: View {
         case .image:
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let path = item.imagePath, let image = NSImage(contentsOfFile: path) {
+                    if let path = item.imagePath {
                         mediaCanvas {
-                            Image(nsImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxWidth: .infinity, maxHeight: 392)
+                            AsyncPreviewImage(path: path, maxHeight: 392) {
+                                unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
+                            }
                         }
                     } else {
                         unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
@@ -154,12 +153,21 @@ struct PreviewPane: View {
                         }
                     }
 
-                    if singleImageFile, let image = NSImage(contentsOfFile: primaryPath) {
+                    if singleImageFile {
                         mediaCanvas {
-                            Image(nsImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxWidth: .infinity, maxHeight: 360)
+                            AsyncPreviewImage(path: primaryPath, maxHeight: 360) {
+                                // 文件分支单图加载失败 → 退化为路径文本显示，不画 "Image not found"
+                                // 误导用户（文件本身可能存在但不是图片格式）
+                                supportingBlock(title: "Path", systemImage: "folder") {
+                                    SelectableTextPreview(
+                                        text: fileListText,
+                                        font: .monospacedSystemFont(ofSize: 12, weight: .regular),
+                                        searchQuery: searchQuery,
+                                        vm: vm
+                                    )
+                                    .frame(minHeight: 80)
+                                }
+                            }
                         }
                     } else {
                         supportingBlock(title: paths.count > 1 ? "Selection" : "Path", systemImage: "folder") {
@@ -588,6 +596,50 @@ struct PreviewPane: View {
         .systemFont(ofSize: 13.5, weight: .regular)
     }
 
+}
+
+/// 异步加载 NSImage 的预览组件。
+///
+/// 旧实现在 PreviewPane.body 里直接 `NSImage(contentsOfFile:)`，SwiftUI 每次重建
+/// 这棵 view 都会同步在主线程读文件 + 解码——大图（数 MB PNG / 网络盘 / OCR 后的高清
+/// 截屏）会让面板切换肉眼可感地卡顿。改用 `.task(id: path)` 在 userInitiated detached
+/// task 解码，切换 item 时 task 自动取消。失败显示 placeholder，避免空白闪烁。
+private struct AsyncPreviewImage<Placeholder: View>: View {
+    let path: String
+    let maxHeight: CGFloat
+    @ViewBuilder var placeholder: () -> Placeholder
+
+    @State private var loaded: NSImage?
+    @State private var failed = false
+
+    var body: some View {
+        Group {
+            if let loaded {
+                Image(nsImage: loaded)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: maxHeight)
+            } else if failed {
+                placeholder()
+            } else {
+                // 解码中：保留 frame 占位，避免外层布局抖动
+                Color.clear.frame(maxWidth: .infinity, maxHeight: maxHeight)
+            }
+        }
+        .task(id: path) {
+            // 切换 path 时 SwiftUI 自动取消旧 task，无需手动判断
+            failed = false
+            loaded = nil
+            let image = await Task.detached(priority: .userInitiated) {
+                NSImage(contentsOfFile: path)
+            }.value
+            if let image {
+                loaded = image
+            } else {
+                failed = true
+            }
+        }
+    }
 }
 
 private struct ColorSwatchPreview: View {
