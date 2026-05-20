@@ -284,11 +284,41 @@ extension View {
 ///   hover 自绘。二者不可混用:组级玻璃会杀掉 per-button `.interactive()`。
 struct ClipinFooterGlassButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            // 边距向 Raycast 底栏胶囊的舒适比例靠(原 12/7 偏紧)。
-            .padding(.horizontal, 13)
-            .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
+        HoverBody(configuration: configuration)
+    }
+
+    /// 与 `ClipinFooterSegmentStyle` 视觉语言对齐:hover 都是「内缩灰高亮 capsule +
+    /// scale 0.97 press」(memory raycast-footer-reference 写的 Raycast 1:1 三层效果②)。
+    /// 实现差别只在玻璃来源:
+    /// - SegmentStyle 自身不带玻璃,内缩 capsule 画在 `.background` 上,露出外层组级玻璃
+    /// - 本样式自带 `.glassEffect`,内缩 capsule 画在 `.overlay` 上,叠在自身玻璃内部
+    /// `.regular.interactive()` 在派生 overlay 场景下系统 hover 不响应(用户实测确认),
+    /// 自绘是唯一保证视觉一致的方式。`.interactive()` 仍保留作为压感双保险。
+    /// @State 必须在内嵌 View 上,ButtonStyle 不是 View,无法挂状态(踩过)。
+    private struct HoverBody: View {
+        let configuration: Configuration
+        @State private var isHovered = false
+
+        var body: some View {
+            let pressed = configuration.isPressed
+            let highlighted = isHovered
+            return configuration.label
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
+                        .padding(2) // 内缩一圈,露出外层玻璃 capsule 边
+                        .allowsHitTesting(false) // 高亮层不抢 Button 的命中
+                )
+                .scaleEffect(pressed ? 0.97 : 1)
+                .contentShape(Capsule(style: .continuous))
+                .onHover { hovering in
+                    withAnimation(ClipinMotion.feedback) { isHovered = hovering }
+                }
+                .animation(ClipinMotion.feedback, value: pressed)
+        }
     }
 }
 
