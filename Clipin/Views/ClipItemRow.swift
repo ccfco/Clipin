@@ -178,6 +178,88 @@ private func parseFunctionalHSL(_ s: String) -> Color? {
     return Color(red: r1 + m, green: g1 + m, blue: b1 + m, opacity: alphaValue)
 }
 
+/// URL 类型的列表 favicon 视图：与预览面板共享 FaviconCache 内存/磁盘缓存。
+///
+/// 两态设计（loading 与 fail 共用占位）：
+/// 1. 字母圈占位 → 立即显示，作为"稳定 placeholder"
+/// 2. favicon 拉到 → 无缝替换
+///
+/// 不画 loading→globe→favicon 三态，因为列表 row 比预览面板更频繁（每行一个），
+/// 多一层中间状态会让列表滚动时出现"globe 一闪即过"的视觉噪声。
+/// 字母圈本身已经是稳定的视觉锚点（同 host 永远同一个字母），用户不需要 globe 提示。
+private struct RowFaviconView: View {
+    let host: String?
+    @State private var image: NSImage?
+
+    var body: some View {
+        ZStack {
+            if let image {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(0.05))
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .padding(3)
+            } else if let host, !host.isEmpty {
+                RowFaviconLetterMark(host: host)
+            } else {
+                // 解析不出 host（极少数 URL 字符串损坏） → 兜底 globe
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(0.05))
+                Image(systemName: "globe")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(ClipinInk.secondary)
+            }
+        }
+        .frame(width: 24, height: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
+        .task(id: host ?? "") {
+            image = nil
+            guard let host, !host.isEmpty else { return }
+            let requestedHost = host
+            let fetched = await FaviconCache.shared.icon(for: requestedHost)
+            // 快速切条目 / 列表滚动 row 复用时，旧 host 的网络响应可能晚到。
+            // 必须验证当前 host 仍是发起时的那个，否则会把 A 站 favicon 覆盖到 B 站行上。
+            guard !Task.isCancelled, requestedHost == host else { return }
+            image = fetched
+        }
+    }
+}
+
+/// 列表版字母圈：灰底 + 单色首字母。
+///
+/// 与预览面板 `FaviconLetterMark` 的彩色 hue 版区别：
+/// - 预览面板 64×64，是当前条目主角，可以承担彩色品牌识别角色
+/// - 列表 row 24×24，同时显示十几个站点；如果用彩色 hue，多个字母圈会互相抢注意力
+/// - 所以列表版用同样的 `primary.opacity(0.05)` 灰底（与其它 SF Symbol 容器一致）+
+///   `primary.opacity(0.7)` 单色字母，维持列表整体的视觉静默
+private struct RowFaviconLetterMark: View {
+    let host: String
+
+    private var letter: String {
+        // 与预览面板 FaviconLetterMark 保持一致：去 www 后取首段首字母大写。
+        // "docs.feishu.cn" → "D"; "www.github.com" → "G"; "localhost" → "L"
+        let lower = host.lowercased()
+        let parts = lower.split(separator: ".")
+        let firstMeaningful = parts.first(where: { $0 != "www" }) ?? parts.first ?? Substring(host)
+        return String(firstMeaningful.first ?? Character("?")).uppercased()
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.primary.opacity(0.05))
+            Text(letter)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.primary.opacity(0.7))
+        }
+    }
+}
+
 private struct ClipThumbnailImage: View {
     let path: String
     @State private var thumbnail: CGImage?
@@ -268,6 +350,10 @@ struct ClipItemRow: View {
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
             }
             .frame(width: 24, height: 24)
+        } else if item.clipType == .url {
+            // URL 类型：拿 favicon 代替通用 link 图标。preview 就是 URL 字符串本身
+            // （ClipListItem 240 字符截断对 URL 几乎不影响 host 解析）。
+            RowFaviconView(host: URL(string: item.preview)?.host)
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
