@@ -70,7 +70,7 @@ final class ArchiveServiceTests: XCTestCase {
         try archiveJSON.data(using: .utf8)!.write(to: archiveURL)
 
         let result = try await ArchiveService.importArchive(from: archiveURL, core: core)
-        let items = core.getItems(limit: 10, offset: 0, typeFilter: nil)
+        let items = try core.getItems(limit: 10, offset: 0, typeFilter: nil)
 
         XCTAssertEqual(result.importedCount, 0)
         XCTAssertEqual(result.skippedDuplicateCount, 1)
@@ -119,7 +119,7 @@ final class ArchiveServiceTests: XCTestCase {
         try archiveJSON.data(using: .utf8)!.write(to: archiveURL)
 
         let result = try await ArchiveService.importArchive(from: archiveURL, core: core)
-        let items = core.getItems(limit: 10, offset: 0, typeFilter: .image)
+        let items = try core.getItems(limit: 10, offset: 0, typeFilter: .image)
 
         XCTAssertEqual(result.importedCount, 1)
         XCTAssertEqual(result.skippedDuplicateCount, 0)

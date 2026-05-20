@@ -1078,9 +1078,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             vm.togglePinSelected()
             return nil
         case KeyCode.delete where flags == .command:
-            // 文本预览区编辑时（NSTextView 为 firstResponder），⌘⌫ 是系统“删到行首”，
-            // 不能被全局路由吃掉变成“删除当前剪贴板条目”——会误删用户正在阅读的项。
-            if self.panel?.firstResponder is NSTextView {
+            // 文本预览区编辑时（NSTextView 为 firstResponder），⌘⌫ 是系统"删到行首"，
+            // 不能被全局路由吃掉变成"删除当前剪贴板条目"——会误删用户正在阅读的项。
+            // 判断收到 LauncherKeyRouting helper 以便单测覆盖（ActionPaletteShortcutTests）。
+            if LauncherKeyRouting.shouldPreserveTextEditing(
+                keyCode: event.keyCode,
+                flags: flags,
+                firstResponderIsTextView: self.panel?.firstResponder is NSTextView
+            ) {
                 return event
             }
             vm.deleteSelected()

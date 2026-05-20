@@ -187,12 +187,11 @@ impl ClipinCore {
     pub fn image_dir(&self) -> String {
         self.storage.image_dir().to_string()
     }
-}
 
-/// 非 UniFFI 暴露的 API：只服务 Rust 单元测试与迁移工具，避免污染 Swift binding 表
-/// 和 UniFFI checksum。曾经误暴露给 Swift 但生产代码从未调用——下架后 binding 体积
-/// 缩小、跨层契约面更小。如未来需要 Swift 端调用，把对应方法移回上面的 `impl` 块即可。
-impl ClipinCore {
+    /// 完整 item 分页查询。生产 Swift 路径不用（list 列表走 get_list_items），
+    /// 但 ClipinTests 的 ArchiveServiceTests / ArchiveV2Tests 用它来 setup + assert
+    /// 完整 ClipItem 字段（pasteCount/isPinned/imagePath 等 ClipListItem 不带的字段）。
+    /// 这是合法测试消费者，必须留在 UniFFI binding 里。
     pub fn get_items(
         &self,
         limit: i32,
@@ -202,6 +201,7 @@ impl ClipinCore {
         self.storage.get_items(limit, offset, type_filter.as_ref())
     }
 
+    /// 完整 item 搜索。生产 Swift 路径只用 search_list_items，但保留以便测试使用。
     pub fn search(
         &self,
         query: String,
@@ -210,6 +210,9 @@ impl ClipinCore {
         self.storage.search(&query, type_filter.as_ref())
     }
 
+    /// 不带 if_missing 的 import。生产 Swift 路径走 import_item_if_missing
+    /// （归档导入需要去重语义），但测试 setup 阶段需要无条件插入"已存在的条目"
+    /// 来验证去重/修复行为，所以保留。
     pub fn import_item(
         &self,
         content: String,

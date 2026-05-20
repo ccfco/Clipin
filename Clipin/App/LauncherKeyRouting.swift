@@ -73,4 +73,20 @@ enum LauncherKeyRouting {
     static func normalizedFlags(_ flags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
         flags.intersection(.deviceIndependentFlagsMask)
     }
+
+    /// 判断当前键事件是否应该交还给系统的文本编辑路径（不被 launcher 全局快捷键吃掉）。
+    /// 目前唯一规则：⌘⌫ 在 NSTextView firstResponder 时是"删到行首"，必须放行；
+    /// 在主面板列表 firstResponder 时是"删除当前条目"，由 launcher 处理。
+    ///
+    /// 抽出纯函数 helper 而不是在 AppDelegate 里 inline，是为了让 ⌘⌫ 的边界条件有
+    /// 可单测的"锚点"——之前 inline 写在 AppDelegate 的 `if self.panel?.firstResponder
+    /// is NSTextView` 没法被 ActionPaletteShortcutTests 验证，只能靠 UI 集成跑。
+    static func shouldPreserveTextEditing(
+        keyCode: UInt16,
+        flags: NSEvent.ModifierFlags,
+        firstResponderIsTextView: Bool
+    ) -> Bool {
+        guard firstResponderIsTextView else { return false }
+        return keyCode == KeyCode.delete && normalizedFlags(flags) == .command
+    }
 }

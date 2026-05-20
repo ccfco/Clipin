@@ -28,14 +28,14 @@ final class ClipboardViewModelTests: XCTestCase {
         viewModel.deleteItem(id: item.id)
 
         XCTAssertTrue(viewModel.isEmpty)
-        XCTAssertEqual(core.getItems(limit: 10, offset: 0, typeFilter: nil).count, 1)
+        XCTAssertEqual(try core.getItems(limit: 10, offset: 0, typeFilter: nil).count, 1)
         XCTAssertEqual(viewModel.launcherNotice?.actionTitle, NSLocalizedString("Undo", comment: ""))
 
         viewModel.performNoticeAction()
 
         XCTAssertFalse(viewModel.isEmpty)
         XCTAssertEqual(viewModel.selectedItemID, item.id)
-        XCTAssertEqual(core.getItems(limit: 10, offset: 0, typeFilter: nil).count, 1)
+        XCTAssertEqual(try core.getItems(limit: 10, offset: 0, typeFilter: nil).count, 1)
     }
 
     func testFinalizePendingDeletionRemovesItemFromStorage() throws {
@@ -54,7 +54,7 @@ final class ClipboardViewModelTests: XCTestCase {
         viewModel.finalizePendingDeletion()
 
         XCTAssertTrue(viewModel.isEmpty)
-        XCTAssertEqual(core.getItems(limit: 10, offset: 0, typeFilter: nil).count, 0)
+        XCTAssertEqual(try core.getItems(limit: 10, offset: 0, typeFilter: nil).count, 0)
     }
 
     func testQuickPasteTouchesItemSoItBecomesRecent() throws {
@@ -87,7 +87,7 @@ final class ClipboardViewModelTests: XCTestCase {
         viewModel.pasteItemAt(index: 1)
 
         XCTAssertEqual(pastedID, older.id)
-        XCTAssertEqual(core.getItems(limit: 10, offset: 0, typeFilter: nil).first?.id, older.id)
+        XCTAssertEqual(try core.getItems(limit: 10, offset: 0, typeFilter: nil).first?.id, older.id)
     }
 
     func testSilentReloadCanPreserveActionPalette() throws {

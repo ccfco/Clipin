@@ -25,7 +25,7 @@ final class ArchiveV2Tests: XCTestCase {
                                    imageDir: tmpDir2.appendingPathComponent("images").path)
         _ = try await ArchiveService.importArchive(from: archiveURL, core: core2)
 
-        let items = core2.getItems(limit: 10, offset: 0, typeFilter: nil)
+        let items = try core2.getItems(limit: 10, offset: 0, typeFilter: nil)
         XCTAssertEqual(items.count, 1)
         let loaded = try core2.getRepresentations(id: items[0].id)
         XCTAssertEqual(loaded.count, 2)
@@ -57,7 +57,7 @@ final class ArchiveV2Tests: XCTestCase {
         let result = try await ArchiveService.importArchive(from: url, core: core)
         XCTAssertEqual(result.importedCount, 1)
 
-        let items = core.getItems(limit: 10, offset: 0, typeFilter: nil)
+        let items = try core.getItems(limit: 10, offset: 0, typeFilter: nil)
         let reps = try core.getRepresentations(id: items[0].id)
         XCTAssertEqual(reps.count, 0)
     }
