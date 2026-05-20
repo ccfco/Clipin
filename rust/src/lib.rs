@@ -73,7 +73,7 @@ impl ClipinCore {
         limit: i32,
         offset: i32,
         type_filter: Option<ClipType>,
-    ) -> Vec<ClipItem> {
+    ) -> Result<Vec<ClipItem>, ClipinError> {
         self.storage.get_items(limit, offset, type_filter.as_ref())
     }
 
@@ -88,7 +88,7 @@ impl ClipinCore {
         limit: i32,
         offset: i32,
         type_filter: Option<ClipType>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         self.storage
             .get_list_items(limit, offset, type_filter.as_ref())
     }
@@ -99,7 +99,7 @@ impl ClipinCore {
         limit: i32,
         offset: i32,
         type_filter: Option<ClipType>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         self.storage
             .get_pinned_list_items(limit, offset, type_filter.as_ref())
     }
@@ -110,7 +110,7 @@ impl ClipinCore {
         limit: i32,
         offset: i32,
         type_filter: Option<ClipType>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         self.storage
             .get_unpinned_list_items(limit, offset, type_filter.as_ref())
     }
@@ -277,7 +277,7 @@ mod tests {
         assert_eq!(item.clip_type, ClipType::Text);
         assert_eq!(item.char_count, 11);
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].content, "hello world");
     }
@@ -291,7 +291,7 @@ mod tests {
         core.save_item("same".into(), ClipType::Text, None, None, None)
             .unwrap();
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 1, "重复内容应该去重");
     }
 
@@ -320,7 +320,7 @@ mod tests {
             .unwrap();
         core.delete_item(item.id).unwrap();
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 0);
     }
 
@@ -333,11 +333,11 @@ mod tests {
         core.save_item("url".into(), ClipType::Url, None, None, None)
             .unwrap();
 
-        let text_only = core.get_items(10, 0, Some(ClipType::Text));
+        let text_only = core.get_items(10, 0, Some(ClipType::Text)).unwrap();
         assert_eq!(text_only.len(), 1);
         assert_eq!(text_only[0].content, "text");
 
-        let url_only = core.get_items(10, 0, Some(ClipType::Url));
+        let url_only = core.get_items(10, 0, Some(ClipType::Url)).unwrap();
         assert_eq!(url_only.len(), 1);
         assert_eq!(url_only[0].content, "url");
     }
@@ -350,7 +350,7 @@ mod tests {
         core.save_item(content.clone(), ClipType::Text, None, None, None)
             .unwrap();
 
-        let items = core.get_list_items(10, 0, None);
+        let items = core.get_list_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].preview.len(), 240);
 
@@ -565,7 +565,7 @@ mod tests {
         let cleared = core.clear_unpinned_before(future).unwrap();
         assert_eq!(cleared, 2);
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 0);
     }
 
@@ -585,7 +585,7 @@ mod tests {
         let cleared = core.clear_unpinned_before(future).unwrap();
         assert_eq!(cleared, 1);
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].content, "pinned");
     }
@@ -613,7 +613,7 @@ mod tests {
         )
         .unwrap();
 
-        let items = core.get_items(10, 0, Some(ClipType::Image));
+        let items = core.get_items(10, 0, Some(ClipType::Image)).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].copy_count, 2);
         assert_eq!(items[0].image_path.as_deref(), Some(second_path.as_str()));
@@ -634,7 +634,7 @@ mod tests {
         core.save_item("same".into(), ClipType::Text, None, None, None)
             .unwrap();
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].copy_count, 2);
         assert_eq!(items[0].paste_count, 2);
@@ -667,7 +667,7 @@ mod tests {
         )
         .unwrap();
 
-        let items = core.get_items(10, 0, Some(ClipType::Image));
+        let items = core.get_items(10, 0, Some(ClipType::Image)).unwrap();
         assert_eq!(items.len(), 2);
     }
 
@@ -692,7 +692,7 @@ mod tests {
             )
             .unwrap();
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert!(!imported);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, existing.id);
@@ -732,7 +732,7 @@ mod tests {
             )
             .unwrap();
 
-        let items = core.get_items(10, 0, Some(ClipType::Image));
+        let items = core.get_items(10, 0, Some(ClipType::Image)).unwrap();
         assert!(repaired);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, existing.id);
@@ -763,7 +763,7 @@ mod tests {
             .unwrap();
         assert!(imported);
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 1);
         let loaded_reps = core.get_representations(items[0].id.clone()).unwrap();
         assert_eq!(loaded_reps.len(), 1);
@@ -811,7 +811,7 @@ mod tests {
             "merging representations into empty should count as imported"
         );
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 1);
         let loaded_reps = core.get_representations(items[0].id.clone()).unwrap();
         assert_eq!(loaded_reps.len(), 1);
@@ -860,7 +860,7 @@ mod tests {
             "should skip when target already has representations"
         );
 
-        let items = core.get_items(10, 0, None);
+        let items = core.get_items(10, 0, None).unwrap();
         let loaded = core.get_representations(items[0].id.clone()).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(

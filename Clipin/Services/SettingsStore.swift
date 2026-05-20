@@ -476,8 +476,15 @@ final class SettingsStore: ObservableObject {
             return true
         }
 
-        if !core.getListItems(limit: 1, offset: 0, typeFilter: nil).isEmpty {
-            return true
+        // getListItems 现在 throws；这里是引导流程的"是否已经有历史"探测，
+        // 失败时按"探测不到 = 假设无历史"处理是合理的：onboarding 入口宁可多走一次，
+        // 也不要因 DB 偶发错误把用户锁在 onboarding 外。但失败必须 log，不能裸 try?。
+        do {
+            if try !core.getListItems(limit: 1, offset: 0, typeFilter: nil).isEmpty {
+                return true
+            }
+        } catch {
+            print("⚠️ existing-history probe failed during onboarding decision: \(error)")
         }
 
         return Self.legacyInstallKeys.contains { defaults.object(forKey: $0) != nil }

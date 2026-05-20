@@ -723,26 +723,36 @@ final class ClipboardViewModel: ObservableObject {
 
     /// 当普通浏览选择“仅在 pinned 视图显示”时，分页要以“可见项页”而不是“原始 SQL 页”为准，
     /// 否则第一页可能被隐藏的 pinned 条目吃满，列表会错误显示为空。
+    ///
+    /// Rust 端 get_(pinned|unpinned)_list_items 现在返回 Result（旧实现把 SQL/decode 失败
+    /// unwrap_or_default 伪装成"空历史"，违反 CLAUDE.md "不兜底"）。失败时返回空 chunk +
+    /// 关闭分页 + showNotice，让用户知道 DB 故障而非"真的没数据"。
     private func fetchBrowsePage(offset: Int, typeFilter: ClipType?) -> (items: [ClipListItem], rawCount: Int, hasMore: Bool) {
         let chunk: [ClipListItem]
-        if browseMode.isPinnedOnly {
-            chunk = core.getPinnedListItems(
-                limit: Int32(Self.pageSize),
-                offset: Int32(offset),
-                typeFilter: typeFilter
-            )
-        } else if usesUnpinnedBrowseQuery {
-            chunk = core.getUnpinnedListItems(
-                limit: Int32(Self.pageSize),
-                offset: Int32(offset),
-                typeFilter: typeFilter
-            )
-        } else {
-            chunk = core.getListItems(
-                limit: Int32(Self.pageSize),
-                offset: Int32(offset),
-                typeFilter: typeFilter
-            )
+        do {
+            if browseMode.isPinnedOnly {
+                chunk = try core.getPinnedListItems(
+                    limit: Int32(Self.pageSize),
+                    offset: Int32(offset),
+                    typeFilter: typeFilter
+                )
+            } else if usesUnpinnedBrowseQuery {
+                chunk = try core.getUnpinnedListItems(
+                    limit: Int32(Self.pageSize),
+                    offset: Int32(offset),
+                    typeFilter: typeFilter
+                )
+            } else {
+                chunk = try core.getListItems(
+                    limit: Int32(Self.pageSize),
+                    offset: Int32(offset),
+                    typeFilter: typeFilter
+                )
+            }
+        } catch {
+            print("⚠️ fetchBrowsePage failed (offset=\(offset)): \(error)")
+            showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+            return (items: [], rawCount: 0, hasMore: false)
         }
 
         return (

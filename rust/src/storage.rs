@@ -726,36 +726,30 @@ impl Storage {
         limit: i32,
         offset: i32,
         type_filter: Option<&ClipType>,
-    ) -> Vec<ClipItem> {
+    ) -> Result<Vec<ClipItem>, ClipinError> {
         let conn = self.conn();
-        let sql;
 
-        let result = if let Some(t) = type_filter {
+        // 旧实现把 prepare/query_map/row decode 错误统一用 filter_map(.ok) + unwrap_or_default()
+        // 吞掉——主列表浏览/分页路径任何失败都会被伪装成"历史为空"，违反 CLAUDE.md 「不兜底」。
+        // 任何 SQL 失败或行解码失败都向上传播，Swift 层显式 notice。
+        if let Some(t) = type_filter {
             let filter_val = t.as_str().to_string();
-            sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
+            let sql = "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items WHERE clip_type = ?1
                  ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT ?2 OFFSET ?3"
-            );
-            conn.prepare(&sql).and_then(|mut stmt| {
-                stmt.query_map(params![filter_val, limit, offset], Self::row_to_item)
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            })
+                 LIMIT ?2 OFFSET ?3";
+            let mut stmt = conn.prepare(sql)?;
+            let rows = stmt.query_map(params![filter_val, limit, offset], Self::row_to_item)?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
         } else {
-            sql = format!(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
+            let sql = "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count
                  FROM clip_items
                  ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT ?1 OFFSET ?2"
-            );
-            conn.prepare(&sql).and_then(|mut stmt| {
-                stmt.query_map(params![limit, offset], Self::row_to_item)
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-            })
-        };
-
-        result.unwrap_or_default()
+                 LIMIT ?1 OFFSET ?2";
+            let mut stmt = conn.prepare(sql)?;
+            let rows = stmt.query_map(params![limit, offset], Self::row_to_item)?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        }
     }
 
     /// 导出专用：在同一把锁内一次性读出 items 与各自的 representations。
@@ -771,7 +765,9 @@ impl Storage {
                  ORDER BY is_pinned DESC, created_at DESC, id DESC",
             )?;
             let rows = stmt.query_map([], Self::row_to_item)?;
-            rows.filter_map(|r| r.ok()).collect()
+            // 旧实现 filter_map(.ok) 会让单行 decode 失败被静默丢弃，归档仍然显示"成功"
+            // 但快照实际少条目；按 "不兜底" 改为 fail-fast，便于在备份阶段就发现 schema 漂移。
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
 
         let mut rep_stmt = conn.prepare(
@@ -800,7 +796,7 @@ impl Storage {
         limit: i32,
         offset: i32,
         type_filter: Option<&ClipType>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         self.get_list_items_with_pinned_filter(limit, offset, type_filter, None)
     }
 
@@ -809,7 +805,7 @@ impl Storage {
         limit: i32,
         offset: i32,
         type_filter: Option<&ClipType>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         self.get_list_items_with_pinned_filter(limit, offset, type_filter, Some(true))
     }
 
@@ -818,7 +814,7 @@ impl Storage {
         limit: i32,
         offset: i32,
         type_filter: Option<&ClipType>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         self.get_list_items_with_pinned_filter(limit, offset, type_filter, Some(false))
     }
 
@@ -828,15 +824,17 @@ impl Storage {
         offset: i32,
         type_filter: Option<&ClipType>,
         pinned_filter: Option<bool>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         let conn = self.conn();
-        let sql;
 
-        let result = match (type_filter, pinned_filter) {
+        // 旧实现整段 and_then(...).unwrap_or_default()，主列表浏览/分页路径任何 SQL/decode
+        // 失败都被伪装成"空列表"，分页 sentinel 也可能误判 hasMore——按 "不兜底" 改 Result，
+        // Swift fetchBrowsePage 不再把 DB 故障当作"没有更多数据"。
+        match (type_filter, pinned_filter) {
             (Some(t), Some(pinned)) => {
                 let filter_val = t.as_str().to_string();
                 let pinned_val = if pinned { 1 } else { 0 };
-                sql = format!(
+                let sql = format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count
@@ -846,17 +844,16 @@ impl Storage {
                      LIMIT ?3 OFFSET ?4",
                     p = Self::LIST_PREVIEW_CHARS
                 );
-                conn.prepare(&sql).and_then(|mut stmt| {
-                    stmt.query_map(
-                        params![filter_val, pinned_val, limit, offset],
-                        Self::row_to_list_item,
-                    )
-                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
+                let mut stmt = conn.prepare(&sql)?;
+                let rows = stmt.query_map(
+                    params![filter_val, pinned_val, limit, offset],
+                    Self::row_to_list_item,
+                )?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
             }
             (Some(t), None) => {
                 let filter_val = t.as_str().to_string();
-                sql = format!(
+                let sql = format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count
@@ -866,14 +863,14 @@ impl Storage {
                      LIMIT ?2 OFFSET ?3",
                     p = Self::LIST_PREVIEW_CHARS
                 );
-                conn.prepare(&sql).and_then(|mut stmt| {
-                    stmt.query_map(params![filter_val, limit, offset], Self::row_to_list_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
+                let mut stmt = conn.prepare(&sql)?;
+                let rows =
+                    stmt.query_map(params![filter_val, limit, offset], Self::row_to_list_item)?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
             }
             (None, Some(pinned)) => {
                 let pinned_val = if pinned { 1 } else { 0 };
-                sql = format!(
+                let sql = format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count
@@ -883,13 +880,13 @@ impl Storage {
                      LIMIT ?2 OFFSET ?3",
                     p = Self::LIST_PREVIEW_CHARS
                 );
-                conn.prepare(&sql).and_then(|mut stmt| {
-                    stmt.query_map(params![pinned_val, limit, offset], Self::row_to_list_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
+                let mut stmt = conn.prepare(&sql)?;
+                let rows =
+                    stmt.query_map(params![pinned_val, limit, offset], Self::row_to_list_item)?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
             }
             (None, None) => {
-                sql = format!(
+                let sql = format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count
@@ -898,14 +895,11 @@ impl Storage {
                      LIMIT ?1 OFFSET ?2",
                     p = Self::LIST_PREVIEW_CHARS
                 );
-                conn.prepare(&sql).and_then(|mut stmt| {
-                    stmt.query_map(params![limit, offset], Self::row_to_list_item)
-                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-                })
+                let mut stmt = conn.prepare(&sql)?;
+                let rows = stmt.query_map(params![limit, offset], Self::row_to_list_item)?;
+                Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
             }
-        };
-
-        result.unwrap_or_default()
+        }
     }
 
     /// 转义 FTS5 phrase query，内部的 " 翻倍。
@@ -1082,23 +1076,27 @@ impl Storage {
                 normalized_pinyin,
                 &["pinyin_flat", "pinyin_initials"],
             );
+            // 拼音 FTS 路径原本把 rank 选成 NULL、ORDER BY 也漏掉 rank，
+            // 导致拼音命中后排序退化为 (pin, paste, copy, time)，违反 CLAUDE.md
+            // 「FTS 路径 ORDER BY 必须包含 clip_fts.rank」硬约束——同名查询走 raw FTS
+            // 有 rank、拼音 FTS 没有，会造成两路 hit 合并后顺序不稳定。
             let sql = if type_filter.is_some() {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
                         ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count,
-                        NULL
+                        clip_fts.rank
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, ci.copy_count DESC, ci.created_at DESC
+                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                  LIMIT 200"
             } else {
                 "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
                         ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count,
-                        NULL
+                        clip_fts.rank
                  FROM clip_items ci
                  JOIN clip_fts ON clip_fts.rowid = ci.rowid
                  WHERE clip_fts MATCH ?1
-                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, ci.copy_count DESC, ci.created_at DESC
+                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                  LIMIT 200"
             };
 
@@ -1248,16 +1246,18 @@ impl Storage {
                 normalized_pinyin,
                 &["pinyin_flat", "pinyin_initials"],
             );
+            // 同 query_pinyin_item_hits：rank 必须从 clip_fts.rank 取，
+            // ORDER BY 同步补 clip_fts.rank，跟 raw FTS list 路径保持一致排序语义。
             let sql = if type_filter.is_some() {
                 format!(
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            NULL
+                            clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, ci.copy_count DESC, ci.created_at DESC
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -1266,11 +1266,11 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            NULL
+                            clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
-                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, ci.copy_count DESC, ci.created_at DESC
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
                 )
@@ -1946,7 +1946,7 @@ mod migration_tests {
         let removed = storage.trim_unpinned(2).unwrap();
         assert_eq!(removed, 1);
 
-        let items = storage.get_items(10, 0, None);
+        let items = storage.get_items(10, 0, None).unwrap();
         let contents: Vec<String> = items.into_iter().map(|item| item.content).collect();
         assert_eq!(contents, vec!["new", "mid"]);
     }
@@ -2002,7 +2002,7 @@ mod migration_tests {
         let removed = storage.trim_unpinned(1).unwrap();
         assert_eq!(removed, 1);
 
-        let items = storage.get_items(10, 0, None);
+        let items = storage.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 2);
         assert!(
             items
