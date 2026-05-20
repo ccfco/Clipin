@@ -630,16 +630,26 @@ private struct AsyncPreviewImage<Placeholder: View>: View {
             // 切换 path 时 SwiftUI 自动取消旧 task，无需手动判断
             failed = false
             loaded = nil
-            let image = await Task.detached(priority: .userInitiated) {
-                NSImage(contentsOfFile: path)
+            // NSImage 没有 Sendable conformance（AppKit 历史包袱：内部可变 representations
+            // 不保证线程安全），直接从 Task.detached 把 NSImage? 返回主 actor 会被 Swift 6
+            // strict isolation 拒绝。包装成 @unchecked Sendable 是安全的：本地 task 完成
+            // 后不再触碰 image，传递一次给主线程后没有并发访问。
+            let wrapped = await Task.detached(priority: .userInitiated) {
+                NSImage(contentsOfFile: path).map(UncheckedSendableImage.init)
             }.value
-            if let image {
-                loaded = image
+            if let wrapped {
+                loaded = wrapped.image
             } else {
                 failed = true
             }
         }
     }
+}
+
+/// 让 NSImage 安全跨越 Task.detached → main actor 边界的最小 wrapper。
+/// 仅在 AsyncPreviewImage 这种"后台构造 + 一次性传给主线程后立刻丢弃" 的语境用。
+private struct UncheckedSendableImage: @unchecked Sendable {
+    let image: NSImage
 }
 
 private struct ColorSwatchPreview: View {
