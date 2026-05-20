@@ -73,14 +73,4 @@ enum LauncherKeyRouting {
     static func normalizedFlags(_ flags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
         flags.intersection(.deviceIndependentFlagsMask)
     }
-
-    static func shouldPreserveTextEditing(
-        keyCode: UInt16,
-        flags: NSEvent.ModifierFlags,
-        firstResponderIsTextView: Bool
-    ) -> Bool {
-        firstResponderIsTextView
-            && keyCode == PaletteActionShortcut.delete.keyCode
-            && normalizedFlags(flags) == .command
-    }
 }

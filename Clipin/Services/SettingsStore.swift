@@ -198,10 +198,6 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(appearanceOverride.rawValue, forKey: Keys.appearanceOverride) }
     }
 
-    @Published var visualTheme: VisualTheme {
-        didSet { defaults.set(visualTheme.rawValue, forKey: Keys.visualTheme) }
-    }
-
     @Published var appLanguage: AppLanguage {
         didSet {
             if let langs = appLanguage.appleLanguagesValue {
@@ -262,7 +258,6 @@ final class SettingsStore: ObservableObject {
         static let autoBackupFolderPath = "settings.autoBackupFolderPath"
         static let autoBackupInterval = "settings.autoBackupInterval"
         static let appearanceOverride = "settings.appearanceOverride"
-        static let visualTheme = "settings.visualTheme"
         static let appLanguage = "settings.appLanguage"
         static let rememberPanelPosition = "settings.rememberPanelPosition"
         static let useCtrlVInTerminalForImages = "settings.useCtrlVInTerminalForImages"
@@ -284,7 +279,6 @@ final class SettingsStore: ObservableObject {
         Keys.autoBackupFolderPath,
         Keys.autoBackupInterval,
         Keys.appearanceOverride,
-        Keys.visualTheme,
         Keys.appLanguage,
         Keys.rememberPanelPosition,
         Keys.useCtrlVInTerminalForImages,
@@ -307,8 +301,6 @@ final class SettingsStore: ObservableObject {
             .flatMap { AutoBackupInterval(rawValue: $0) } ?? .weekly
         let storedAppearance = defaults.string(forKey: Keys.appearanceOverride)
             .flatMap { AppearanceOverride(rawValue: $0) } ?? .system
-        let storedVisualTheme = defaults.string(forKey: Keys.visualTheme)
-            .flatMap { VisualTheme(rawValue: $0) } ?? .mist
         let storedAppLanguage = defaults.string(forKey: Keys.appLanguage)
             .flatMap { AppLanguage(rawValue: $0) } ?? .system
         let storedPinnedItemsPresentation = defaults.string(forKey: Keys.pinnedItemsPresentation)
@@ -329,7 +321,6 @@ final class SettingsStore: ObservableObject {
         self.autoBackupFolderPath = defaults.string(forKey: Keys.autoBackupFolderPath)
         self.autoBackupInterval = storedInterval
         self.appearanceOverride = storedAppearance
-        self.visualTheme = storedVisualTheme
         self.appLanguage = storedAppLanguage
         self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
         self.useCtrlVInTerminalForImages = defaults.object(forKey: Keys.useCtrlVInTerminalForImages) as? Bool ?? false

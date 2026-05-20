@@ -20,18 +20,8 @@ enum QAFlags {
     static var forceSegmentHover: Bool { on("CLIPIN_QA_FORCE_HOVER") }
 }
 
-/// 主题 tint 已在 Liquid Glass 迁移中下线(单 native 无 tint,见 SettingsView 注释)。
-/// 枚举与 rawValue 仅为 `SettingsStore.visualTheme` 持久化保留,防止破坏既有用户偏好的迁移;
-/// 渲染层不再读其值。原 `displayName` / `CaseIterable`(给已删的主题 picker 用)已随之移除。
-enum VisualTheme: String {
-    case native = "native"
-    case mist = "mist"
-    case graphite = "graphite"
-    case sunrise = "sunrise"
-}
-
 enum ClipinChrome {
-    // 主圆角层级（嵌套依次递减）：shell 24 → section 16 → contentStage/field 14 → metadata 12 → row 12 → badge 10/7
+    // 主圆角层级（嵌套依次递减）：shell 24 → section 16 → contentStage/field 14 → metadata 12 → row 12 → badge 10
     // 链外两个独立量级（不参与嵌套递减，按用途单列）：
     //   card 18 —— 辅助窗口（引导/权限/更新）里 ClipinContentSurface 的 grouped 卡片，介于 section 与 shell 之间
     //   palette 26 —— 动作面板浮在最顶层，刻意比 shell 略大以强调悬浮层级
@@ -41,31 +31,20 @@ enum ClipinChrome {
     static let searchCornerRadius: CGFloat = 14
     static let rowCornerRadius: CGFloat = 12
     static let paletteCornerRadius: CGFloat = 26
-    static let primaryBadgeCornerRadius: CGFloat = 14
     static let badgeCornerRadius: CGFloat = 10
     // 全局间距节奏：所有 shell→section / section→section / section 垂直节奏统一用 shellGap
     static let shellGap: CGFloat = 8
     static let listRowOuterInset: CGFloat = 8
     static let detailContentInset: CGFloat = 12
-    static let detailObjectInset: CGFloat = 0
     static let detailStageInset: CGFloat = 12
-    static let detailMetadataInset: CGFloat = 12
     static let detailGroupSpacing: CGFloat = 8
     static let detailStageCornerRadius: CGFloat = 14
-    static let detailMetadataCornerRadius: CGFloat = 12
     static let detailMediaCornerRadius: CGFloat = 14
     static let footerMinHeight: CGFloat = 44
-    /// 底栏命令胶囊/来源面包屑的圆角:实测对齐 Raycast——是「圆角矩形」(~12pt)而非整颗药丸。
-    /// 用户原话:那个按钮的弧度是「个角的弧度」。所有 footer glass chip 共用此度量。
-    static let footerChipCornerRadius: CGFloat = 12
     /// 悬浮液态玻璃底栏「外接带」高度(玻璃元件高 + 与窗口边间距)。
     /// 列表 scroll 底部 inset 与预览卡 bottom margin 共用此单一度量,防两处各算漂移。规格单元 B。
     static let floatingFooterBand: CGFloat = 56
     static let footerContentInset: CGFloat = 6
-    static let footerCalloutVerticalInset: CGFloat = 4
-    static let footerCalloutHorizontalLeading: CGFloat = 10
-    static let footerCalloutHorizontalTrailing: CGFloat = 10
-    static let footerCalloutIconSize: CGFloat = 20
     static let heroOrbCornerRadius: CGFloat = 20
     static let sectionIntroSpacing: CGFloat = 10
 }
@@ -90,28 +69,8 @@ struct ClipinSceneState: Equatable {
     let isShowingActions: Bool
     let isContinuousPasteEnabled: Bool
 
-    var hasActiveQuery: Bool { isSearching || isFiltered }
-    var ambientStrength: Double {
-        if isShowingActions { return 1.0 }
-        if isContinuousPasteEnabled { return 0.92 }
-        if hasActiveQuery { return 0.74 }
-        return 0.58
-    }
-
-    var headerAccentOpacity: Double {
-        if isShowingActions { return 0.68 }
-        if hasActiveQuery { return 0.54 }
-        return 0.18
-    }
-
-    var headerGlowOpacity: Double {
-        if isShowingActions { return 0.18 }
-        if hasActiveQuery { return 0.14 }
-        return 0.06
-    }
-
     var headerLift: CGFloat {
-        hasActiveQuery ? -0.5 : 0
+        (isSearching || isFiltered) ? -0.5 : 0
     }
 
     var listRestingOpacity: Double {
@@ -158,14 +117,6 @@ struct ClipinSceneState: Equatable {
 
     var paletteScale: CGFloat { isShowingActions ? 1.0 : 0.985 }
     var paletteLift: CGFloat { isShowingActions ? 0 : 6 }
-
-    static let idle = ClipinSceneState(
-        hasSelection: false,
-        isSearching: false,
-        isFiltered: false,
-        isShowingActions: false,
-        isContinuousPasteEnabled: false
-    )
 }
 
 struct ClipinKeycap: View {

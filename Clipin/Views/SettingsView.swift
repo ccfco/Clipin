@@ -404,9 +404,6 @@ struct SettingsView: View {
                         .frame(width: 220)
                     }
 
-                    // 主题 tint 已推迟,首版单 native 无 tint —— 显式决策,非兜底
-                    // SettingsStore.visualTheme 持久化保留以防破坏迁移,渲染层不再读其值。
-
                     groupDivider
 
                     settingFieldRow("Language", description: "Restart Clipin after changing the app language.") {

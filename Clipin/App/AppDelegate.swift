@@ -128,7 +128,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var keyMonitor: Any?
     private var appSwitchObserver: Any?
     private var activeSpaceObserver: Any?
-    private var suppressResignKey = false
     private var hideGeneration: Int = 0
     private var savedPanelOrigin: NSPoint?
     private var isProgrammaticMove = false
@@ -634,7 +633,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel?.hideActionsPalette()
         viewModel?.cancelPreviewPreparation()
         QuickLookPreviewService.shared.dismiss()
-        suppressResignKey = false
         stopClickOutsideMonitor()
         stopAppSwitchObserver()
 
@@ -722,8 +720,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// 连续粘贴回焦的前置条件：面板可见、连续粘贴开启、设置/权限/Quick Look 都不在抢焦点。
     /// resignKey 入口和 150ms 后的延迟入口都用这个判断，避免重复条件漂移。
     private var canRestoreContinuousPasteFocus: Bool {
-        !suppressResignKey
-            && !QuickLookPreviewService.shared.isPresenting
+        !QuickLookPreviewService.shared.isPresenting
             && viewModel?.isContinuousPasteEnabled == true
             && settingsWindow?.isVisible != true
             && permissionWindow?.isVisible != true
@@ -1014,13 +1011,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             vm.togglePinSelected()
             return nil
         case KeyCode.delete where flags == .command:
-            if LauncherKeyRouting.shouldPreserveTextEditing(
-                keyCode: event.keyCode,
-                flags: flags,
-                firstResponderIsTextView: self.panel?.firstResponder is NSTextView
-            ) {
-                return event
-            }
             vm.deleteSelected()
             return nil
         case KeyCode.letterO where flags == .command:
@@ -1489,9 +1479,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false
         let targetApp = resolveTargetApp()
 
-        // 粘贴流程中抑制 resignKey 自动夺回，避免和下面的手动夺回竞争
-        if continuousPasteEnabled { suppressResignKey = true }
-
         if !continuousPasteEnabled {
             hidePanel()
         }
@@ -1508,7 +1495,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.monitor?.resume()
 
             if continuousPasteEnabled {
-                self?.suppressResignKey = false
                 self?.scheduleContinuousPasteFocusRestore(after: 0.15)
             }
         }
