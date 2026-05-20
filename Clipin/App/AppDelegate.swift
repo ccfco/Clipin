@@ -142,6 +142,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         static let originY = "panel.savedOriginY"
     }
 
+    /// ⌥+顶排数字键 → 浏览模式映射。文件级常量，避免每次 keyDown 重建字典。
+    private static let optionDigitBrowseMode: [UInt16: LauncherBrowseMode] = [
+        KeyCode.digit0: .all,
+        KeyCode.digit1: .pinned,
+        KeyCode.digit2: .text,
+        KeyCode.digit3: .image,
+        KeyCode.digit4: .file,
+        KeyCode.digit5: .url,
+    ]
+
     private enum SettingsWindowMetrics {
         static let size = NSSize(width: 748, height: 620)
     }
@@ -1051,19 +1061,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 vm.pasteItemAt(index: digit - 1)
                 return nil
             }
-            if flags == .option {
-                let modeMapping: [UInt16: LauncherBrowseMode] = [
-                    KeyCode.digit0: .all,
-                    KeyCode.digit1: .pinned,
-                    KeyCode.digit2: .text,
-                    KeyCode.digit3: .image,
-                    KeyCode.digit4: .file,
-                    KeyCode.digit5: .url,
-                ]
-                if let mode = modeMapping[event.keyCode] {
-                    vm.browseMode = mode
-                    return nil
-                }
+            if flags == .option, let mode = Self.optionDigitBrowseMode[event.keyCode] {
+                vm.browseMode = mode
+                return nil
             }
             return event
         }

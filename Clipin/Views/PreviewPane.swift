@@ -179,33 +179,25 @@ struct PreviewPane: View {
 
     private func footerEntries(for item: ClipItem) -> [PreviewRailEntry] {
         var entries: [PreviewRailEntry] = []
-
+        // 顺序即层级：source / pinned / OCR 这类"识别项"靠前，time / metric / formats / usage 这类"元数据"靠后。
+        // 早期版本用 prominence 在字号/padding 上拉开 0.5–1pt 差异，但视觉差小到不可分，已删除。
         if let source = primarySourceBadge(for: item) {
-            entries.append(PreviewRailEntry(item: source, prominence: .context))
+            entries.append(PreviewRailEntry(item: source))
         }
-
-        entries.append(PreviewRailEntry(item: timeBadge(for: item), prominence: .supporting))
-
+        entries.append(PreviewRailEntry(item: timeBadge(for: item)))
         if let pinned = pinnedBadge(for: item) {
-            entries.append(PreviewRailEntry(item: pinned, prominence: .context))
+            entries.append(PreviewRailEntry(item: pinned))
         }
-
-        entries.append(contentsOf: metricBadges(for: item).map {
-            PreviewRailEntry(item: $0, prominence: .supporting)
-        })
-
+        entries.append(contentsOf: metricBadges(for: item).map(PreviewRailEntry.init))
         if let formats = formatsBadge(for: item) {
-            entries.append(PreviewRailEntry(item: formats, prominence: .supporting))
+            entries.append(PreviewRailEntry(item: formats))
         }
-
         if let usage = usageBadge(for: item) {
-            entries.append(PreviewRailEntry(item: usage, prominence: .supporting))
+            entries.append(PreviewRailEntry(item: usage))
         }
-
         if let ocr = ocrBadge(for: item) {
-            entries.append(PreviewRailEntry(item: ocr, prominence: .context))
+            entries.append(PreviewRailEntry(item: ocr))
         }
-
         return entries
     }
 
@@ -478,8 +470,6 @@ struct PreviewPane: View {
 
     fileprivate struct PreviewRailEntry: Identifiable {
         let item: PreviewBadgeItem
-        let prominence: PreviewBadgeProminence
-
         var id: String { item.id }
     }
 
@@ -671,35 +661,29 @@ private struct ColorSwatchPreview: View {
     }
 }
 
-private enum PreviewBadgeProminence {
-    case context
-    case supporting
-}
-
 private struct PreviewValueBadge: View {
     let item: PreviewPane.PreviewBadgeItem
-    let prominence: PreviewBadgeProminence
 
     var body: some View {
         HStack(spacing: 6) {
             if let systemImage = item.systemImage {
                 Image(systemName: systemImage)
-                    .font(.system(size: prominence == .context ? 9.5 : 10, weight: .semibold))
+                    .font(.system(size: 10, weight: .semibold))
             } else if let icon = item.icon {
                 Image(nsImage: icon)
                     .resizable()
-                    .frame(width: prominence == .context ? 10 : 11, height: prominence == .context ? 10 : 11)
+                    .frame(width: 11, height: 11)
             }
 
             Text(item.title)
-                .font(.system(size: prominence == .context ? 10 : 10.5, weight: .medium, design: .rounded))
+                .font(.system(size: 10.5, weight: .medium, design: .rounded))
                 .lineLimit(1)
                 .textSelection(.enabled)
         }
         .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(ClipinInk.secondary)
-        .padding(.horizontal, prominence == .context ? 8 : 9)
-        .padding(.vertical, prominence == .context ? 4 : 5)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
         .clipinChromeGlass(in: Capsule(style: .continuous))
         .help(item.helpText ?? item.title)
     }
@@ -712,10 +696,7 @@ private struct PreviewFooterRail: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(entries) { entry in
-                    PreviewValueBadge(
-                        item: entry.item,
-                        prominence: entry.prominence
-                    )
+                    PreviewValueBadge(item: entry.item)
                 }
             }
             .padding(.horizontal, 1)
