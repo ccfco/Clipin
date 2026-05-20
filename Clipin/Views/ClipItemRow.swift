@@ -194,13 +194,17 @@ private struct ClipThumbnailImage: View {
                     .foregroundStyle(ClipinInk.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(Color(nsColor: .controlColor))
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.primary.opacity(0.05))
                     )
             }
         }
         .frame(width: 24, height: 24)
-        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
         .task(id: path) {
             thumbnail = ClipImageThumbnailCache.shared.cachedThumbnail(for: path)
             if thumbnail == nil {
@@ -259,19 +263,23 @@ struct ClipItemRow: View {
             )
         } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
             ZStack {
-                RoundedRectangle(cornerRadius: 5, style: .continuous).fill(color)
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(color)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
             }
             .frame(width: 24, height: 24)
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(ClipinInk.secondary)
-                .frame(width: 24, height: 22)
+                .frame(width: 24, height: 24)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color(nsColor: .controlColor))
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                 )
         }
     }
