@@ -1330,38 +1330,37 @@ impl Storage {
         }
     }
 
-    pub fn search(&self, query: &str, type_filter: Option<&ClipType>) -> Vec<ClipItem> {
+    pub fn search(
+        &self,
+        query: &str,
+        type_filter: Option<&ClipType>,
+    ) -> Result<Vec<ClipItem>, ClipinError> {
         let conn = self.conn();
         let search = Self::build_search_query(query);
-        let raw_hits = Self::query_raw_item_hits(&conn, &search, type_filter).unwrap_or_default();
-        let pinyin_hits = search
-            .normalized_pinyin
-            .as_deref()
-            .map(|normalized| {
-                Self::query_pinyin_item_hits(&conn, normalized, type_filter).unwrap_or_default()
-            })
-            .unwrap_or_default();
-
-        Self::merge_search_hits(raw_hits, pinyin_hits)
+        // 旧实现两路都 unwrap_or_default() 会把 SQL/FTS 故障伪装成"没有匹配项"——
+        // 用户搜索没结果时根本无法分辨"真的没有"和"DB 坏了"。按 CLAUDE.md "不兜底"
+        // 约束，任一路 SQL 失败都向上传播，Swift 层显式 surface notice。
+        let raw_hits = Self::query_raw_item_hits(&conn, &search, type_filter)?;
+        let pinyin_hits = match search.normalized_pinyin.as_deref() {
+            Some(normalized) => Self::query_pinyin_item_hits(&conn, normalized, type_filter)?,
+            None => Vec::new(),
+        };
+        Ok(Self::merge_search_hits(raw_hits, pinyin_hits))
     }
 
     pub fn search_list_items(
         &self,
         query: &str,
         type_filter: Option<&ClipType>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         let conn = self.conn();
         let search = Self::build_search_query(query);
-        let raw_hits = Self::query_raw_list_hits(&conn, &search, type_filter).unwrap_or_default();
-        let pinyin_hits = search
-            .normalized_pinyin
-            .as_deref()
-            .map(|normalized| {
-                Self::query_pinyin_list_hits(&conn, normalized, type_filter).unwrap_or_default()
-            })
-            .unwrap_or_default();
-
-        Self::merge_search_hits(raw_hits, pinyin_hits)
+        let raw_hits = Self::query_raw_list_hits(&conn, &search, type_filter)?;
+        let pinyin_hits = match search.normalized_pinyin.as_deref() {
+            Some(normalized) => Self::query_pinyin_list_hits(&conn, normalized, type_filter)?,
+            None => Vec::new(),
+        };
+        Ok(Self::merge_search_hits(raw_hits, pinyin_hits))
     }
 
     pub fn get_item(&self, id: &str) -> Result<ClipItem, ClipinError> {

@@ -116,7 +116,11 @@ impl ClipinCore {
     }
 
     /// 搜索历史记录
-    pub fn search(&self, query: String, type_filter: Option<ClipType>) -> Vec<ClipItem> {
+    pub fn search(
+        &self,
+        query: String,
+        type_filter: Option<ClipType>,
+    ) -> Result<Vec<ClipItem>, ClipinError> {
         self.storage.search(&query, type_filter.as_ref())
     }
 
@@ -125,7 +129,7 @@ impl ClipinCore {
         &self,
         query: String,
         type_filter: Option<ClipType>,
-    ) -> Vec<ClipListItem> {
+    ) -> Result<Vec<ClipListItem>, ClipinError> {
         self.storage.search_list_items(&query, type_filter.as_ref())
     }
 
@@ -371,7 +375,7 @@ mod tests {
         core.save_item("rust cargo build".into(), ClipType::Text, None, None, None)
             .unwrap();
 
-        let results = core.search("rust".into(), None);
+        let results = core.search("rust".into(), None).unwrap();
         assert_eq!(results.len(), 2);
     }
 
@@ -382,11 +386,11 @@ mod tests {
         core.save_item("你好世界".into(), ClipType::Text, None, None, None)
             .unwrap();
 
-        let flat = core.search("nihao".into(), None);
+        let flat = core.search("nihao".into(), None).unwrap();
         assert_eq!(flat.len(), 1);
         assert_eq!(flat[0].content, "你好世界");
 
-        let initials = core.search("nh".into(), None);
+        let initials = core.search("nh".into(), None).unwrap();
         assert_eq!(initials.len(), 1);
         assert_eq!(initials[0].content, "你好世界");
     }
@@ -407,12 +411,12 @@ mod tests {
         }
         core.increment_paste_count(cold.id).unwrap();
 
-        let results = core.search("zhu yi".into(), None);
+        let results = core.search("zhu yi".into(), None).unwrap();
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].content, "注意：高频条目");
         assert_eq!(results[0].paste_count, 10);
 
-        let list_results = core.search_list_items("zhu yi".into(), None);
+        let list_results = core.search_list_items("zhu yi".into(), None).unwrap();
         assert_eq!(list_results.len(), 2);
         assert_eq!(list_results[0].preview, "注意：高频条目");
         assert_eq!(list_results[0].paste_count, 10);
@@ -445,11 +449,11 @@ mod tests {
             core.increment_paste_count(hot.id.clone()).unwrap();
         }
 
-        let results = core.search("common searchable".into(), None);
+        let results = core.search("common searchable".into(), None).unwrap();
         assert_eq!(results[0].content, "common searchable hot item");
         assert_eq!(results[0].paste_count, 50);
 
-        let list_results = core.search_list_items("common searchable".into(), None);
+        let list_results = core.search_list_items("common searchable".into(), None).unwrap();
         assert_eq!(list_results[0].preview, "common searchable hot item");
         assert_eq!(list_results[0].paste_count, 50);
     }
@@ -537,12 +541,12 @@ mod tests {
             .unwrap();
 
         // 搜 "%" 应只匹配 "100% done"，不匹配所有记录
-        let pct = core.search("%".into(), None);
+        let pct = core.search("%".into(), None).unwrap();
         assert_eq!(pct.len(), 1, "% 应作为字面量搜索，不匹配所有记录");
         assert_eq!(pct[0].content, "100% done");
 
         // 搜 "_" 应只匹配 "file_name.txt"，不匹配单字符通配
-        let underscore = core.search("_".into(), None);
+        let underscore = core.search("_".into(), None).unwrap();
         assert_eq!(underscore.len(), 1, "_ 应作为字面量搜索，不匹配任意单字符");
         assert_eq!(underscore[0].content, "file_name.txt");
     }

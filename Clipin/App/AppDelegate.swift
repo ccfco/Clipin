@@ -1029,6 +1029,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             vm.togglePinSelected()
             return nil
         case KeyCode.delete where flags == .command:
+            // 文本预览区编辑时（NSTextView 为 firstResponder），⌘⌫ 是系统“删到行首”，
+            // 不能被全局路由吃掉变成“删除当前剪贴板条目”——会误删用户正在阅读的项。
+            if self.panel?.firstResponder is NSTextView {
+                return event
+            }
             vm.deleteSelected()
             return nil
         case KeyCode.letterO where flags == .command:
@@ -1388,7 +1393,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let representations: [ClipRepresentation]
         if item.clipType == .text || item.clipType == .url {
-            representations = (try? appState.core.getRepresentations(id: item.id)) ?? []
+            do {
+                representations = try appState.core.getRepresentations(id: item.id)
+            } catch {
+                // DB 读 representations 失败不能 ?? [] 静默退化成“只写纯文本”——
+                // 用户期待 HTML/RTF 跟着粘贴，悄悄丢格式属于“不兜底”里禁止的兜底行为。
+                print("⚠️ Failed to load representations for paste: \(error)")
+                monitor?.resume()
+                viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
+                return
+            }
         } else {
             representations = []
         }
@@ -1433,7 +1447,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func performPasteRepresentation(_ item: ClipItem, uti: String) {
         monitor?.pause()
-        let representations = (try? appState.core.getRepresentations(id: item.id)) ?? []
+        let representations: [ClipRepresentation]
+        do {
+            representations = try appState.core.getRepresentations(id: item.id)
+        } catch {
+            // 同 performPaste：⌥H / ⌥R 走的是“按 UTI 取格式回写”，
+            // representations 读不到 ?? [] 会让 writeRepresentation 直接失败，
+            // 但报错语义会变得模糊（看起来像“格式不支持”而非 DB 失败），所以显式上报。
+            print("⚠️ Failed to load representations for paste(\(uti)): \(error)")
+            monitor?.resume()
+            viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
+            return
+        }
         guard PasteService.writeRepresentation(item, uti: uti, representations: representations) else {
             monitor?.resume()
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)

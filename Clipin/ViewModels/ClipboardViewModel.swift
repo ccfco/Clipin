@@ -192,7 +192,16 @@ final class ClipboardViewModel: ObservableObject {
             totalLoadedFromDB = page.rawCount
             hasMore = page.hasMore
         } else {
-            items = core.searchListItems(query: searchQuery, typeFilter: typeFilter)
+            do {
+                items = try core.searchListItems(query: searchQuery, typeFilter: typeFilter)
+            } catch {
+                // Rust 端搜索 SQL/FTS 故障不能 ?? [] 静默退化成"无结果"——用户根本
+                // 无法分辨"真的没匹配"和"DB 坏了"。失败时显式 notice，方便察觉异常
+                // （修改自 storage::search 返回 Result 的改造）。
+                print("⚠️ searchListItems failed: \(error)")
+                items = []
+                showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+            }
             hasMore = false
         }
         items = visibleItems(from: items)
@@ -624,7 +633,13 @@ final class ClipboardViewModel: ObservableObject {
     private func loadItem(id: String, touch: Bool = false) -> ClipItem? {
         do {
             let item = try core.getItem(id: id)
-            if touch { try? core.touchItem(id: id) }
+            if touch {
+                // touchItem 失败只影响"最近使用"排序，不能阻断已经成功取到的粘贴主流程；
+                // 但也不能 try? 静默吞掉——至少打到 stderr，方便后续从日志反查排序异常。
+                do { try core.touchItem(id: id) } catch {
+                    print("⚠️ touchItem failed for id=\(id): \(error)")
+                }
+            }
             return item
         } catch {
             showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)

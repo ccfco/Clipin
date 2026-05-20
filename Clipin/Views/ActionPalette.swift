@@ -215,7 +215,10 @@ struct ActionPaletteBuilder {
         var list: [PaletteAction] = []
 
         if let selected = viewModel.selectedListItem {
-            list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", section: .primary) {
+            // 不带 badge：Paste 是 palette 默认选中的第一项，"选中+Return=执行" 已由
+            // selection 高亮表达；行右侧固定画 ↵ 会让用户在切到其它行时仍误以为
+            // Return 直接粘贴，违反"展示出来的快捷键必须是真快捷键"约束。
+            list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", section: .primary) {
                 viewModel.pasteSelected()
             })
 
@@ -250,7 +253,9 @@ struct ActionPaletteBuilder {
         }
 
         if viewModel.hasActiveFilter {
-            list.append(PaletteAction("Clear Search & Filters", systemImage: "line.3.horizontal.decrease.circle", badge: "↵") {
+            // 同 Paste：Clear 既不是 palette 默认选中项也没有全局快捷键，
+            // 行右侧画 ↵ 是欺骗 UI（用户按 Return 实际执行的是当前选中行，不是 Clear）。
+            list.append(PaletteAction("Clear Search & Filters", systemImage: "line.3.horizontal.decrease.circle") {
                 _ = viewModel.clearActiveQueryAndFilters()
             })
         }
