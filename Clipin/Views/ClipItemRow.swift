@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 /// 检测十六进制颜色字符串，返回 SwiftUI Color（#RGB / #RRGGBB / #RRGGBBAA）
+/// 列表行用 hex-only：CSS 命名色（red/blue）误判率太高，rgb()/hsl() 留给预览面板。
 func detectHexColor(in text: String) -> Color? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard trimmed.hasPrefix("#"), [4, 7, 9].contains(trimmed.count) else { return nil }
@@ -31,6 +32,111 @@ func detectHexColor(in text: String) -> Color? {
     default:
         return nil
     }
+}
+
+/// 预览面板专用色彩检测：hex 之外额外识别 `rgb()/rgba()/hsl()/hsla()`。
+/// 不识别 CSS 命名色（red/blue/...）——日常文本里太常见，会大量 false positive
+/// 把"早上吃了红薯"识别成颜色卡片，反而干扰使用。整段必须严格匹配（trim + 完整 prefix）。
+func detectColorForPreview(in text: String) -> Color? {
+    if let hex = detectHexColor(in: text) { return hex }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if trimmed.hasPrefix("rgb") { return parseFunctionalRGB(trimmed) }
+    if trimmed.hasPrefix("hsl") { return parseFunctionalHSL(trimmed) }
+    return nil
+}
+
+private func parseFunctionalRGB(_ s: String) -> Color? {
+    // 接受 rgb(r, g, b) / rgba(r, g, b, a)；r/g/b 支持 0-255 整数或 0-100% 百分比；
+    // a 支持 0-1 浮点或 0-100% 百分比。整段必须严格闭合，不允许残留字符。
+    guard let open = s.firstIndex(of: "("), let close = s.lastIndex(of: ")"),
+          close == s.index(before: s.endIndex) else { return nil }
+    let head = s[..<open]
+    let isAlpha = head == "rgba" || head == "rgb"
+    guard isAlpha else { return nil }
+    let body = s[s.index(after: open)..<close]
+    let parts = body.split(whereSeparator: { ", /".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }
+    guard parts.count == 3 || parts.count == 4 else { return nil }
+
+    func channel(_ token: String) -> CGFloat? {
+        if token.hasSuffix("%") {
+            guard let v = Double(token.dropLast()) else { return nil }
+            return CGFloat(max(0, min(1, v / 100)))
+        }
+        guard let v = Double(token) else { return nil }
+        return CGFloat(max(0, min(1, v / 255)))
+    }
+
+    func alpha(_ token: String) -> CGFloat? {
+        if token.hasSuffix("%") {
+            guard let v = Double(token.dropLast()) else { return nil }
+            return CGFloat(max(0, min(1, v / 100)))
+        }
+        guard let v = Double(token) else { return nil }
+        return CGFloat(max(0, min(1, v)))
+    }
+
+    guard let r = channel(parts[0]), let g = channel(parts[1]), let b = channel(parts[2]) else { return nil }
+    // alpha token 存在但解析失败 → 返回 nil 让正文走文本预览，而不是静默兜底 1.0 把
+    // `rgba(255,0,0,wat)` 这种格式错误也当成有效颜色显示（CLAUDE.md "不写 fallback" 红线）
+    let a: CGFloat
+    if parts.count == 4 {
+        guard let parsed = alpha(parts[3]) else { return nil }
+        a = parsed
+    } else {
+        a = 1
+    }
+    return Color(red: r, green: g, blue: b, opacity: a)
+}
+
+private func parseFunctionalHSL(_ s: String) -> Color? {
+    guard let open = s.firstIndex(of: "("), let close = s.lastIndex(of: ")"),
+          close == s.index(before: s.endIndex) else { return nil }
+    let head = s[..<open]
+    guard head == "hsla" || head == "hsl" else { return nil }
+    let body = s[s.index(after: open)..<close]
+    let parts = body.split(whereSeparator: { ", /".contains($0) }).map { $0.trimmingCharacters(in: .whitespaces) }
+    guard parts.count == 3 || parts.count == 4 else { return nil }
+
+    // hue: 接受度数（含 "deg" 或 "°" 后缀）、纯数字。turn/rad 罕见暂不支持。
+    // "°" 必须识别：CSS 工具和 ColorSwatch 自己都常输出 "120°"，不识别就会出现
+    // "从预览复制出去再粘进来不再识别为颜色"的自产自销不闭环。
+    var hueToken = parts[0]
+    if hueToken.hasSuffix("deg") { hueToken = String(hueToken.dropLast(3)) }
+    else if hueToken.hasSuffix("°") { hueToken = String(hueToken.dropLast()) }
+    guard let hueDeg = Double(hueToken) else { return nil }
+    let h = CGFloat((hueDeg.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360) / 360)
+
+    func percent(_ token: String) -> CGFloat? {
+        guard token.hasSuffix("%"), let v = Double(token.dropLast()) else { return nil }
+        return CGFloat(max(0, min(1, v / 100)))
+    }
+    guard let saturation = percent(parts[1]), let lightness = percent(parts[2]) else { return nil }
+
+    var alphaValue: CGFloat = 1
+    if parts.count == 4 {
+        let token = parts[3]
+        if token.hasSuffix("%"), let v = Double(token.dropLast()) {
+            alphaValue = CGFloat(max(0, min(1, v / 100)))
+        } else if let v = Double(token) {
+            alphaValue = CGFloat(max(0, min(1, v)))
+        }
+    }
+
+    // HSL → RGB 标准转换
+    let c = (1 - abs(2 * lightness - 1)) * saturation
+    let hPrime = h * 6
+    let x = c * (1 - abs(hPrime.truncatingRemainder(dividingBy: 2) - 1))
+    let (r1, g1, b1): (CGFloat, CGFloat, CGFloat)
+    switch hPrime {
+    case 0..<1: (r1, g1, b1) = (c, x, 0)
+    case 1..<2: (r1, g1, b1) = (x, c, 0)
+    case 2..<3: (r1, g1, b1) = (0, c, x)
+    case 3..<4: (r1, g1, b1) = (0, x, c)
+    case 4..<5: (r1, g1, b1) = (x, 0, c)
+    default:    (r1, g1, b1) = (c, 0, x)
+    }
+    let m = lightness - c / 2
+    return Color(red: r1 + m, green: g1 + m, blue: b1 + m, opacity: alphaValue)
 }
 
 private struct ClipThumbnailImage: View {

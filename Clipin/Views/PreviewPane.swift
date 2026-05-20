@@ -11,6 +11,12 @@ struct PreviewPane: View {
     let sceneState: ClipinSceneState
     @EnvironmentObject var vm: ClipboardViewModel
 
+    /// metadata 预热触发器：item 切换时 `.task` 异步把 dimensions/fileSize/appIcon 写进
+    /// PreviewMetadataCache，完成后 revision +1 强制 body 重建，此时 cached* 同步命中显示。
+    /// 这是"body 永远不做主线程同步 IO"的关键桥；首次未命中那一瞬间相关 badge 暂时不显示，
+    /// 比同步阻塞主线程更顺。
+    @State private var metadataRevision: Int = 0
+
     var body: some View {
         Group {
             if let item {
@@ -38,6 +44,41 @@ struct PreviewPane: View {
         .scaleEffect(sceneState.previewScale)
         .offset(y: sceneState.previewLift)
         .animation(ClipinMotion.focusShift, value: sceneState)
+        .task(id: item?.id) {
+            await preloadMetadata(for: item)
+        }
+    }
+
+    private func preloadMetadata(for item: ClipItem?) async {
+        guard let item else { return }
+        // 并发预热当前 item footer/source 需要的所有 metadata。
+        // 完成后写 metadataRevision 触发重渲染，body 中 cached* 同步命中。
+        await withTaskGroup(of: Void.self) { group in
+            if let bundleID = item.sourceApp {
+                group.addTask {
+                    _ = await PreviewMetadataCache.shared.loadAppIcon(for: bundleID)
+                }
+            }
+            switch item.clipType {
+            case .image:
+                if let path = item.imagePath {
+                    group.addTask { _ = await PreviewMetadataCache.shared.loadDimensions(at: path) }
+                    group.addTask { _ = await PreviewMetadataCache.shared.loadFileSize(at: path) }
+                }
+            case .file:
+                let paths = FileClipboardContent.paths(from: item.content)
+                if paths.count == 1, let path = paths.first {
+                    group.addTask { _ = await PreviewMetadataCache.shared.loadFileSize(at: path) }
+                    if Self.isImageFile(path) {
+                        group.addTask { _ = await PreviewMetadataCache.shared.loadDimensions(at: path) }
+                    }
+                }
+            case .text, .url:
+                break
+            }
+        }
+        // 触发 body 重建，让 cached* 路径同步命中
+        metadataRevision &+= 1
     }
 
     private func contentStage(for item: ClipItem) -> some View {
@@ -73,7 +114,7 @@ struct PreviewPane: View {
     private func content(for item: ClipItem) -> some View {
         switch item.clipType {
         case .text:
-            if let color = detectHexColor(in: item.content) {
+            if let color = detectColorForPreview(in: item.content) {
                 ColorSwatchPreview(color: color, originalText: item.content)
                     .frame(maxWidth: 480, alignment: .leading)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -95,93 +136,16 @@ struct PreviewPane: View {
             .environmentObject(vm)
 
         case .image:
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if let path = item.imagePath {
-                        mediaCanvas {
-                            AsyncPreviewImage(path: path, maxHeight: 392) {
-                                unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
-                            }
-                        }
-                    } else {
-                        unavailableLabel("Image not found", systemImage: "exclamationmark.triangle")
-                    }
-
-                    // OCR 识别文字区域（有结果时展示，可选中复制，支持搜索高亮）
-                    if let ocr = item.ocrText, !ocr.isEmpty {
-                        supportingBlock(title: "OCR text", systemImage: "text.viewfinder") {
-                            SelectableTextPreview(
-                                text: ocr,
-                                font: .systemFont(ofSize: 13, weight: .regular),
-                                searchQuery: searchQuery,
-                                vm: vm
-                            )
-                            .frame(minHeight: 72, maxHeight: 200)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            // `.id(item.id)` 让 SwiftUI 在切换条目时把整棵 view 当新 view 重建，
+            // 避免 @State ocrExpanded 从上一条目泄漏（用户展开 A 后切到 B 仍处于展开态）。
+            ImagePreviewBody(item: item, searchQuery: searchQuery, vm: vm)
+                .id(item.id)
 
         case .file:
-            let paths = FileClipboardContent.paths(from: item.content)
-            let primaryPath = paths.first ?? item.content
-            let primaryURL = URL(fileURLWithPath: primaryPath)
-            let fileListText = paths.isEmpty ? item.content : paths.joined(separator: "\n")
-            let singleImageFile = paths.count == 1 && isImageFile(primaryPath)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 14) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(Color(nsColor: .controlColor))
-                            Image(nsImage: NSWorkspace.shared.icon(forFile: primaryPath))
-                                .resizable()
-                                .frame(width: 54, height: 54)
-                        }
-                        .frame(width: 72, height: 72)
-
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(FileClipboardContent.displayName(for: primaryPath))
-                                .font(.system(size: 17, weight: .semibold))
-                            Text(fileHeaderSubtitle(paths: paths, primaryURL: primaryURL))
-                                .font(.system(size: 12.5))
-                                .foregroundStyle(ClipinInk.secondary)
-                                .textSelection(.enabled)
-                        }
-                    }
-
-                    if singleImageFile {
-                        mediaCanvas {
-                            AsyncPreviewImage(path: primaryPath, maxHeight: 360) {
-                                // 文件分支单图加载失败 → 退化为路径文本显示，不画 "Image not found"
-                                // 误导用户（文件本身可能存在但不是图片格式）
-                                supportingBlock(title: "Path", systemImage: "folder") {
-                                    SelectableTextPreview(
-                                        text: fileListText,
-                                        font: .monospacedSystemFont(ofSize: 12, weight: .regular),
-                                        searchQuery: searchQuery,
-                                        vm: vm
-                                    )
-                                    .frame(minHeight: 80)
-                                }
-                            }
-                        }
-                    } else {
-                        supportingBlock(title: paths.count > 1 ? "Selection" : "Path", systemImage: "folder") {
-                            SelectableTextPreview(
-                                text: fileListText,
-                                font: .monospacedSystemFont(ofSize: 12, weight: .regular),
-                                searchQuery: searchQuery,
-                                vm: vm
-                            )
-                            .frame(minHeight: 80)
-                        }
-                    }
-                }
-            }
+            // 同上：fileIcons 虽然每次 .task 都会全量覆盖，但 .id 是更稳的防御，
+            // 保证未来再加 @State 时不会无声地跨 item 携带状态。
+            FilePreviewBody(item: item, searchQuery: searchQuery, vm: vm)
+                .id(item.id)
         }
     }
 
@@ -237,7 +201,9 @@ struct PreviewPane: View {
 
         case .image:
             if let path = item.imagePath {
-                if let dimensions = imageDimensions(at: path) {
+                // 全部走 PreviewMetadataCache 的 cached* 同步路径：未命中返回 nil，
+                // 不显示对应 badge。.task 预热完成后下一帧自然补齐。
+                if let dimensions = PreviewMetadataCache.shared.cachedDimensions(at: path) {
                     items.append(
                         PreviewBadgeItem(
                             id: "dimensions",
@@ -247,7 +213,7 @@ struct PreviewPane: View {
                     )
                 }
 
-                if let size = fileSizeString(at: path) {
+                if let size = PreviewMetadataCache.shared.cachedFileSize(at: path) {
                     items.append(
                         PreviewBadgeItem(
                             id: "file_size",
@@ -271,7 +237,7 @@ struct PreviewPane: View {
             }
 
             if let path = paths.first, paths.count == 1 {
-                if let size = fileSizeString(at: path) {
+                if let size = PreviewMetadataCache.shared.cachedFileSize(at: path) {
                     items.append(
                         PreviewBadgeItem(
                             id: "file_size",
@@ -281,7 +247,8 @@ struct PreviewPane: View {
                     )
                 }
 
-                if isImageFile(path), let dimensions = imageDimensions(at: path) {
+                if Self.isImageFile(path),
+                   let dimensions = PreviewMetadataCache.shared.cachedDimensions(at: path) {
                     items.append(
                         PreviewBadgeItem(
                             id: "dimensions",
@@ -297,6 +264,12 @@ struct PreviewPane: View {
         }
 
         return items
+    }
+
+    private static func isImageFile(_ path: String) -> Bool {
+        let ext = URL(fileURLWithPath: path).pathExtension
+        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .image)
     }
 
     private func displayCharacterCount(for text: String) -> Int {
@@ -337,47 +310,15 @@ struct PreviewPane: View {
         }
     }
 
-    private func imageDimensions(at path: String) -> (width: Int, height: Int)? {
-        let url = URL(fileURLWithPath: path) as CFURL
-        guard let source = CGImageSourceCreateWithURL(url, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int
-        else { return nil }
-
-        return (width, height)
-    }
-
-    private func fileSizeString(at path: String) -> String? {
-        let url = URL(fileURLWithPath: path)
-        guard let values = try? url.resourceValues(forKeys: [
-            .isDirectoryKey,
-            .totalFileAllocatedSizeKey,
-            .fileAllocatedSizeKey,
-            .totalFileSizeKey,
-            .fileSizeKey
-        ]) else { return nil }
-
-        if values.isDirectory == true {
-            return nil
-        }
-
-        let bytes =
-            values.totalFileAllocatedSize ??
-            values.fileAllocatedSize ??
-            values.totalFileSize ??
-            values.fileSize
-
-        guard let bytes else { return nil }
-        return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-    }
-
     private func primarySourceBadge(for item: ClipItem) -> PreviewBadgeItem? {
         guard let sourceName = item.sourceName else { return nil }
+        // 走 PreviewMetadataCache.cachedAppIcon 同步路径，未命中返回 nil badge 仍显示文字。
+        // .task 预热完成后下一帧补齐 icon。
+        let icon = item.sourceApp.flatMap { PreviewMetadataCache.shared.cachedAppIcon(for: $0) }
         return PreviewBadgeItem(
             id: "source",
             title: sourceName,
-            icon: sourceAppIcon(for: item)
+            icon: icon
         )
     }
 
@@ -503,55 +444,6 @@ struct PreviewPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func unavailableLabel(_ text: LocalizedStringKey, systemImage: String) -> some View {
-        Label(text, systemImage: systemImage)
-            .font(.system(size: 13))
-            .foregroundStyle(ClipinInk.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    // 预览图片直接落在毛玻璃面上：无底板、无描边、无阴影、无内边距，
-    // 只给位图本身一个轻微圆角，避免裁切边过于锐利（对齐 Raycast）。
-    private func mediaCanvas<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func supportingBlock<Content: View>(
-        title: LocalizedStringKey,
-        systemImage: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(ClipinInk.secondary)
-
-            content()
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func isImageFile(_ path: String) -> Bool {
-        let ext = URL(fileURLWithPath: path).pathExtension
-        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
-        return type.conforms(to: .image)
-    }
-
-    private func fileHeaderSubtitle(paths: [String], primaryURL: URL) -> String {
-        let directory = primaryURL.deletingLastPathComponent().path
-        guard paths.count > 1 else { return directory }
-        return "\(FileClipboardContent.summaryLabel(for: paths.joined(separator: "\n"))) • \(directory)"
-    }
-
-    private func sourceAppIcon(for item: ClipItem) -> NSImage? {
-        guard let bundleId = item.sourceApp else { return nil }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else { return nil }
-        return NSWorkspace.shared.icon(forFile: url.path)
-    }
-
     private static let _absoluteDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
@@ -593,29 +485,292 @@ struct PreviewPane: View {
     }
 
     private func previewTextFont() -> NSFont {
-        .systemFont(ofSize: 13.5, weight: .regular)
+        .systemFont(ofSize: ClipinChrome.previewBodyFontSize, weight: .regular)
     }
 
 }
 
-/// 异步加载 NSImage 的预览组件。
+/// 文件预览主体单独拆出来：承载多文件 icon 异步加载 + mini list。
+/// 旧实现把"只显示首文件 + 全路径列表"硬塞到 PreviewPane.content inline，
+/// 多选时其余文件只剩纯文本路径行 —— 视觉上完全丢了 Finder 多选语义。
+private struct FilePreviewBody: View {
+    let item: ClipItem
+    let searchQuery: String
+    let vm: ClipboardViewModel
+
+    /// 缓存读出来的 file icon。SwiftUI 同步 body 不能直接 await，所以这里用
+    /// @State 桥接：.task 异步预热 cache，完成后 fileIcons 更新触发重渲染，
+    /// 渲染时直接走 PreviewMetadataCache 的 cached* 路径，永远不在主线程同步读 IconServices。
+    @State private var fileIcons: [String: NSImage] = [:]
+
+    /// mini list 最多展示多少行；超出折叠成 "+N more"。
+    /// Finder 实测多选超过 8 个就开始体验冗余，8 是经验上限。
+    private let maxRows = 8
+
+    private var paths: [String] {
+        FileClipboardContent.paths(from: item.content)
+    }
+
+    var body: some View {
+        let allPaths = paths
+        let primaryPath = allPaths.first ?? item.content
+        let primaryURL = URL(fileURLWithPath: primaryPath)
+        let singleImageFile = allPaths.count == 1 && isImageFile(primaryPath)
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header(primaryPath: primaryPath, primaryURL: primaryURL, paths: allPaths)
+
+                if singleImageFile {
+                    AsyncPreviewImage(path: primaryPath, maxHeight: 360) {
+                        pathFallback(allPaths: allPaths)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else if allPaths.count > 1 {
+                    multiFileList(paths: allPaths)
+                } else {
+                    pathFallback(allPaths: allPaths)
+                }
+            }
+        }
+        .task(id: item.id) {
+            // 预热前 maxRows 个 file icon；后续超出的折叠在 "+N more"，不需要异步拉
+            await withTaskGroup(of: Void.self) { group in
+                for path in paths.prefix(maxRows) {
+                    group.addTask {
+                        _ = await PreviewMetadataCache.shared.loadFileIcon(at: path)
+                    }
+                }
+            }
+            // 更新本地 @State 触发重渲染，body 重建时 cachedFileIcon 同步命中
+            var snapshot: [String: NSImage] = [:]
+            for path in paths.prefix(maxRows) {
+                if let icon = PreviewMetadataCache.shared.cachedFileIcon(at: path) {
+                    snapshot[path] = icon
+                }
+            }
+            fileIcons = snapshot
+        }
+    }
+
+    private func icon(for path: String) -> NSImage? {
+        if let cached = fileIcons[path] { return cached }
+        // 第一次 body 重建时 .task 还没跑完，先查 shared cache
+        return PreviewMetadataCache.shared.cachedFileIcon(at: path)
+    }
+
+    @ViewBuilder
+    private func header(primaryPath: String, primaryURL: URL, paths: [String]) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(nsColor: .controlColor))
+                if let img = icon(for: primaryPath) {
+                    Image(nsImage: img)
+                        .resizable()
+                        .frame(width: 54, height: 54)
+                }
+            }
+            .frame(width: 72, height: 72)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(FileClipboardContent.displayName(for: primaryPath))
+                    .font(.system(size: 17, weight: .semibold))
+                Text(fileHeaderSubtitle(paths: paths, primaryURL: primaryURL))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(ClipinInk.secondary)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func multiFileList(paths: [String]) -> some View {
+        let shown = Array(paths.prefix(maxRows))
+        let overflow = paths.count - shown.count
+
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Selection", systemImage: "square.stack.3d.up")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ClipinInk.secondary)
+
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(shown, id: \.self) { path in
+                    HStack(spacing: 10) {
+                        if let img = icon(for: path) {
+                            Image(nsImage: img)
+                                .resizable()
+                                .frame(width: 18, height: 18)
+                        } else {
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                                .frame(width: 18, height: 18)
+                        }
+                        Text(FileClipboardContent.displayName(for: path))
+                            .font(.system(size: 12.5))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                if overflow > 0 {
+                    Text(String(format: NSLocalizedString("+%d more", comment: ""), overflow))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(ClipinInk.secondary)
+                        .padding(.leading, 28)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func pathFallback(allPaths: [String]) -> some View {
+        let fileListText = allPaths.isEmpty ? item.content : allPaths.joined(separator: "\n")
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Path", systemImage: "folder")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(ClipinInk.secondary)
+            SelectableTextPreview(
+                text: fileListText,
+                font: .monospacedSystemFont(ofSize: 12, weight: .regular),
+                searchQuery: searchQuery,
+                vm: vm
+            )
+            .frame(minHeight: 80)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func isImageFile(_ path: String) -> Bool {
+        let ext = URL(fileURLWithPath: path).pathExtension
+        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .image)
+    }
+
+    private func fileHeaderSubtitle(paths: [String], primaryURL: URL) -> String {
+        let directory = primaryURL.deletingLastPathComponent().path
+        guard paths.count > 1 else { return directory }
+        return "\(FileClipboardContent.summaryLabel(for: paths.joined(separator: "\n"))) • \(directory)"
+    }
+}
+
+/// 图片预览主体单独拆出来：承载 OCR 区块的"折叠/展开" @State。
+/// 嵌在 PreviewPane.content(for:) inline 里没办法挂 @State，拆 struct 是最干净的做法。
+private struct ImagePreviewBody: View {
+    let item: ClipItem
+    let searchQuery: String
+    let vm: ClipboardViewModel
+    @State private var ocrExpanded = false
+
+    /// 折叠时 OCR 块高度上限；展开后让 OCR 跟随外层 ScrollView 自然延伸。
+    /// 200pt 沿用原值，保证不会一上来就吃掉图片预览的视觉权重。
+    private let collapsedOCRHeight: CGFloat = 200
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if let path = item.imagePath {
+                    AsyncPreviewImage(path: path, maxHeight: 392) {
+                        Label("Image not found", systemImage: "exclamationmark.triangle")
+                            .font(.system(size: 13))
+                            .foregroundStyle(ClipinInk.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Label("Image not found", systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClipinInk.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                if let ocr = item.ocrText, !ocr.isEmpty {
+                    ocrBlock(ocr)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    private func ocrBlock(_ ocr: String) -> some View {
+        // 估算长度：极短 OCR（一两行字）直接铺开，没必要给 Show all 按钮；
+        // 估算阈值用字符数粗算，避免依赖 NSLayoutManager 测高的同步开销。
+        let isShortEnough = ocr.count < 200
+        let effectivelyExpanded = isShortEnough || ocrExpanded
+
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Label("OCR text", systemImage: "text.viewfinder")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(ClipinInk.secondary)
+                Spacer(minLength: 6)
+                if !isShortEnough {
+                    Button {
+                        withAnimation(ClipinMotion.feedback) { ocrExpanded.toggle() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: ocrExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                            Text(ocrExpanded ? "Collapse" : "Show all")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .foregroundStyle(ClipinInk.secondary)
+                        .clipinChromeGlass(in: Capsule(style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .help(ocrExpanded ? "Collapse OCR text" : "Show full OCR text")
+                }
+            }
+
+            SelectableTextPreview(
+                text: ocr,
+                font: .systemFont(ofSize: 13, weight: .regular),
+                searchQuery: searchQuery,
+                vm: vm
+            )
+            .frame(
+                minHeight: 72,
+                // 展开后给一个大上限，让 OCR 占满外层 ScrollView 剩余空间；
+                // 不用 .infinity 避免 SwiftUI ScrollView 内嵌 NSTextView 高度推算无穷。
+                maxHeight: effectivelyExpanded ? 1600 : collapsedOCRHeight
+            )
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 异步加载预览图片组件。
 ///
-/// 旧实现在 PreviewPane.body 里直接 `NSImage(contentsOfFile:)`，SwiftUI 每次重建
-/// 这棵 view 都会同步在主线程读文件 + 解码——大图（数 MB PNG / 网络盘 / OCR 后的高清
-/// 截屏）会让面板切换肉眼可感地卡顿。改用 `.task(id: path)` 在 userInitiated detached
-/// task 解码，切换 item 时 task 自动取消。失败显示 placeholder，避免空白闪烁。
+/// 旧实现走 `NSImage(contentsOfFile:)` 解码原图——5MB+ 4K 截屏会被解到全尺寸 bitmap，
+/// preview 区高度只有 392pt，浪费一截内存和 CPU。当前实现走 `ClipImageThumbnailCache.preview`
+/// 用 `CGImageSourceCreateThumbnailAtIndex` 解到 ~1024px，复用列表缩略图同套机制，
+/// 内存上限可预测，重复来回切同一张图不再重解。
+///
+/// `.task(id: path)` 让 SwiftUI 在切换 item 时自动取消旧 task，无需手动判断。
 private struct AsyncPreviewImage<Placeholder: View>: View {
     let path: String
     let maxHeight: CGFloat
     @ViewBuilder var placeholder: () -> Placeholder
 
-    @State private var loaded: NSImage?
+    @State private var loaded: CGImage?
     @State private var failed = false
 
     var body: some View {
         Group {
             if let loaded {
-                Image(nsImage: loaded)
+                Image(decorative: loaded, scale: 1, orientation: .up)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: maxHeight)
@@ -627,18 +782,20 @@ private struct AsyncPreviewImage<Placeholder: View>: View {
             }
         }
         .task(id: path) {
-            // 切换 path 时 SwiftUI 自动取消旧 task，无需手动判断
             failed = false
+            // 命中即同步显示（避免首帧空白），未命中再 await 后台解码
+            if let cached = ClipImageThumbnailCache.preview.cachedThumbnail(for: path) {
+                loaded = cached
+                return
+            }
             loaded = nil
-            // NSImage 没有 Sendable conformance（AppKit 历史包袱：内部可变 representations
-            // 不保证线程安全），直接从 Task.detached 把 NSImage? 返回主 actor 会被 Swift 6
-            // strict isolation 拒绝。包装成 @unchecked Sendable 是安全的：本地 task 完成
-            // 后不再触碰 image，传递一次给主线程后没有并发访问。
-            let wrapped = await Task.detached(priority: .userInitiated) {
-                NSImage(contentsOfFile: path).map(UncheckedSendableImage.init)
-            }.value
-            if let wrapped {
-                loaded = wrapped.image
+            let requestedPath = path
+            let cg = await ClipImageThumbnailCache.preview.thumbnail(for: requestedPath)
+            // 快速切换 item 时，旧 path 的解码结果可能在新 path 任务启动后才返回。
+            // 必须同时检查取消状态 + path 一致，否则会用旧图覆盖正确预览。
+            guard !Task.isCancelled, requestedPath == path else { return }
+            if let cg {
+                loaded = cg
             } else {
                 failed = true
             }
@@ -646,19 +803,34 @@ private struct AsyncPreviewImage<Placeholder: View>: View {
     }
 }
 
-/// 让 NSImage 安全跨越 Task.detached → main actor 边界的最小 wrapper。
-/// 仅在 AsyncPreviewImage 这种"后台构造 + 一次性传给主线程后立刻丢弃" 的语境用。
-private struct UncheckedSendableImage: @unchecked Sendable {
-    let image: NSImage
-}
-
 private struct ColorSwatchPreview: View {
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var vm: ClipboardViewModel
     let color: Color
     let originalText: String
+    @State private var hoveredRow: String?
 
     private var nsColor: NSColor {
         NSColor(color).usingColorSpace(.sRGB) ?? NSColor(color)
+    }
+
+    /// 显示在 HEX 行的值：
+    /// - 输入本身就是 #hex → 原样大写
+    /// - 输入是 rgb()/hsl() → 用 nsColor 计算出标准 #RRGGBB（或 #RRGGBBAA 含透明度）
+    /// 这样不论输入是哪种格式，三行 HEX/RGB/HSL 都有一致的"可复制"值。
+    private var hexString: String {
+        let trimmed = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("#") { return trimmed.uppercased() }
+        let c = nsColor
+        let r = Int((c.redComponent * 255).rounded())
+        let g = Int((c.greenComponent * 255).rounded())
+        let b = Int((c.blueComponent * 255).rounded())
+        let a = c.alphaComponent
+        if a < 0.999 {
+            let aInt = Int((a * 255).rounded())
+            return String(format: "#%02X%02X%02X%02X", r, g, b, aInt)
+        }
+        return String(format: "#%02X%02X%02X", r, g, b)
     }
 
     var body: some View {
@@ -675,7 +847,7 @@ private struct ColorSwatchPreview: View {
             .frame(height: 120)
 
             VStack(alignment: .leading, spacing: 10) {
-                colorRow("HEX", value: originalText.trimmingCharacters(in: .whitespacesAndNewlines).uppercased())
+                colorRow("HEX", value: hexString)
                 colorRow("RGB", value: rgbString)
                 colorRow("HSL", value: hslString)
             }
@@ -691,6 +863,30 @@ private struct ColorSwatchPreview: View {
             Text(value)
                 .font(.system(size: 12, design: .monospaced))
                 .textSelection(.enabled)
+            Spacer(minLength: 8)
+            Button {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(value, forType: .string)
+                vm.showNotice(String(format: NSLocalizedString("%@ copied", comment: ""), label))
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(ClipinInk.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.primary.opacity(hoveredRow == label ? 0.08 : 0))
+                    )
+            }
+            .buttonStyle(.plain)
+            .opacity(hoveredRow == label ? 1 : 0)
+            .help("Copy \(label)")
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            hoveredRow = hovering ? label : (hoveredRow == label ? nil : hoveredRow)
         }
     }
 
@@ -708,7 +904,9 @@ private struct ColorSwatchPreview: View {
         let maxC = max(r, g, b), minC = min(r, g, b)
         let l = (maxC + minC) / 2
         guard maxC != minC else {
-            return "hsl(0°, 0%, \(Int((l * 100).rounded()))%)"
+            // 输出用 "deg" 后缀（CSS Level 3/4 都合规），让 parser 反向识别更稳；
+            // "°" 在等宽字体里不显眼且部分工具不接受
+            return "hsl(0deg, 0%, \(Int((l * 100).rounded()))%)"
         }
         let d = maxC - minC
         let s = l > 0.5 ? d / (2 - maxC - minC) : d / (maxC + minC)
@@ -719,7 +917,7 @@ private struct ColorSwatchPreview: View {
         default: h = (r - g) / d + 4
         }
         h /= 6
-        return "hsl(\(Int((h * 360).rounded()))°, \(Int((s * 100).rounded()))%, \(Int((l * 100).rounded()))%)"
+        return "hsl(\(Int((h * 360).rounded()))deg, \(Int((s * 100).rounded()))%, \(Int((l * 100).rounded()))%)"
     }
 }
 
@@ -738,7 +936,7 @@ private struct PreviewValueBadge: View {
             }
 
             Text(item.title)
-                .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                .font(.system(size: ClipinChrome.previewBadgeFontSize, weight: .medium, design: .rounded))
                 .lineLimit(1)
                 .textSelection(.enabled)
         }
@@ -755,15 +953,14 @@ private struct PreviewFooterRail: View {
     let entries: [PreviewPane.PreviewRailEntry]
 
     var body: some View {
+        // 外层 previewFooter 已 .padding(.top, 8)，rail 内部不再重复加 top；
+        // .horizontal/.bottom 1pt 是历史防 clip 残留（glass capsule 现已自带 padding），删除。
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(entries) { entry in
                     PreviewValueBadge(item: entry.item)
                 }
             }
-            .padding(.horizontal, 1)
-            .padding(.top, 8)
-            .padding(.bottom, 1)
         }
     }
 }
@@ -773,6 +970,22 @@ private struct SelectableTextPreview: NSViewRepresentable {
     let font: NSFont
     var searchQuery: String = ""
     weak var vm: ClipboardViewModel?
+
+    /// NSDataDetector 创建并非零成本（底层是 NLP regex 状态机）。
+    /// 文档明确表示 thread-safe，可以全局静态复用。
+    static let linkDetector: NSDataDetector? =
+        try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+
+    final class Coordinator {
+        var lastTextHash: Int = 0
+        var lastQueryHash: Int = 0
+        var lastFontDescriptor: NSFontDescriptor?
+        /// 文本不变时复用上次链接扫描结果；query/font 变化无需重扫
+        var detectedLinks: [(NSRange, URL)] = []
+        var hasInitialized = false
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -816,6 +1029,20 @@ private struct SelectableTextPreview: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
+        // 哈希判等：SwiftUI 外层 state 变动（scene state / selection / sceneState 抖动）
+        // 都会触发 updateNSView，但实际我们只关心 (text, query, font) 三元组。
+        // 之前用 textView.attributedString() != attributed 做判等会先 copy 整段 NSAttributedString
+        // 再 deep-compare，对长文本是真实开销。
+        let textHash = text.hashValue
+        let queryHash = searchQuery.hashValue
+        let coord = context.coordinator
+        let textChanged = !coord.hasInitialized
+            || textHash != coord.lastTextHash
+            || coord.lastFontDescriptor != font.fontDescriptor
+        let queryChanged = queryHash != coord.lastQueryHash
+
+        guard textChanged || queryChanged else { return }
+
         let textColor = NSColor.labelColor
         let para = NSMutableParagraphStyle()
         para.lineSpacing = 6
@@ -841,62 +1068,162 @@ private struct SelectableTextPreview: NSViewRepresentable {
             }
         }
 
-        // URL 链接检测：用 NSDataDetector 写入 .link 属性，使链接可点击
-        let fullRange = NSRange(location: 0, length: (text as NSString).length)
-        if let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) {
-            detector.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
+        // 链接检测：text 变了才重扫，仅 query 变只复用上次结果
+        if textChanged {
+            let fullRange = NSRange(location: 0, length: (text as NSString).length)
+            var links: [(NSRange, URL)] = []
+            Self.linkDetector?.enumerateMatches(in: text, options: [], range: fullRange) { match, _, _ in
                 if let match, let url = match.url {
-                    attributed.addAttribute(.link, value: url, range: match.range)
+                    links.append((match.range, url))
                 }
             }
+            coord.detectedLinks = links
+        }
+        for (range, url) in coord.detectedLinks {
+            attributed.addAttribute(.link, value: url, range: range)
         }
 
-        // 只在内容或高亮变化时更新，避免不必要的重绘
-        if textView.attributedString() != attributed {
-            textView.textStorage?.setAttributedString(attributed)
+        textView.textStorage?.setAttributedString(attributed)
+        if textChanged {
+            // 文本变了重置选区，仅 query 变保留用户已选范围
             textView.setSelectedRange(NSRange(location: 0, length: 0))
         }
+
+        coord.lastTextHash = textHash
+        coord.lastQueryHash = queryHash
+        coord.lastFontDescriptor = font.fontDescriptor
+        coord.hasInitialized = true
     }
 }
 
 // MARK: - URL Preview
 
-/// `NSImage` 的 Sendable 包装：actor 已串行化访问，跨线程传递安全。
-private final class SendableImage: @unchecked Sendable {
-    let image: NSImage
-    init(_ image: NSImage) { self.image = image }
-}
-
-/// 远程 favicon 缓存：actor 串行化 + pending dedup，避免列表来回切换时同一 host 重复发请求。
+/// 远程 favicon 缓存：actor 串行化 + pending dedup + 磁盘持久化 + 多源回退。
+///
+/// 旧实现单上游写死 `google.com/s2/favicons`，重启即丢、且在中国大陆/离线场景容易长期 nil。
+/// 当前实现：
+/// 1. 启动即从磁盘 `~/Library/Application Support/Clipin/favicons/<host>.png` 异步读回
+///    in-memory cache；
+/// 2. 取 favicon 时按"直连 `/favicon.ico` → Google s2 兜底"顺序；
+/// 3. 命中后异步写磁盘，TTL 7 天（避免站点换 favicon 后永久不更新）。
+///
+/// **关键设计：cache 持有 immutable `Data`（PNG），每次 `icon(for:)` 调用即时构造
+/// 新的 `NSImage` 给 caller**。NSImage 内部 representations 可变非线程安全，如果让
+/// UI 和后台磁盘写同一个 instance，会触发 race（AppKit 历史包袱：第一次 draw 时
+/// lazy lock 到主线程，后台读 tiffRepresentation 同时绘制会并发 mutation）。
+/// 把 cache 内层做成"序列化产物"，调用方每次都拿独立"渲染产物"，是唯一干净的解。
+///
 /// 拿不到就返回 nil，由调用方自己画 globe 占位，不在这里造假数据。
 private actor FaviconCache {
     static let shared = FaviconCache()
-    private var cache: [String: SendableImage] = [:]
-    private var pending: [String: Task<SendableImage?, Never>] = [:]
 
-    func icon(for host: String) async -> SendableImage? {
-        if let cached = cache[host] { return cached }
-        if let task = pending[host] { return await task.value }
+    /// PNG-encoded immutable data。每次 caller 调用都构造新的 NSImage，避免共享可变实例。
+    private var cache: [String: Data] = [:]
+    private var pending: [String: Task<Data?, Never>] = [:]
 
-        let task = Task<SendableImage?, Never> {
-            guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=128") else {
-                return nil
-            }
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                guard let img = NSImage(data: data) else { return nil }
-                return SendableImage(img)
-            } catch {
-                return nil
-            }
+    /// 7 天 TTL：favicon 改动频率远低于此，但也不至于让旧文件永远滞留。
+    private static let diskTTL: TimeInterval = 7 * 24 * 3600
+
+    private static let diskDir: URL = {
+        let fm = FileManager.default
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = support.appendingPathComponent("Clipin/favicons", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    func icon(for host: String) async -> NSImage? {
+        if let data = cache[host] { return NSImage(data: data) }
+        if let task = pending[host] {
+            if let data = await task.value { return NSImage(data: data) }
+            return nil
+        }
+
+        // 磁盘命中：填充 in-memory 后返回
+        if let data = readDisk(host: host) {
+            cache[host] = data
+            return NSImage(data: data)
+        }
+
+        let task = Task<Data?, Never> {
+            await Self.fetchRemote(host: host)
         }
         pending[host] = task
         let result = await task.value
         pending[host] = nil
-        if let result {
-            cache[host] = result
+        if let data = result {
+            cache[host] = data
+            // 写磁盘只需 Data，不再共享 NSImage 实例
+            writeDisk(host: host, data: data)
+            return NSImage(data: data)
         }
-        return result
+        return nil
+    }
+
+    /// fetchRemote 返回 PNG-encoded Data：在 detached task 内一次性把网络数据 normalize
+    /// 成 PNG（用 NSBitmapImageRep 转码），后续 cache/磁盘/UI 三个消费方都基于这份
+    /// immutable Data 各自构造独立 NSImage，杜绝跨线程共享 NSImage 实例。
+    private nonisolated static func fetchRemote(host: String) async -> Data? {
+        // 多源回退：直连优先（更准确，且支持本地局域网/内网域名），
+        // Google s2 兜底（覆盖直连失败/无 favicon.ico 的站点）
+        let candidates = [
+            "https://\(host)/favicon.ico",
+            "https://www.google.com/s2/favicons?domain=\(host)&sz=128",
+        ]
+        for urlString in candidates {
+            guard let url = URL(string: urlString) else { continue }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 4   // 单源 4s，串行最多 8s，仍在用户耐心阈值内
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                    continue
+                }
+                // 验证是真实图片且非 1×1 透明占位：本地 NSImage 仅用于校验，校验完即丢，
+                // 不进 cache 也不返回给 caller。
+                guard let probe = NSImage(data: data), probe.size.width > 1 else { continue }
+                // Normalize 到 PNG：ico/不规则格式统一编码，磁盘读出来也能直接构造 NSImage
+                if let tiff = probe.tiffRepresentation,
+                   let rep = NSBitmapImageRep(data: tiff),
+                   let png = rep.representation(using: .png, properties: [:]) {
+                    return png
+                }
+                // 罕见情况：probe 成功但转 PNG 失败 → 兜底用原始 data
+                return data
+            } catch {
+                continue
+            }
+        }
+        return nil
+    }
+
+    private func diskFile(for host: String) -> URL {
+        // host 可能包含 ":" 之类字符（IPv6/带端口），替换成安全字符
+        let safe = host.replacingOccurrences(of: ":", with: "_")
+        return Self.diskDir.appendingPathComponent(safe).appendingPathExtension("png")
+    }
+
+    private func readDisk(host: String) -> Data? {
+        let file = diskFile(for: host)
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: file.path),
+              let attrs = try? fm.attributesOfItem(atPath: file.path),
+              let modDate = attrs[.modificationDate] as? Date,
+              Date().timeIntervalSince(modDate) < Self.diskTTL,
+              let data = try? Data(contentsOf: file) else {
+            return nil
+        }
+        return data
+    }
+
+    private nonisolated func writeDisk(host: String, data: Data) {
+        // 写磁盘走 detached：避免阻塞 actor 队列。Data 是值类型 Sendable，跨线程安全。
+        let file = Self.diskDir.appendingPathComponent(
+            host.replacingOccurrences(of: ":", with: "_")
+        ).appendingPathExtension("png")
+        Task.detached(priority: .utility) {
+            try? data.write(to: file)
+        }
     }
 }
 
@@ -926,7 +1253,12 @@ private struct FaviconView: View {
         .task(id: host ?? "") {
             image = nil
             guard let host, !host.isEmpty else { return }
-            image = await FaviconCache.shared.icon(for: host)?.image
+            let requestedHost = host
+            let fetched = await FaviconCache.shared.icon(for: requestedHost)
+            // 快速切 URL 时旧 host 的网络响应可能晚到，必须验证当前还在显示同一 host。
+            // 否则会把上一个站点 favicon 覆盖到新条目上。
+            guard !Task.isCancelled, requestedHost == host else { return }
+            image = fetched
         }
     }
 }
@@ -1000,7 +1332,30 @@ private struct URLPreviewView: View {
     }
 
     private var fullURLBlock: some View {
-        urlInfoBlock(title: "Full URL", systemImage: "link") {
+        urlInfoBlock(title: "Full URL", systemImage: "link", trailing: {
+            // 仅当存在已知 tracking 参数时显示"Copy clean URL"，避免在干净 URL 上误导。
+            if let cleaned = cleanedURLString, cleaned != urlString {
+                Button {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(cleaned, forType: .string)
+                    vm.showNotice(NSLocalizedString("Clean URL copied", comment: ""))
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "scissors")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Clean copy")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .foregroundStyle(ClipinInk.secondary)
+                    .clipinChromeGlass(in: Capsule(style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Copy URL without tracking parameters (utm_*, fbclid, gclid, mc_*)")
+            }
+        }) {
             SelectableTextPreview(
                 text: urlString,
                 font: .monospacedSystemFont(ofSize: 12.5, weight: .regular),
@@ -1009,6 +1364,31 @@ private struct URLPreviewView: View {
             )
             .frame(minHeight: 44, maxHeight: 92)
         }
+    }
+
+    /// 已知 tracking 参数前缀：剥掉这些保留语义、不破坏目标页面正常访问。
+    /// 来源：UTM 协议 + 社交平台 click ID + 邮件营销主流前缀。
+    private static let trackingParamPrefixes: [String] = [
+        "utm_", "mc_", "ga_", "_hs", "vero_", "trk_",
+    ]
+    private static let trackingParamExacts: Set<String> = [
+        "fbclid", "gclid", "dclid", "msclkid", "yclid",
+        "igshid", "ref_src", "ref_url", "twclid", "li_fat_id",
+        "spm", "scm",
+    ]
+
+    private var cleanedURLString: String? {
+        guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = components.queryItems, !items.isEmpty else { return nil }
+        let filtered = items.filter { item in
+            let name = item.name.lowercased()
+            if Self.trackingParamExacts.contains(name) { return false }
+            if Self.trackingParamPrefixes.contains(where: { name.hasPrefix($0) }) { return false }
+            return true
+        }
+        guard filtered.count != items.count else { return nil }
+        components.queryItems = filtered.isEmpty ? nil : filtered
+        return components.url?.absoluteString
     }
 
     private func queryItems(for url: URL) -> [(String, String)] {
@@ -1041,15 +1421,20 @@ private struct URLPreviewView: View {
         }
     }
 
-    private func urlInfoBlock<Content: View>(
+    private func urlInfoBlock<Content: View, Trailing: View>(
         title: LocalizedStringKey,
         systemImage: String,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(ClipinInk.secondary)
+            HStack(spacing: 8) {
+                Label(title, systemImage: systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(ClipinInk.secondary)
+                Spacer(minLength: 6)
+                trailing()
+            }
             content()
         }
         .padding(12)

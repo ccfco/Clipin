@@ -2,7 +2,13 @@ import Foundation
 import ImageIO
 
 final class ClipImageThumbnailCache: @unchecked Sendable {
+    /// 列表行 24×24 缩略图档位（默认实例）
     static let shared = ClipImageThumbnailCache()
+    /// 预览面板大图档位：尺寸上限 ~1024，条目少一些（30），避免内存常驻过大。
+    /// preview 切换比列表滚动稀疏得多，30 个 LRU 槽位足以覆盖典型来回浏览路径。
+    /// 数值与 ClipinChrome.previewImageMaxPixelSize 同步，但本类保持自包含
+    /// 不跨模块引用 token（cache 是基础设施，不依赖 UI 层）。
+    static let preview = ClipImageThumbnailCache(maxSize: 30, maxPixelSize: 1024)
 
     private let maxSize: Int
     private let maxPixelSize: Int

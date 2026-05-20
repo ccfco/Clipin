@@ -47,6 +47,16 @@ enum ClipinChrome {
     static let footerContentInset: CGFloat = 6
     static let heroOrbCornerRadius: CGFloat = 20
     static let sectionIntroSpacing: CGFloat = 10
+
+    // 预览面板文字层级。统一收口到 token 而不是各组件内 let，
+    // 避免后续做"大字号"或字号微调时四处搜源码。
+    /// 预览正文（text / OCR / URL full / file path list）字号
+    static let previewBodyFontSize: CGFloat = 13.5
+    /// 预览 footer 徽章字号；与 ClipinKeycap (10.5) 区分，
+    /// 徽章信息密度高于键帽，需要在低 DPI 显示器上仍能舒适阅读。
+    static let previewBadgeFontSize: CGFloat = 11
+    /// 预览图片最大解码像素（缩略图档位，避免主线程解原图全尺寸）
+    static let previewImageMaxPixelSize: Int = 1024
 }
 
 enum ClipinMotion {
