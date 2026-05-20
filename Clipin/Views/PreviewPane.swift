@@ -1883,29 +1883,12 @@ private struct URLPreviewView: View {
         }
     }
 
-    /// 已知 tracking 参数前缀：剥掉这些保留语义、不破坏目标页面正常访问。
-    /// 来源：UTM 协议 + 社交平台 click ID + 邮件营销主流前缀。
-    private static let trackingParamPrefixes: [String] = [
-        "utm_", "mc_", "ga_", "_hs", "vero_", "trk_",
-    ]
-    private static let trackingParamExacts: Set<String> = [
-        "fbclid", "gclid", "dclid", "msclkid", "yclid",
-        "igshid", "ref_src", "ref_url", "twclid", "li_fat_id",
-        "spm", "scm",
-    ]
-
+    /// 借用 ClearURLs 社区维护的 200+ provider 规则做 tracking 清理。
+    /// 引擎自写（零 Swift 依赖），数据嵌入在 Clipin/Resources/clearurls-rules.json。
+    /// 返回 nil 表示无需清理（原 URL 已干净，不应显示 "Clean copy" 按钮）。
     private var cleanedURLString: String? {
-        guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let items = components.queryItems, !items.isEmpty else { return nil }
-        let filtered = items.filter { item in
-            let name = item.name.lowercased()
-            if Self.trackingParamExacts.contains(name) { return false }
-            if Self.trackingParamPrefixes.contains(where: { name.hasPrefix($0) }) { return false }
-            return true
-        }
-        guard filtered.count != items.count else { return nil }
-        components.queryItems = filtered.isEmpty ? nil : filtered
-        return components.url?.absoluteString
+        let result = URLTrackingCleaner.shared.clean(urlString)
+        return result.didModify ? result.cleaned : nil
     }
 
     private func queryItems(for url: URL) -> [(String, String)] {
