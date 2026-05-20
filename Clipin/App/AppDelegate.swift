@@ -845,18 +845,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // 每次取最早的 N 条未处理图片（ocr_text IS NULL），处理后再取下一批
             // 无 offset，新增图片不会导致分页跳过
             while !Task.isCancelled {
-                let pending = core.getUnprocessedImages(limit: pageSize)
+                // getUnprocessedImages 现在 throws：旧实现的 unwrap_or_default 会让 SQL
+                // 错误"伪装成已处理完"——backfill 直接 break；按 "不兜底" 必须 log 错误
+                // 并退出循环（短时间内重试也很难成功，下次启动会重跑）。
+                let pending: [ClipItem]
+                do {
+                    pending = try core.getUnprocessedImages(limit: pageSize)
+                } catch {
+                    print("⚠️ OCR backfill query failed, aborting this session: \(error)")
+                    break
+                }
                 if pending.isEmpty { break }
 
                 for item in pending {
                     guard !Task.isCancelled else { break }
 
                     guard let path = item.imagePath else {
-                        try? core.updateOcrText(id: item.id, ocrText: "")
+                        // updateOcrText 失败仅意味着这次没标记完成，下次启动会再扫到——
+                        // 这里 log 后继续即可，不阻断 backfill。
+                        do { try core.updateOcrText(id: item.id, ocrText: "") }
+                        catch { print("⚠️ OCR backfill mark-empty failed (id=\(item.id)): \(error)") }
                         continue
                     }
                     guard FileManager.default.fileExists(atPath: path) else {
-                        try? core.updateOcrText(id: item.id, ocrText: "")
+                        do { try core.updateOcrText(id: item.id, ocrText: "") }
+                        catch { print("⚠️ OCR backfill mark-empty failed (id=\(item.id)): \(error)") }
                         continue
                     }
 
@@ -889,9 +902,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let cleanup = cleanupService
         viewModel?.loadItems(selectLatest: selectLatest)
         Task { @MainActor [weak self] in
-            let result = try? await cleanup.runNow()
-            if (result?.totalRemoved ?? 0) > 0 {
-                self?.viewModel?.loadItems()
+            // 自动清理失败需要 log（旧实现 try? 直接吞错），历史膨胀/文件删除失败
+            // 长期隐藏的根因都丢了。这里不向用户 toast（自动清理是后台行为），
+            // 用户主动清理由 SettingsView 入口自带 notice 路径。
+            do {
+                let result = try await cleanup.runNow()
+                if result.totalRemoved > 0 {
+                    self?.viewModel?.loadItems()
+                }
+            } catch {
+                print("⚠️ runCleanupAndReload failed: \(error)")
             }
         }
     }

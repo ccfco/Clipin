@@ -244,15 +244,25 @@ final class ClipboardViewModel: ObservableObject {
             selectedItem = nil
             return
         }
-        // 主线程立即更新 ID（选中高亮即时响应），后台加载完整 item（避免 SQLite 阻塞主线程）
+        // 主线程立即更新 ID（选中高亮即时响应），后台加载完整 item（避免 SQLite 阻塞主线程）。
+        // 旧实现用 try? 把 getItem 失败伪装成 selectedItem = nil，预览区悄无声息——
+        // 用户连按 Return/⌘O 重复 toast，根本不知道是 DB 故障。失败时显式 notice。
         let core = self.core
         let capturedId = id
         loadItemTask = Task {
-            let item = try? await Task.detached(priority: .userInitiated) {
-                try core.getItem(id: capturedId)
+            let result: Result<ClipItem, Error> = await Task.detached(priority: .userInitiated) {
+                do { return .success(try core.getItem(id: capturedId)) }
+                catch { return .failure(error) }
             }.value
             guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
-            self.selectedItem = item
+            switch result {
+            case .success(let item):
+                self.selectedItem = item
+            case .failure(let error):
+                print("⚠️ selectItem.getItem failed (id=\(capturedId)): \(error)")
+                self.selectedItem = nil
+                self.showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+            }
         }
     }
 
@@ -263,11 +273,22 @@ final class ClipboardViewModel: ObservableObject {
         }
         let core = self.core
         Task.detached(priority: .userInitiated) { [weak self] in
-            let reps = (try? core.getRepresentations(id: id)) ?? []
+            // 旧实现 ?? [] 把 representations 加载失败伪装成"没有 rich format"，
+            // 用户在 footer 看不到 HTML/RTF 选项不知道是 DB 故障——按"不兜底"显式 log，
+            // 失败时清空 UTI 集合（保留旧的会让别的条目显示错的格式）。
+            let result: Result<[ClipRepresentation], Error>
+            do { result = .success(try core.getRepresentations(id: id)) }
+            catch { result = .failure(error) }
             await MainActor.run {
                 guard let self else { return }
                 guard self.selectedItemID == id else { return }
-                self.selectedRepresentationUTIs = reps.map { $0.uti }
+                switch result {
+                case .success(let reps):
+                    self.selectedRepresentationUTIs = reps.map { $0.uti }
+                case .failure(let error):
+                    print("⚠️ reloadRepresentationsForSelected failed (id=\(id)): \(error)")
+                    self.selectedRepresentationUTIs = []
+                }
             }
         }
     }
@@ -400,7 +421,14 @@ final class ClipboardViewModel: ObservableObject {
                     if selectedSnapshot?.id == id {
                         return selectedSnapshot
                     }
-                    return try? core.getItem(id: id)
+                    // Quick Look 的"邻近条目"语义允许 partial（被删/损坏时少几项可接受），
+                    // 但失败仍要 log——之前裸 try? 静默丢弃，用户只看到 session 少项无法
+                    // 反查根因。当前选中项失败由外层 session == nil 分支显式 notice。
+                    do { return try core.getItem(id: id) }
+                    catch {
+                        print("⚠️ preview neighbor getItem failed (id=\(id)): \(error)")
+                        return nil
+                    }
                 }
             }.value
 

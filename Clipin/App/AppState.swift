@@ -22,8 +22,15 @@ final class AppState: ObservableObject, @unchecked Sendable {
             fileManager.fileExists(atPath: dbPath) ||
             fileManager.fileExists(atPath: imageDir)
 
-        try? fileManager.createDirectory(atPath: clipinDir.path, withIntermediateDirectories: true)
-        try? fileManager.createDirectory(atPath: imageDir, withIntermediateDirectories: true)
+        // 目录创建失败 == 后续 ClipinCore 必定失败。旧实现用 try? 静默吞错，
+        // 用户看到的最终错误会是 "DB 打不开" 而非真正的 root cause（权限/磁盘已满）。
+        // 启动阶段直接 fatalError 携带原始 NSError，便于在 Console 中精确定位。
+        do {
+            try fileManager.createDirectory(atPath: clipinDir.path, withIntermediateDirectories: true)
+            try fileManager.createDirectory(atPath: imageDir, withIntermediateDirectories: true)
+        } catch {
+            fatalError("❌ Failed to create Clipin storage directories at \(clipinDir.path): \(error)")
+        }
 
         do {
             self.core = try ClipinCore(dbPath: dbPath, imageDir: imageDir)

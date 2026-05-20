@@ -215,7 +215,7 @@ impl ClipinCore {
     }
 
     /// 获取 OCR 尚未处理的图片条目（ocr_text IS NULL），用于 backfill
-    pub fn get_unprocessed_images(&self, limit: i32) -> Vec<ClipItem> {
+    pub fn get_unprocessed_images(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
         self.storage.get_unprocessed_images(limit)
     }
 

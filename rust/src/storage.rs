@@ -1377,10 +1377,12 @@ impl Storage {
         })
     }
 
-    /// OCR backfill 专用：直接查 ocr_text IS NULL，无需 offset，不受新增条目影响
-    pub fn get_unprocessed_images(&self, limit: i32) -> Vec<ClipItem> {
+    /// OCR backfill 专用：直接查 ocr_text IS NULL，无需 offset，不受新增条目影响。
+    /// 旧实现 filter_map(.ok) + unwrap_or_default 会让 SQL/decode 失败被静默吞掉，
+    /// OCR backfill 长期"无声停止"——按 "不兜底" 改 Result，调用方 log 错误。
+    pub fn get_unprocessed_images(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
         let conn = self.conn();
-        conn.prepare(
+        let mut stmt = conn.prepare(
             "SELECT id, content, clip_type, source_app, source_name,
                     is_pinned, created_at, image_path, char_count, copy_count,
                     first_copied_at, ocr_text, paste_count
@@ -1388,12 +1390,9 @@ impl Storage {
              WHERE clip_type = 'image' AND ocr_text IS NULL
              ORDER BY created_at ASC
              LIMIT ?1",
-        )
-        .and_then(|mut stmt| {
-            stmt.query_map(params![limit], Self::row_to_item)
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
-        })
-        .unwrap_or_default()
+        )?;
+        let rows = stmt.query_map(params![limit], Self::row_to_item)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     pub fn update_ocr_text(&self, id: &str, ocr_text: &str) -> Result<(), ClipinError> {
