@@ -12,6 +12,10 @@ private struct PasteButtonAnchorKey: PreferenceKey {
 /// 主面板 - 更贴近 macOS 26 的 frosted glass 双栏布局
 struct MainPanel: View {
     @ObservedObject var viewModel: ClipboardViewModel
+    /// 底栏胶囊在 dark mode 下要给玻璃加黑色 tint 压暗——`.glassEffect(.regular)`
+    /// 在深色窗体上天然偏亮发白(Liquid Glass 是"浮起高光面"语义),Clipin 窗体很暗
+    /// 时对比被放大,胶囊看上去像贴了一颗米白 pill。light mode 不染色,保持白皙。
+    @Environment(\.colorScheme) private var colorScheme
     /// hover Paste → 其正上方派生次级动作玻璃胶囊簇(Raycast 式)。命中区必须
     /// 连续:Paste 与 pills 各自维护 hover,OR 起来;pills 视图底边贴 Paste 顶边
     /// (视觉 6pt 缝由 pills 内透明 padding 给),鼠标在两者间移动不穿死区。
@@ -243,7 +247,15 @@ struct MainPanel: View {
                 }
                 .buttonStyle(ClipinFooterSegmentStyle())
             }
-            .glassEffect(.regular, in: Capsule(style: .continuous))
+            // dark mode 下给玻璃加中性黑 tint(.regular.tint),把深色窗体上"米白浮起"
+            // 压回中性灰白档;light mode 不染色,保留液态玻璃的白皙轻盈。仍是原生 Glass,
+            // 高光/压感反馈/GlassEffectContainer 融合行为不丢。
+            .glassEffect(
+                colorScheme == .dark
+                    ? .regular.tint(Color.black.opacity(0.28))
+                    : .regular,
+                in: Capsule(style: .continuous)
+            )
         }
         .padding(.horizontal, ClipinChrome.footerContentInset)
         .padding(.vertical, ClipinChrome.footerContentInset)
