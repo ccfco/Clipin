@@ -34,15 +34,54 @@ func detectHexColor(in text: String) -> Color? {
     }
 }
 
-/// 预览面板专用色彩检测：hex 之外额外识别 `rgb()/rgba()/hsl()/hsla()`。
+/// 预览面板专用色彩检测：hex 之外额外识别 `rgb()/rgba()/hsl()/hsla()`，
+/// 并允许常见 CSS 属性包装（`color: #FF5733;` / `background: rgb(255,0,0)` 等）。
+///
 /// 不识别 CSS 命名色（red/blue/...）——日常文本里太常见，会大量 false positive
-/// 把"早上吃了红薯"识别成颜色卡片，反而干扰使用。整段必须严格匹配（trim + 完整 prefix）。
+/// 把"早上吃了红薯"识别成颜色卡片。整段必须严格匹配（trim + 完整 prefix）。
+///
+/// 为什么要剥 CSS 包装：日常从 DevTools / 设计稿 / 代码里复制颜色时，复制范围常常
+/// 是"整行 CSS 属性"而不是纯颜色值；如果不剥就会无法进入 ColorSwatch，用户必须
+/// 手动把 `color: ` 那段删掉，这违背 launcher "复制就能用"的心智。
 func detectColorForPreview(in text: String) -> Color? {
     if let hex = detectHexColor(in: text) { return hex }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+    // 第一步：原文匹配 rgb()/hsl()
     if trimmed.hasPrefix("rgb") { return parseFunctionalRGB(trimmed) }
     if trimmed.hasPrefix("hsl") { return parseFunctionalHSL(trimmed) }
+
+    // 第二步：剥 CSS 属性包装后再试
+    if let stripped = stripCSSPropertyWrapper(trimmed) {
+        if stripped.hasPrefix("#"), let hex = detectHexColor(in: stripped) { return hex }
+        if stripped.hasPrefix("rgb") { return parseFunctionalRGB(stripped) }
+        if stripped.hasPrefix("hsl") { return parseFunctionalHSL(stripped) }
+    }
     return nil
+}
+
+/// 剥 `name: value;` 形式的 CSS 包装。
+/// 接受常见 CSS 颜色属性名 whitelist，避免把 `time: 12:30` 误剥成颜色。
+/// 返回 nil 表示不是已知颜色属性、不应继续尝试解析。
+private func stripCSSPropertyWrapper(_ s: String) -> String? {
+    guard let colonIdx = s.firstIndex(of: ":") else { return nil }
+    let name = s[..<colonIdx].trimmingCharacters(in: .whitespaces)
+    let knownProps: Set<String> = [
+        "color", "background", "background-color",
+        "fill", "stroke", "border-color", "outline-color",
+        "caret-color", "accent-color", "text-decoration-color",
+        "border-top-color", "border-right-color", "border-bottom-color", "border-left-color",
+    ]
+    // CSS 自定义变量（`--brand-color: #fff` / `--accent: rgb(...)`）：现代设计系统标配，
+    // Tailwind / shadcn / CSS-in-JS 大量使用；whitelist 漏掉会让用户复制变量行无法识别颜色
+    let isCustomProperty = name.hasPrefix("--")
+    guard knownProps.contains(name) || isCustomProperty else { return nil }
+    var tail = s[s.index(after: colonIdx)...].trimmingCharacters(in: .whitespaces)
+    // 去掉行尾 ";" 和可能的 "!important"
+    if tail.hasSuffix(";") { tail = String(tail.dropLast()) }
+    tail = tail.replacingOccurrences(of: "!important", with: "")
+        .trimmingCharacters(in: .whitespaces)
+    return tail.isEmpty ? nil : tail
 }
 
 private func parseFunctionalRGB(_ s: String) -> Color? {
