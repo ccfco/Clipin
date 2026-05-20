@@ -14,8 +14,9 @@ jobs:
     # macos-latest 当前仍指向 macOS 15，不带 macOS 26 SDK——而 Clipin 用到
     # NSGlassEffectView / .glass buttonStyle 等 Tahoe (macOS 26) 新 API，
     # 在老 SDK 上根本符号缺失。v0.1.7 CI 红就是这个原因。
-    # 显式锁到 macos-26-arm64（默认 Xcode 26.2，能编译 macOS 26 SDK）。
-    runs-on: macos-26-arm64
+    # 用 macos-26（不带 -arm64）：GitHub macOS runner 自 14 起默认就是
+    # Apple Silicon，alias 标签调度池更宽，比 -arm64 排队短。
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v4
