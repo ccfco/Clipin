@@ -70,6 +70,8 @@ struct MainPanel: View {
         }
         .overlay(alignment: .bottom) {
             bottomBar
+                .opacity(viewModel.isShowingActions ? 0 : 1)
+                .allowsHitTesting(!viewModel.isShowingActions)
         }
         // hover Paste → 其正上方派生次级动作玻璃胶囊簇(真机 Raycast 式)。
         // 必须挂 panelContent 顶层而非底栏内部:底栏是 ~44pt 高的
@@ -136,13 +138,12 @@ struct MainPanel: View {
                 )
                 .transition(
                     .asymmetric(
-                        insertion: .scale(scale: 0.985, anchor: .bottomTrailing).combined(with: .opacity),
-                        removal: .opacity
+                        insertion: .scale(scale: 0.90, anchor: .bottomTrailing).combined(with: .opacity),
+                        removal: .scale(scale: 0.93, anchor: .bottomTrailing).combined(with: .opacity)
                     )
                 )
             }
         }
-        .animation(ClipinMotion.commandReveal, value: sceneState.isShowingActions)
         .onAppear { viewModel.loadItems() }
     }
 

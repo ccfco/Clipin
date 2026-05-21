@@ -96,11 +96,15 @@ final class ClipboardViewModel: ObservableObject {
         guard !actions.isEmpty else { return }
         paletteActions = actions
         selectedActionIndex = min(selectedActionIndex, max(actions.count - 1, 0))
-        isShowingActions = true
+        withAnimation(ClipinMotion.paletteReveal) {
+            isShowingActions = true
+        }
     }
 
     func hideActionsPalette(restoreFocus: Bool = false) {
-        isShowingActions = false
+        withAnimation(ClipinMotion.paletteDismiss) {
+            isShowingActions = false
+        }
         paletteActions = []
         selectedActionIndex = 0
 
