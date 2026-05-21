@@ -5,9 +5,9 @@ import AppKit
 ///
 /// 旧实现单上游写死 `google.com/s2/favicons`，重启即丢、且在中国大陆/离线场景容易长期 nil。
 /// 当前实现：
-/// 1. 启动即从磁盘 `~/Library/Application Support/Clipin/favicons/<host>.png` 异步读回
+/// 1. 启动即从磁盘 `~/Library/Application Support/Clipin/favicons/<origin>.png` 异步读回
 ///    in-memory cache；
-/// 2. 取 favicon 时按"直连 `/favicon.ico` → Google s2 兜底"顺序；
+/// 2. 取 favicon 时按"origin 直连 `/favicon.ico` → 根域 → HTML head 解析 → Google s2 兜底"顺序；
 /// 3. 命中后异步写磁盘，TTL 7 天（避免站点换 favicon 后永久不更新）。
 ///
 /// **关键设计：cache 持有 immutable `Data`（PNG），每次 `icon(for:)` 调用即时构造
@@ -16,14 +16,21 @@ import AppKit
 /// lazy lock 到主线程，后台读 tiffRepresentation 同时绘制会并发 mutation）。
 /// 把 cache 内层做成"序列化产物"，调用方每次都拿独立"渲染产物"，是唯一干净的解。
 ///
-/// 拿不到就返回 nil，由调用方自己画 globe 占位，不在这里造假数据。
+/// 拿不到就返回 nil，由调用方自己画占位，不在这里造假数据。
 ///
-/// 访问权限：原先 file-private 仅供 PreviewPane 使用；现已抽到独立文件供列表 row
-/// 也复用同一份内存/磁盘缓存（列表 favicon 与预览面板共享同一 host → 不重复拉）。
+/// **抽象层级：以 origin (scheme://host:port) 为 key，而不是 host**。原因：
+/// - host 只够定位"公网站点"（github.com 永远 :443/https），但用户剪贴板里也常出现
+///   IP+port（vite dev `http://localhost:5173`、内网管理面板 `http://10.0.0.5:8080`、
+///   Docker 容器 `http://112.44.253.74:9210` 等），这些不同端口可能跑完全不同的服务、
+///   有完全不同的 favicon
+/// - 浏览器的实现就是按 origin 抓 favicon（同 origin 同 favicon），与之对齐
+/// - origin 经 normalize（去掉默认端口）保证 `https://github.com:443` 和
+///   `https://github.com` 不重复缓存
 actor FaviconCache {
     static let shared = FaviconCache()
 
     /// PNG-encoded immutable data。每次 caller 调用都构造新的 NSImage，避免共享可变实例。
+    /// key 是 normalize 后的 origin 字符串。
     private var cache: [String: Data] = [:]
     private var pending: [String: Task<Data?, Never>] = [:]
 
@@ -38,32 +45,56 @@ actor FaviconCache {
         return dir
     }()
 
-    func icon(for host: String) async -> NSImage? {
-        if let data = cache[host] { return NSImage(data: data) }
-        if let task = pending[host] {
+    func icon(for url: URL) async -> NSImage? {
+        guard let origin = Self.origin(of: url) else { return nil }
+
+        if let data = cache[origin] { return NSImage(data: data) }
+        if let task = pending[origin] {
             if let data = await task.value { return NSImage(data: data) }
             return nil
         }
 
         // 磁盘命中：填充 in-memory 后返回
-        if let data = readDisk(host: host) {
-            cache[host] = data
+        if let data = readDisk(origin: origin) {
+            cache[origin] = data
             return NSImage(data: data)
         }
 
         let task = Task<Data?, Never> {
-            await Self.fetchRemote(host: host)
+            await Self.fetchRemote(url: url, origin: origin)
         }
-        pending[host] = task
+        pending[origin] = task
         let result = await task.value
-        pending[host] = nil
+        pending[origin] = nil
         if let data = result {
-            cache[host] = data
+            cache[origin] = data
             // 写磁盘只需 Data，不再共享 NSImage 实例
-            writeDisk(host: host, data: data)
+            writeDisk(origin: origin, data: data)
             return NSImage(data: data)
         }
         return nil
+    }
+
+    /// 把 URL normalize 成 origin 字符串：scheme + host + 非默认 port。
+    /// - `https://github.com` → `"https://github.com"`
+    /// - `https://github.com:443/foo` → `"https://github.com"`（443 是 https 默认）
+    /// - `http://112.44.253.74:9210/x` → `"http://112.44.253.74:9210"`
+    /// - 非 http(s) scheme / 无 host → nil（不可缓存的 URL，调用方走兜底显示）
+    ///
+    /// host 大小写 normalize：DNS 不区分大小写，统一小写避免 GitHub.com / github.com 双份缓存。
+    private static func origin(of url: URL) -> String? {
+        guard let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty else { return nil }
+        let normalizedHost = host.lowercased()
+        if let port = url.port, !isDefaultPort(port, scheme: scheme) {
+            return "\(scheme)://\(normalizedHost):\(port)"
+        }
+        return "\(scheme)://\(normalizedHost)"
+    }
+
+    private static func isDefaultPort(_ port: Int, scheme: String) -> Bool {
+        (scheme == "https" && port == 443) || (scheme == "http" && port == 80)
     }
 
     /// fetchRemote 返回 PNG-encoded Data：在 detached task 内一次性把网络数据 normalize
@@ -71,41 +102,52 @@ actor FaviconCache {
     /// immutable Data 各自构造独立 NSImage，杜绝跨线程共享 NSImage 实例。
     ///
     /// 多源回退顺序（按"命中率 × 速度"权衡）：
-    /// 1. host 直连 `/favicon.ico` —— 最快，约 50% 站点命中
-    /// 2. 根域直连 `/favicon.ico` —— 覆盖 SPA 子域：docs.feishu.cn 没有但 feishu.cn 有
-    /// 3. 拉 HTML 头部解析 `<link rel="icon">` —— 覆盖飞书/Notion/各种 SaaS 把 favicon
-    ///    放在 CDN 的场景；其他应用能显示的真正信源就是这一层
-    /// 4. Google s2 服务 —— 大陆走 t2.gstatic.com 重定向，可达性看运气，作为最后兜底
-    private nonisolated static func fetchRemote(host: String) async -> Data? {
+    /// 1. **origin 直连** `<origin>/favicon.ico` —— 保留传入 URL 的 scheme + port，
+    ///    覆盖 IP+port 服务（vite/dev server、内网面板等）；约 50% 公网站点命中
+    /// 2. **根域直连** `https://<root>/favicon.ico` —— 覆盖 SPA 子域：
+    ///    docs.feishu.cn 没有但 feishu.cn 有。仅对域名生效，IP 跳过
+    /// 3. **HTML head 解析** `<link rel="icon">` —— 覆盖飞书/Notion/各种 SaaS 把
+    ///    favicon 放在 CDN 的场景；保留原 origin，相对路径 resolve 到 origin 上
+    /// 4. **Google s2 服务** —— 仅对域名走（s2 只查 DNS 域名），IP 跳过避免浪费 4s
+    private nonisolated static func fetchRemote(url: URL, origin: String) async -> Data? {
         var triedURLs = Set<String>()
 
         func tryURL(_ urlString: String) async -> Data? {
-            guard !triedURLs.contains(urlString), let url = URL(string: urlString) else { return nil }
+            guard !triedURLs.contains(urlString), let u = URL(string: urlString) else { return nil }
             triedURLs.insert(urlString)
-            return await downloadAndNormalize(url: url)
+            return await downloadAndNormalize(url: u)
         }
 
-        // 第 1 源：host 直连
-        if let data = await tryURL("https://\(host)/favicon.ico") { return data }
+        let host = url.host ?? ""
+        let hostIsIP = isIPAddress(host)
 
-        // 第 2 源：根域回退（处理 docs.feishu.cn / app.notion.so 等 SPA 子域）
-        if let root = rootDomain(of: host), root != host {
+        // 第 1 源：origin 直连（保留 scheme + port，关键能力）
+        if let data = await tryURL("\(origin)/favicon.ico") { return data }
+
+        // 第 2 源：根域回退（仅对域名生效；IP 没有"根域"概念）
+        if !hostIsIP, let root = rootDomain(of: host), root != host {
             if let data = await tryURL("https://\(root)/favicon.ico") { return data }
             if let data = await tryURL("https://www.\(root)/favicon.ico") { return data }
         }
 
-        // 第 3 源：解析 HTML 的 <link rel="icon">。优先用原始 host（保留子域语义，
-        // 比如某些 SaaS 不同子域用不同品牌色 favicon），失败再退到根域 HTML。
-        for htmlHost in [host, rootDomain(of: host)].compactMap({ $0 }) where !triedURLs.contains("html:\(htmlHost)") {
-            triedURLs.insert("html:\(htmlHost)")
-            if let iconHref = await fetchIconFromHTML(host: htmlHost),
+        // 第 3 源：HTML head 解析。优先用传入的 origin（保留 port 和 scheme），
+        // 失败再回退根域 https://；IP 只试自身 origin。
+        var htmlOrigins: [String] = [origin]
+        if !hostIsIP, let root = rootDomain(of: host) {
+            let rootOrigin = "https://\(root)"
+            if !htmlOrigins.contains(rootOrigin) { htmlOrigins.append(rootOrigin) }
+        }
+        for htmlOrigin in htmlOrigins where !triedURLs.contains("html:\(htmlOrigin)") {
+            triedURLs.insert("html:\(htmlOrigin)")
+            if let iconHref = await fetchIconFromHTML(origin: htmlOrigin),
                let data = await tryURL(iconHref) {
                 return data
             }
         }
 
-        // 第 4 源：Google s2 兜底
-        if let data = await tryURL("https://www.google.com/s2/favicons?domain=\(host)&sz=128") {
+        // 第 4 源：Google s2 兜底（仅域名）
+        if !hostIsIP,
+           let data = await tryURL("https://www.google.com/s2/favicons?domain=\(host)&sz=128") {
             return data
         }
 
@@ -141,8 +183,8 @@ actor FaviconCache {
     /// 拉 HTML head 部分，提取 `<link rel="...icon...">` 的 href。
     /// 使用 `Range: bytes=0-65535` 限制下载量（绝大多数站点 head 在前 64KB 内），
     /// 但有些 CDN 会忽略 Range 头返回完整 HTML —— 4s 超时是兜底安全网。
-    private nonisolated static func fetchIconFromHTML(host: String) async -> String? {
-        guard let url = URL(string: "https://\(host)/") else { return nil }
+    private nonisolated static func fetchIconFromHTML(origin: String) async -> String? {
+        guard let url = URL(string: "\(origin)/") else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
         request.setValue("bytes=0-65535", forHTTPHeaderField: "Range")
@@ -164,7 +206,7 @@ actor FaviconCache {
             let candidates = parseIconLinks(in: html)
             guard let best = chooseBestIcon(candidates) else { return nil }
 
-            // resolve 相对路径到完整 URL
+            // resolve 相对路径到完整 URL，相对的 base 就是 origin/，保留 port + scheme
             return URL(string: best, relativeTo: url)?.absoluteString
         } catch {
             return nil
@@ -250,6 +292,8 @@ actor FaviconCache {
     /// 简化版：把 host 切成 labels，保留最后两段；不处理 .co.uk / .com.cn 等多级 TLD
     /// （会把 example.com.cn 错切成 com.cn，但 favicon 仍可能在该域命中——这种情况
     /// 极少出现在剪贴板里）。返回 nil 表示传入的就是单段（如 localhost）。
+    ///
+    /// **入口已经过滤 IP**（fetchRemote 里 hostIsIP 检测），这里不必再判一次。
     private nonisolated static func rootDomain(of host: String) -> String? {
         let labels = host.split(separator: ".")
         guard labels.count >= 2 else { return nil }
@@ -263,14 +307,35 @@ actor FaviconCache {
         return labels.suffix(2).joined(separator: ".")
     }
 
-    private func diskFile(for host: String) -> URL {
-        // host 可能包含 ":" 之类字符（IPv6/带端口），替换成安全字符
-        let safe = host.replacingOccurrences(of: ":", with: "_")
-        return Self.diskDir.appendingPathComponent(safe).appendingPathExtension("png")
+    /// 检测 host 是否是 IP 地址（IPv4 或 IPv6）。IP 不走根域回退也不走 s2 兜底。
+    /// IPv4: 严格 4 段、每段 0..255。IPv6: host 含 `:`（IPv6 必含 `:`，域名永远不含）。
+    private nonisolated static func isIPAddress(_ host: String) -> Bool {
+        if host.contains(":") { return true } // IPv6
+        let parts = host.split(separator: ".")
+        guard parts.count == 4 else { return false }
+        return parts.allSatisfy { part in
+            guard let n = Int(part) else { return false }
+            return (0...255).contains(n)
+        }
     }
 
-    private func readDisk(host: String) -> Data? {
-        let file = diskFile(for: host)
+    /// origin → 磁盘文件名 sanitize。
+    /// origin 含 `://` 和可能的 `:port`，FileManager 会把 `/` 当路径分隔符，必须替换。
+    /// 例：`http://112.44.253.74:9210` → `http___112.44.253.74_9210.png`
+    private static func diskName(for origin: String) -> String {
+        var safe = origin
+        safe = safe.replacingOccurrences(of: "://", with: "___")
+        safe = safe.replacingOccurrences(of: ":", with: "_")
+        safe = safe.replacingOccurrences(of: "/", with: "_")
+        return safe
+    }
+
+    private func diskFile(for origin: String) -> URL {
+        Self.diskDir.appendingPathComponent(Self.diskName(for: origin)).appendingPathExtension("png")
+    }
+
+    private func readDisk(origin: String) -> Data? {
+        let file = diskFile(for: origin)
         let fm = FileManager.default
         guard fm.fileExists(atPath: file.path),
               let attrs = try? fm.attributesOfItem(atPath: file.path),
@@ -282,11 +347,11 @@ actor FaviconCache {
         return data
     }
 
-    private nonisolated func writeDisk(host: String, data: Data) {
+    private nonisolated func writeDisk(origin: String, data: Data) {
         // 写磁盘走 detached：避免阻塞 actor 队列。Data 是值类型 Sendable，跨线程安全。
-        let file = Self.diskDir.appendingPathComponent(
-            host.replacingOccurrences(of: ":", with: "_")
-        ).appendingPathExtension("png")
+        let file = Self.diskDir
+            .appendingPathComponent(Self.diskName(for: origin))
+            .appendingPathExtension("png")
         Task.detached(priority: .utility) {
             try? data.write(to: file)
         }

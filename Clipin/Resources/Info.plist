@@ -18,5 +18,19 @@
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>LSUIElement</key>
     <true/>
+    <!--
+    放开 ATS 允许 HTTP 请求。
+    背景：剪贴板里常有 HTTP IP+port 的 URL（vite dev / 内网管理面板 / Docker 容器），
+    浏览器能拿到这些站点的 favicon，Clipin 默认 ATS 全拒（NSURLErrorCode -1022）。
+    无 NSAllowsLocalNetworking 替代方案：那只覆盖 192.168.x.x / 10.x.x.x 等局域网，
+    不覆盖公网 IP（如用户截图里的 112.44.253.74:9210 是公网 IP 服务）。
+    风险评估：URLSession 仅用于拉 favicon 和 URL 页面 title，这两类资源都是只读、
+    无认证、无脚本执行；最坏情况是 favicon 缓存里多一个无关图片。无敏感数据外发。
+    -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

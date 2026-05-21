@@ -1358,7 +1358,7 @@ private actor URLMetadataCache {
 }
 
 private struct FaviconView: View {
-    let host: String?
+    let url: URL?
     @State private var image: NSImage?
     @State private var loadFinished = false
 
@@ -1374,7 +1374,7 @@ private struct FaviconView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .padding(12)
-            } else if loadFinished, let host, !host.isEmpty {
+            } else if loadFinished, let host = url?.host, !host.isEmpty {
                 FaviconLetterMark(host: host)
             } else {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -1389,18 +1389,18 @@ private struct FaviconView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.6)
         )
-        .task(id: host ?? "") {
+        .task(id: url?.absoluteString ?? "") {
             image = nil
             loadFinished = false
-            guard let host, !host.isEmpty else {
+            guard let url, let host = url.host, !host.isEmpty else {
                 loadFinished = true
                 return
             }
-            let requestedHost = host
-            let fetched = await FaviconCache.shared.icon(for: requestedHost)
-            // 快速切 URL 时旧 host 的网络响应可能晚到，必须验证当前还在显示同一 host。
-            // 否则会把上一个站点 favicon 覆盖到新条目上。
-            guard !Task.isCancelled, requestedHost == host else { return }
+            let requestedURL = url
+            let fetched = await FaviconCache.shared.icon(for: requestedURL)
+            // 快速切 URL 时旧请求的网络响应可能晚到，必须验证当前仍是同一 URL，
+            // 否则会把上一条 URL 的 favicon 覆盖到新条目上。
+            guard !Task.isCancelled, requestedURL == url else { return }
             image = fetched
             loadFinished = true
         }
@@ -1488,7 +1488,7 @@ private struct URLPreviewView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            FaviconView(host: url?.host)
+            FaviconView(url: url)
                 .frame(width: 64, height: 64)
 
             // title 取到 → 大字 title + 次行 host[+path]；

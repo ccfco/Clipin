@@ -187,8 +187,12 @@ private func parseFunctionalHSL(_ s: String) -> Color? {
 /// 不画 loading→globe→favicon 三态，因为列表 row 比预览面板更频繁（每行一个），
 /// 多一层中间状态会让列表滚动时出现"globe 一闪即过"的视觉噪声。
 /// 字母圈本身已经是稳定的视觉锚点（同 host 永远同一个字母），用户不需要 globe 提示。
+///
+/// 接收完整 URL（而非 host）是因为同一 host 不同 port/scheme 是不同服务：
+/// `http://112.44.253.74:9210` 和 `https://112.44.253.74` 是两个独立的 web 服务，
+/// favicon 也可能完全不同。FaviconCache 按 origin (scheme://host:port) 缓存。
 private struct RowFaviconView: View {
-    let host: String?
+    let url: URL?
     @State private var image: NSImage?
 
     var body: some View {
@@ -200,7 +204,7 @@ private struct RowFaviconView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .padding(3)
-            } else if let host, !host.isEmpty {
+            } else if let host = url?.host, !host.isEmpty {
                 RowFaviconLetterMark(host: host)
             } else {
                 // 解析不出 host（极少数 URL 字符串损坏） → 兜底 globe
@@ -217,14 +221,14 @@ private struct RowFaviconView: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
-        .task(id: host ?? "") {
+        .task(id: url?.absoluteString ?? "") {
             image = nil
-            guard let host, !host.isEmpty else { return }
-            let requestedHost = host
-            let fetched = await FaviconCache.shared.icon(for: requestedHost)
-            // 快速切条目 / 列表滚动 row 复用时，旧 host 的网络响应可能晚到。
-            // 必须验证当前 host 仍是发起时的那个，否则会把 A 站 favicon 覆盖到 B 站行上。
-            guard !Task.isCancelled, requestedHost == host else { return }
+            guard let url, url.host?.isEmpty == false else { return }
+            let requestedURL = url
+            let fetched = await FaviconCache.shared.icon(for: requestedURL)
+            // 快速切条目 / 列表滚动 row 复用时，旧请求的网络响应可能晚到。
+            // 必须验证当前 URL 仍是发起时的那个，否则会把 A 行 favicon 覆盖到 B 行。
+            guard !Task.isCancelled, requestedURL == url else { return }
             image = fetched
         }
     }
@@ -351,9 +355,11 @@ struct ClipItemRow: View {
             }
             .frame(width: 24, height: 24)
         } else if item.clipType == .url {
-            // URL 类型：拿 favicon 代替通用 link 图标。preview 就是 URL 字符串本身
-            // （ClipListItem 240 字符截断对 URL 几乎不影响 host 解析）。
-            RowFaviconView(host: URL(string: item.preview)?.host)
+            // URL 类型：拿 favicon 代替通用 link 图标。传完整 URL（含 port + scheme），
+            // FaviconCache 按 origin 缓存——同 host 不同 port 视为不同服务，因为
+            // `http://192.168.1.1:8080` 和 `https://192.168.1.1` 是两个独立的 web service。
+            // preview 就是 URL 字符串本身（ClipListItem 240 字符截断对 URL 几乎不影响解析）。
+            RowFaviconView(url: URL(string: item.preview))
         } else {
             Image(systemName: iconName)
                 .font(.system(size: 12, weight: .medium))
