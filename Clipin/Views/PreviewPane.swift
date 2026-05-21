@@ -41,7 +41,6 @@ struct PreviewPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .scaleEffect(sceneState.previewScale)
         .offset(y: sceneState.previewLift)
         .animation(ClipinMotion.focusShift, value: sceneState)
         .task(id: item?.id) {

@@ -176,7 +176,6 @@ struct MainPanel: View {
         HStack(spacing: ClipinChrome.shellGap) {
             itemList
                 .frame(width: 292)
-                .scaleEffect(sceneState.isShowingActions ? 0.998 : 1.0)
                 .opacity(sceneState.listRestingOpacity)
 
             PreviewPane(item: viewModel.displayedItem, searchQuery: viewModel.searchQuery, sceneState: sceneState)
@@ -271,7 +270,6 @@ struct MainPanel: View {
         .padding(.vertical, ClipinChrome.footerContentInset)
         .frame(minHeight: ClipinChrome.footerMinHeight)
         .animation(ClipinMotion.commandReveal, value: showsDerivedPills)
-        .scaleEffect(sceneState.stripScale)
         .padding(.horizontal, ClipinChrome.shellGap * 2)
         .padding(.bottom, ClipinChrome.shellGap)
         .animation(ClipinMotion.focusShift, value: sceneState)

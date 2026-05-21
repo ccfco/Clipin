@@ -109,10 +109,6 @@ struct ClipinSceneState: Equatable {
         return 1.0
     }
 
-    var previewScale: CGFloat {
-        isShowingActions ? 0.998 : 1.0
-    }
-
     var previewLift: CGFloat {
         isShowingActions ? -1.0 : 0
     }
@@ -125,12 +121,6 @@ struct ClipinSceneState: Equatable {
         isShowingActions ? -1.5 : 0
     }
 
-    var stripScale: CGFloat {
-        isShowingActions ? 0.997 : 1.0
-    }
-
-    var paletteScale: CGFloat { isShowingActions ? 1.0 : 0.985 }
-    var paletteLift: CGFloat { isShowingActions ? 0 : 6 }
 }
 
 struct ClipinKeycap: View {

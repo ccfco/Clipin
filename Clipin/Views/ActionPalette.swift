@@ -106,9 +106,6 @@ struct ActionPalette: View {
         .padding(12)
         .frame(width: 372, alignment: .leading)
         .clipinChromeGlass(cornerRadius: ClipinChrome.paletteCornerRadius)
-        .scaleEffect(sceneState.paletteScale)
-        .offset(y: sceneState.paletteLift)
-        .animation(ClipinMotion.commandReveal, value: sceneState)
         .onAppear { selectedIndex = 0 }
     }
 
