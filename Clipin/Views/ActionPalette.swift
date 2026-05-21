@@ -55,6 +55,8 @@ struct ActionPalette: View {
     let selectedItem: ClipListItem?
     let onSelect: (Int) -> Void
     @State private var hoveredIndex: Int?
+    /// 动作行区域的自然高度，用于把面板封顶到 paletteMaxHeight（超出则内层滚动）。
+    @State private var actionsContentHeight: CGFloat = 0
 
     private var groupedActionIndices: [[Int]] {
         var groups: [[Int]] = []
@@ -94,13 +96,7 @@ struct ActionPalette: View {
             if actions.isEmpty {
                 emptyState
             } else {
-                ForEach(Array(groupedActionIndices.enumerated()), id: \.offset) { _, group in
-                    VStack(spacing: 4) {
-                        ForEach(group, id: \.self) { index in
-                            actionRow(action: actions[index], index: index)
-                        }
-                    }
-                }
+                actionList
             }
         }
         .padding(12)
@@ -108,6 +104,39 @@ struct ActionPalette: View {
         .clipinChromeGlass(cornerRadius: ClipinChrome.paletteCornerRadius)
         .shadow(color: paletteShadowColor, radius: 28, x: 0, y: 14)
         .onAppear { selectedIndex = 0 }
+    }
+
+    /// 动作行区域：分组之间插 hairline 分隔线；包进内层 ScrollView 并按
+    /// 自然高度封顶到 paletteMaxHeight；键盘移动选中时把选中行滚进可见区。
+    private var actionList: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(groupedActionIndices.enumerated()), id: \.offset) { groupOrdinal, group in
+                        if groupOrdinal > 0 {
+                            Rectangle()
+                                .fill(ClipinInk.tertiary.opacity(0.55))
+                                .frame(height: 1)
+                                .padding(.horizontal, ClipinChrome.listRowOuterInset)
+                                .padding(.vertical, 5)
+                        }
+                        VStack(spacing: 4) {
+                            ForEach(group, id: \.self) { index in
+                                actionRow(action: actions[index], index: index)
+                                    .id(index)
+                            }
+                        }
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { actionsContentHeight = $0 }
+            }
+            .frame(height: min(actionsContentHeight, ClipinChrome.paletteMaxHeight))
+            .onChange(of: selectedIndex) { _, newIndex in
+                withAnimation(ClipinMotion.feedback) {
+                    proxy.scrollTo(newIndex, anchor: .center)
+                }
+            }
+        }
     }
 
     /// native glassEffect 只给发丝 rim、不给落影；底栏淡出后右下角无第二层玻璃，
