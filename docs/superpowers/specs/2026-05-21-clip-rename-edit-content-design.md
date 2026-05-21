@@ -125,17 +125,23 @@ AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initi
 ### 单元 5 — Rename inline 编辑(`ClipboardViewModel` + `ClipListRow`)
 
 **ViewModel 状态**
-- 新增 `renamingItemID: String?`——非 nil 表示该 id 的行正处于 inline 编辑态。
-- `beginRenaming(_ id:)`:设置 `renamingItemID`;若动作面板开着则先关闭。
-- `commitRename(_ id:, alias:)`:空白归一化后,后台调用 `core.set_alias`;成功后刷新该行;清空 `renamingItemID`;经 `launcherNotice` 给一句轻量回声。
-- `cancelRename()`:清空 `renamingItemID`,不写库。
+- 新增 `renamingItemID: String?`(非 nil 表示该 id 的行正处于 inline 编辑态)与草稿 `renameDraft: String`。
+- `beginRenaming(id:)`:预填 `renameDraft` 为该行当前显示名(别名或内容兜底预览),设置 `renamingItemID`;若动作面板开着则先关闭;与 Edit Content 互斥。
+- `commitRenaming()`:`renameDraft` 空白归一化后调用 `core.set_alias`(空字符串清空别名),刷新列表,经 `launcherNotice` 给一句轻量回声。
+- `cancelRenaming()`:清空 `renamingItemID` 与草稿,不写库。
 
 **ClipListRow 渲染**
-- 标题区:`if viewModel.renamingItemID == item.id` → 渲染 `TextField`,否则渲染原 `Text`。
-- `TextField` 用 SwiftUI 原生 `TextField` + `@FocusState`;`onSubmit` 提交,`onExitCommand`(或 Esc 处理)取消。`onSubmit` 而非按键监听,避免 IME 组词回车被吞(见 CLAUDE.md IME 相关决策)。
+- 标题区:`if viewModel.renamingItemID == item.id` → 渲染 `TextField`(绑定 `renameDraft`),否则渲染原 `Text`。
+- `TextField` 用 SwiftUI 原生 `TextField` + `@FocusState`;`onSubmit` 提交。`onSubmit` 而非按键监听,避免 IME 组词回车被吞(见 CLAUDE.md IME 相关决策)。
 - 进入编辑态时 `TextField` 抢焦点并全选预填文字。
-- 列表行 `.id(item.id)` 保证 LazyVStack 滚动重建时复用同一 `TextField` 实例;`renamingItemID` 由 ViewModel 持有,不随 row 重建丢失。
+- 列表行 `.id(item.id)` 保证 LazyVStack 滚动重建时复用同一 `TextField` 实例;`renamingItemID` 与 `renameDraft` 由 ViewModel 持有,不随 row 重建丢失。
 - 视觉信号:`item.alias` 非空时,行首画一个轻量小圆点(尺寸/颜色复用现有 chrome token,不新造皮肤)。
+
+**改名的退出路径(访达式)**
+改名是一个模态状态,必须覆盖所有退出方式,不能只处理 Return:
+- `Return` → `onSubmit` → 提交。
+- `Esc` → 取消(由键盘上下文处理,见单元 8)。
+- **`TextField` 失焦 → 自动提交**:用户点击列表其他行、点击面板外部、或面板关闭导致 `TextField` 失焦时,监听 `@FocusState` 变化自动 `commitRenaming()`——与访达/Finder「点别处即提交文件名」一致。这条覆盖了"改名进行中点击其他行"这一最常见的非 Return 退出。
 
 ### 单元 6 — Edit Content 编辑态(`ClipboardViewModel` + `PreviewPane`)
 
@@ -148,6 +154,11 @@ AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initi
 **PreviewPane 渲染**
 - `editingContentItemID == 当前选中 id` 时,preview 的内容 stage 替换为可编辑 `TextEditor`(绑定 `editingContentDraft`),metadata block 在编辑态隐藏,stage 高度全给编辑器;底部提供 `Save`/`Cancel` 按钮(`Save` 标 `⌘↵`)。
 - 非编辑态保持现状(只读 preview)。
+
+**编辑期间锁定列表选中**
+Edit Content 改的是真实内容,自动提交/丢弃都有误操作风险。因此编辑进行中**锁定列表选中切换**:鼠标点击列表其他行不切换选中(键盘 `↑↓` 已由单元 8 交给 `TextEditor`),用户必须显式 `Save`(`⌘↵`)或 `Esc` 结束编辑。这与 Rename 的"失焦即提交"是有意的不对称——改名是轻动作可即时提交,改内容是重动作必须显式确认。
+
+**已知行为**:在按类型筛选的浏览视图里(如「文本」视图)把条目内容编辑成另一类型(如 URL),保存后该条目因类型不再匹配当前筛选而移出当前视图——这是筛选语义的正确结果,非缺陷。
 
 ### 单元 7 — 动作面板两个命令(`ActionPalette` + `PaletteAction`)
 
@@ -165,6 +176,8 @@ Clipin 的本地键盘监视器按"当前窗口上下文"分发导航键。本�
 
 两个上下文都优先于主面板列表导航判定,避免编辑期间误触发列表上下移动或粘贴。`Esc` 在这两个上下文里只做"取消编辑",不触发既有的"先回退搜索/筛选、再关面板"分层逻辑。
 
+**面板关闭时清理编辑态**:参照 CLAUDE.md「面板彻底关闭(`hidePanel`)时强制 `isContinuousPasteEnabled = false`」的先例,`hidePanel` 时必须 `commitRenaming()` + `cancelEditContent()`——改名提交(与失焦提交一致)、内容编辑放弃(不静默写入),防止编辑态残留污染下次打开。
+
 ### 单元 9 — 本地化文案(`Localizable.strings`)
 
 新增 key:`Rename`、`Edit Content`、`Save`、改名/编辑成功与失败的 `launcherNotice` 文案。动态提示统一走 `NSLocalizedString + String(format:)`(见 CLAUDE.md 本地化决策)。
@@ -180,7 +193,7 @@ Clipin 的本地键盘监视器按"当前窗口上下文"分发导航键。本�
 | `pinyin_flat` / `pinyin_initials` | 重算(入参 `content + alias`) |
 | FTS5 索引 | v10 触发器自动同步,无需手动 |
 | `clip_representations`(HTML/RTF/RTFD 副表) | 清空该条目的副表记录——plain text 已改,旧的富文本表示与新内容不一致,保留会导致粘贴出"看不见的旧富文本" |
-| URL 元数据缓存(favicon / og:title) | 编辑后失效该条目的 favicon/标题缓存,下次预览重新抓取——内容变了,旧的抓取结果过期 |
+| URL 元数据缓存(favicon / og:title) | 无需手动失效——`FaviconCache` 与 og:title 抓取都按 URL/origin 作 key;content 编辑成新 URL 后渲染层用新 key 自然走新缓存条目,旧缓存不会被错误命中 |
 | 去重 | 不套用——见单元 2 |
 
 别名相关:`set_alias` 只影响 `alias` 与该条目拼音两项,不触碰其余任何字段。

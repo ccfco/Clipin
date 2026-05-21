@@ -412,13 +412,17 @@ EOF
 
 ---
 
-### Task 5: ClipItemRow inline 改名 UI
+### Task 5: ClipItemRow inline 改名 UI + 列表锁定
 
 **Files:**
 - Modify: `Clipin/Views/ClipItemRow.swift`(`ClipItemRow` 结构体 307-350)
-- Modify: `Clipin/Views/MainPanel.swift`(`ItemListView` 实例化处,约第 192 行)
+- Modify: `Clipin/Views/MainPanel.swift`(`ItemListView` 结构体 425-443、`row(for:)` 手势约 542-543、`ItemListView` 实例化处约第 192 行)
 
-`ClipItemRow` 当前是纯参数视图。改名需要它与 `ClipboardViewModel` 双向通信(读 `renamingItemID`、绑定 `renameDraft`、调 `commitRenaming`),给它注入 `@EnvironmentObject`。`MainPanel` 已对 `PreviewPane` 注入 `environmentObject(viewModel)`,本 task 给 `ItemListView` 也注入,使其子树内的 `ClipItemRow` 能取到。
+`ClipItemRow` 当前是纯参数视图。改名需要它与 `ClipboardViewModel` 双向通信(读 `renamingItemID`、绑定 `renameDraft`、调 `commitRenaming`),给它注入 `@EnvironmentObject`。`MainPanel` 已对 `PreviewPane` 注入 `environmentObject(viewModel)`,本 task 给 `ItemListView` 也注入,使其自身与子树内的 `ClipItemRow` 都能取到。
+
+本 task 同时落实两条**编辑态退出/锁定规则**(spec 单元 5/6):
+- Rename:`TextField` 失焦即自动提交(访达式)——覆盖"改名进行中点击其他行"。
+- Edit Content:编辑进行中**锁定**列表选中切换——鼠标点击其他行不切换。
 
 - [ ] **Step 1: `MainPanel` 给 `ItemListView` 注入 environmentObject**
 
@@ -441,7 +445,35 @@ EOF
 
 (若 `ItemListView(...)` 之后已有其他链式 modifier,把 `.environmentObject(viewModel)` 加在它们之前即可。)
 
-- [ ] **Step 2: `ClipItemRow` 增加 environmentObject 与编辑态计算属性**
+- [ ] **Step 2: `ItemListView` 增加 vm 引用,Edit Content 期间锁定列表交互**
+
+`ItemListView` 结构体属性区(`@State private var hoveredID: String?` 之后)追加:
+
+```swift
+    @EnvironmentObject private var vm: ClipboardViewModel
+```
+
+`row(for:)` 末尾的两个点击手势(当前为):
+
+```swift
+        .onTapGesture(count: 2) { onActivate(item) }
+        .simultaneousGesture(TapGesture(count: 1).onEnded { selection.wrappedValue = item.id })
+```
+
+改为 Edit Content 进行中锁定(改的是真实内容,误点切走有丢编辑/误存风险,必须显式 Save/Esc 结束):
+
+```swift
+        .onTapGesture(count: 2) {
+            if vm.editingContentItemID == nil { onActivate(item) }
+        }
+        .simultaneousGesture(TapGesture(count: 1).onEnded {
+            if vm.editingContentItemID == nil { selection.wrappedValue = item.id }
+        })
+```
+
+> 注:Rename 进行中**不**锁定列表点击 —— 点击其他行靠 Step 4 的"失焦自动提交"处理(访达式),与 Edit Content 的锁定是有意的不对称。
+
+- [ ] **Step 3: `ClipItemRow` 增加 environmentObject 与编辑态计算属性**
 
 `ClipItemRow` 结构体属性区(`let sceneState: ClipinSceneState` 之后)追加:
 
@@ -453,7 +485,7 @@ EOF
     private var hasAlias: Bool { item.alias?.isEmpty == false }
 ```
 
-- [ ] **Step 3: body 标题区改为条件渲染**
+- [ ] **Step 4: body 标题区改为条件渲染 + 失焦自动提交**
 
 `body` 的 `HStack` 内,当前的 `Text(highlightedDisplayText)` 整块(第 323-331 行,含其全部 modifier)替换为:
 
@@ -465,6 +497,12 @@ EOF
                     .focused($aliasFieldFocused)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .onSubmit { vm.commitRenaming() }
+                    .onChange(of: aliasFieldFocused) { _, focused in
+                        // 访达式：TextField 失焦（点击其他行 / 面板外部 / 面板关闭）即自动提交。
+                        // commitRenaming 幂等——renamingItemID 为 nil 时直接 return，
+                        // 故 Return(onSubmit) 与 Esc(cancelRenaming) 先行清空后，此处不会重复写库。
+                        if !focused { vm.commitRenaming() }
+                    }
                     .onAppear {
                         aliasFieldFocused = true
                         // SwiftUI TextField 无直接全选 API：获焦后异步选中 field editor 文本，
@@ -482,7 +520,7 @@ EOF
             }
 ```
 
-- [ ] **Step 4: 增加"有别名"视觉信号**
+- [ ] **Step 5: 增加"有别名"视觉信号**
 
 `body` 的 `HStack` 内,`typeIndicator` 那一整块(`typeIndicator.scaleEffect(...).animation(...)`)之后、标题区之前,插入一个固定宽度的别名标记位(有别名画 accent 小圆点,无别名占等宽空位,保证两种行左对齐一致):
 
@@ -497,28 +535,29 @@ EOF
             .frame(width: 6)
 ```
 
-- [ ] **Step 5: 构建确认通过**
+- [ ] **Step 6: 构建确认通过**
 
 Run: `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release -destination 'generic/platform=macOS' build`
 Expected: BUILD SUCCEEDED。
 
-- [ ] **Step 6: 手动验收**
+- [ ] **Step 7: 手动验收**
 
 构建并运行 app:
 - ⌘⇧V 唤起面板,选中一条文本条目,⌘K → 选 `Rename`:该行标题原地变为 `TextField`,文字预填且全选,光标在该行。
 - 输入新名 → Return:该行立即显示新别名,行首出现 accent 小圆点,底部 notice "Renamed."。
 - 再次 Rename,清空文字 → Return:该行回退为内容兜底预览,小圆点消失。
+- 进入 Rename,**鼠标点击列表另一行**:当前别名自动提交(失焦),选中切到新行——无孤儿编辑态残留。
 
-- [ ] **Step 7: 提交**
+- [ ] **Step 8: 提交**
 
 ```bash
 git add Clipin/Views/ClipItemRow.swift Clipin/Views/MainPanel.swift
 git commit -m "$(cat <<'EOF'
-feat: 列表行 inline 改名 UI
+feat: 列表行 inline 改名 UI + 编辑态列表锁定
 
 【根因/背景】访达式改名——列表行标题原地切换为 TextField
-【踩坑记录】ClipItemRow 原为纯参数视图，改名需与 vm 双向通信，故经 ItemListView 注入 environmentObject；TextField 无全选 API，获焦后异步 selectAll field editor
-【改动范围】ClipItemRow 加 environmentObject/FocusState/编辑态条件渲染/别名视觉信号；MainPanel 给 ItemListView 注入 environmentObject
+【踩坑记录】ClipItemRow 原为纯参数视图，改名需与 vm 双向通信，故经 ItemListView 注入 environmentObject；TextField 无全选 API，获焦后异步 selectAll field editor；改名失焦即提交（访达式），Edit Content 期间锁定列表点击（重动作需显式确认）
+【改动范围】ClipItemRow 加 environmentObject/FocusState/编辑态条件渲染/失焦提交/别名视觉信号；ItemListView 加 vm 并锁定 row 手势；MainPanel 给 ItemListView 注入 environmentObject
 EOF
 )"
 ```
@@ -708,18 +747,30 @@ inline 改名 / 内容编辑进行中,键盘焦点在 SwiftUI 文本控件上。
     }
 ```
 
-- [ ] **Step 5: 构建确认通过**
+- [ ] **Step 5: `hidePanel` 关闭面板时清理编辑态**
+
+面板关闭(点击面板外部、⌘⇧V 等非 Esc 路径)时,改名/编辑态不会被清,会污染下次打开。参照 CLAUDE.md「`hidePanel` 时强制 `isContinuousPasteEnabled = false`」的既有先例,在 `hidePanel(restorePreviousApp:)` 函数内、`viewModel?.isContinuousPasteEnabled = false`(约第 660 行)之后追加两行:
+
+```swift
+        viewModel?.commitRenaming()      // 改名进行中关面板 = 提交（与失焦自动提交一致）
+        viewModel?.cancelEditContent()   // 内容编辑进行中关面板 = 放弃，不静默写入
+```
+
+(两个方法都幂等:无对应编辑态时 `guard` 直接 return。)
+
+- [ ] **Step 6: 构建确认通过**
 
 Run: `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release -destination 'generic/platform=macOS' build`
 Expected: BUILD SUCCEEDED。
 
-- [ ] **Step 6: 手动验收**
+- [ ] **Step 7: 手动验收**
 
 - 进入 inline 改名,按 ↑↓:列表选中项**不移动**(键给了 TextField);输入中文(拼音):IME 选字面板正常,空格选字、回车确认字符都正常;改完按 Return:提交别名。
 - 进入改名,按 Esc:取消改名,该行恢复原显示。
 - 进入 Edit Content,按 ↑↓ / 普通 Return:在 TextEditor 内移动光标 / 换行,列表不动;按 ⌘↵:保存;按 Esc:取消。
+- 进入改名 / Edit Content,点击面板外部关闭面板,再 ⌘⇧V 重新打开:**无残留编辑态**(列表正常、preview 只读)。
 
-- [ ] **Step 7: 提交**
+- [ ] **Step 8: 提交**
 
 ```bash
 git add Clipin/App/AppDelegate.swift
@@ -727,8 +778,8 @@ git commit -m "$(cat <<'EOF'
 feat: 键盘上下文路由支持改名/编辑态
 
 【根因/背景】inline 改名与内容编辑期间，键盘须交还给 SwiftUI 文本控件，不能被列表导航截走
-【踩坑记录】renamingItem/editingContent 上下文优先于 mainPanel 判定；改名态除 Esc 外全放行（含 IME），编辑态额外拦 ⌘↵ 提交
-【改动范围】AppDelegate 的 KeyboardContext 加两 case、keyboardContext 优先判断、主 switch 加分支、新增两个 handler
+【踩坑记录】renamingItem/editingContent 上下文优先于 mainPanel 判定；改名态除 Esc 外全放行（含 IME），编辑态额外拦 ⌘↵ 提交；hidePanel 须清理编辑态防残留污染，照 isContinuousPasteEnabled 先例
+【改动范围】AppDelegate 的 KeyboardContext 加两 case、keyboardContext 优先判断、主 switch 加分支、新增两个 handler、hidePanel 加编辑态清理
 EOF
 )"
 ```
@@ -813,6 +864,7 @@ Expected: BUILD SUCCEEDED。运行编译出的 app。
 - [ ] 改名后用别名搜索能命中(英文别名直接搜、中文别名拼音搜)。
 - [ ] pinned 视图与普通视图都能改名,别名一致。
 - [ ] 改名进行中按 ↑↓ 列表不移动;中文输入法组词正常。
+- [ ] 改名进行中鼠标点击列表其他行 → 别名自动提交、选中切到新行(访达式),无孤儿编辑态。
 
 - [ ] **Step 3: Edit Content 验收**
 
@@ -821,6 +873,7 @@ Expected: BUILD SUCCEEDED。运行编译出的 app。
 - [ ] 保存后该条目后续粘贴出去是新内容。
 - [ ] 把 text 编辑成 `https://…` 并保存:类型变 url(列表图标变 favicon);反之亦然。
 - [ ] 编辑期间 ↑↓ / 普通 Return 在编辑器内生效,列表不动。
+- [ ] 编辑内容进行中鼠标点击列表其他行 → 选中**不切换**(锁定),须 Save/Esc 结束编辑。
 
 - [ ] **Step 4: 备份验收**
 
@@ -830,3 +883,4 @@ Expected: BUILD SUCCEEDED。运行编译出的 app。
 
 - [ ] 不进入任何编辑态时,主面板 ↑↓ / Return / ⌘K / ⌘1-9 / Tab / Space / Esc 行为与改动前一致。
 - [ ] ⌘K 动作面板的其余命令(Paste / Copy / Pin / Open / Delete 等)不受影响。
+- [ ] 改名 / Edit Content 进行中点击面板外部关闭面板,再 ⌘⇧V 重新打开 → 无残留编辑态。
