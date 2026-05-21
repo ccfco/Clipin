@@ -87,8 +87,8 @@ struct ActionPalette: View {
                 .onTapGesture { dismiss() }
 
             palettePanel
-                .padding(.trailing, ClipinChrome.shellGap)
-                .padding(.bottom, ClipinChrome.shellGap)
+                .padding(.trailing, ClipinChrome.gap)
+                .padding(.bottom, ClipinChrome.gap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
@@ -98,7 +98,7 @@ struct ActionPalette: View {
     }
 
     private var palettePanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
             paletteHeader
 
             if actions.isEmpty {
@@ -107,9 +107,11 @@ struct ActionPalette: View {
                 actionList
             }
         }
-        .padding(12)
+        // 面板内距 = edge：选中底板填满面板内壁后，底板距面板边恰为 edge，
+        // 与面板距窗口边的 edge 一致（用户要的「选中→面板 = 面板→app」）。
+        .padding(ClipinChrome.gap)
         .frame(width: 372, alignment: .leading)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.paletteCornerRadius)
+        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerSurface)
         .shadow(color: paletteShadowColor, radius: 28, x: 0, y: 14)
         .onAppear { selectedIndex = 0 }
     }
@@ -125,10 +127,10 @@ struct ActionPalette: View {
                             Rectangle()
                                 .fill(ClipinInk.tertiary.opacity(0.55))
                                 .frame(height: 1)
-                                .padding(.horizontal, ClipinChrome.listRowOuterInset)
-                                .padding(.vertical, 5)
+                                .padding(.horizontal, ClipinChrome.gap)
+                                .padding(.vertical, ClipinChrome.gap)
                         }
-                        VStack(spacing: 4) {
+                        VStack(spacing: 0) {
                             ForEach(group, id: \.self) { index in
                                 actionRow(action: actions[index], index: index)
                                     .id(index)
@@ -154,7 +156,7 @@ struct ActionPalette: View {
     }
 
     private var paletteHeader: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: ClipinChrome.gap) {
             if let item = selectedItem {
                 Image(systemName: item.typeIconName)
                     .font(.system(size: 12, weight: .regular))
@@ -170,16 +172,15 @@ struct ActionPalette: View {
                     .foregroundStyle(ClipinInk.secondary)
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: ClipinChrome.gap)
 
             ClipinKeycap(
                 key: "Esc",
                 foreground: ClipinInk.secondary
             )
         }
-        .padding(.horizontal, 4)
-        .padding(.top, 2)
-        .padding(.bottom, 4)
+        // 左缘 = edge：与下方动作行的文字对齐（行文字 = 选中底板内缩 edge）。
+        .padding(.horizontal, ClipinChrome.gap)
     }
 
     private func actionRow(action: PaletteAction, index: Int) -> some View {
@@ -215,8 +216,10 @@ struct ActionPalette: View {
                 )
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
+        // 文字↔选中底板 = edge（四边一致）。
+        .padding(.horizontal, ClipinChrome.gap)
+        .padding(.vertical, ClipinChrome.gap)
+        // 选中底板填满面板内壁，不再额外加 listRowOuterInset。
         .background(
             ClipinSelectableRowBackground(
                 isSelected: isSelected,
@@ -227,7 +230,6 @@ struct ActionPalette: View {
                 hoverStroke: ClipinHoverInk.stroke
             )
         )
-        .padding(.horizontal, ClipinChrome.listRowOuterInset)
         .contentShape(Rectangle())
         .onTapGesture {
             selectedIndex = index
@@ -240,7 +242,7 @@ struct ActionPalette: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: ClipinChrome.gap) {
             Image(systemName: "command")
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(ClipinInk.tertiary)
@@ -256,8 +258,7 @@ struct ActionPalette: View {
                 .frame(maxWidth: 220)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
+        .padding(.vertical, ClipinChrome.groupGap)
     }
 }
 

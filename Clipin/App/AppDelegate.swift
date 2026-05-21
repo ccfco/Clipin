@@ -30,7 +30,7 @@ private final class ClipinBorderlessHostingView<V: View>: NSHostingView<V> {
         // masksToBounds=true 在 CALayer compositor 层裁掉所有 AppKit subview（含旧 AppKit 毛玻璃 material 子视图），
         // 只用于 borderless 浮层；原生 titled 窗口不能走这里，否则会和 NSWindow frame 叠线。
         layer?.backgroundColor = .clear
-        layer?.cornerRadius = ClipinChrome.shellCornerRadius
+        layer?.cornerRadius = ClipinChrome.cornerShell
         layer?.cornerCurve = .continuous
         layer?.allowsEdgeAntialiasing = true
         layer?.borderWidth = 1 / max(window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2, 1)
@@ -407,7 +407,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 外观自适应,不锁 dark——旧"发白发平"是内容铺不透明底压平玻璃,非明暗问题。
         // 决策留痕:v2 的「实心深色 NSView」被用户多轮真机否决(不够原生)。
         let glass = NSGlassEffectView()
-        glass.cornerRadius = ClipinChrome.shellCornerRadius
+        glass.cornerRadius = ClipinChrome.cornerShell
         let host = ClipinPanelHostingView(rootView: MainPanel(viewModel: vm))
         glass.contentView = host
         panel.contentView = glass
@@ -421,7 +421,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // .titled 窗口始终有系统 frame:用 cornerRadius KVC 把 frame 圆角对齐 shell 24pt
         // (同设置/引导/权限窗口),否则默认 titled 角会在四角露 frame 发丝弧。不手动
         // masksToBounds——旧双发丝线源是已删除的 AppKit material 宿主层抗锯齿边,踩过坑。
-        panel.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
+        panel.setValue(ClipinChrome.cornerShell, forKey: "cornerRadius")
         [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
             panel.standardWindowButton(button)?.isHidden = true
         }
@@ -1300,7 +1300,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             window.standardWindowButton(button)?.isHidden = true
         }
         // 通过 KVC 设置窗口圆角，让系统 frame 的裁切和 SwiftUI 内容的 shellCornerRadius 对齐
-        window.setValue(ClipinChrome.shellCornerRadius, forKey: "cornerRadius")
+        window.setValue(ClipinChrome.cornerShell, forKey: "cornerRadius")
     }
 
     private func openSettingsWindow(select tab: SettingsTab? = nil) {

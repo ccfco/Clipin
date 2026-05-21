@@ -190,7 +190,7 @@ struct SearchBar: View {
     var onCycleBrowseMode: (Bool) -> Void = { _ in }
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: ClipinChrome.gap) {
             searchGlyph
 
             InterceptingTextFieldView(
@@ -216,8 +216,8 @@ struct SearchBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 4)
+        .padding(.horizontal, ClipinChrome.gap)
+        .padding(.vertical, ClipinChrome.gap)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
@@ -249,7 +249,7 @@ struct SearchBar: View {
             menuItem(.file, key: "4")
             menuItem(.url, key: "5")
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: ClipinChrome.gap) {
                 Image(systemName: iconName(for: displayedMode))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(isAll ? ClipinInk.secondary : Color.accentColor)
@@ -266,13 +266,13 @@ struct SearchBar: View {
                     .font(.system(size: 10, weight: .medium, design: .rounded))
                     .foregroundStyle(isAll ? ClipinInk.tertiary : ClipinSelectionInk.dim)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, ClipinChrome.gap)
+            .padding(.vertical, ClipinChrome.gap)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                     .fill(isAll ? Color.clear : Color.accentColor.opacity(0.14))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                             .strokeBorder(
                                 isAll ? ClipinHoverInk.stroke : Color.accentColor.opacity(0.40),
                                 lineWidth: 0.5

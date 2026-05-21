@@ -117,7 +117,7 @@ struct SettingsView: View {
 
     private let repositoryURL = URL(string: "https://github.com/ccfco/Clipin")!
     private let issuesURL = URL(string: "https://github.com/ccfco/Clipin/issues")!
-    private let contentStackSpacing: CGFloat = 18
+    private let contentStackSpacing: CGFloat = ClipinChrome.groupGap
 
     private var updateAutoCheckBinding: Binding<Bool> {
         Binding(
@@ -161,19 +161,19 @@ struct SettingsView: View {
     var body: some View {
         ZStack {
             windowBackdrop
-            HStack(spacing: ClipinChrome.shellGap) {
+            HStack(spacing: ClipinChrome.gap) {
                 sidebar
                 contentArea
                     .animation(ClipinMotion.panel, value: navigation.selectedTab)
             }
-            .padding(ClipinChrome.shellGap)
+            .padding(ClipinChrome.gap)
         }
         .frame(width: 748, height: 620)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let notice {
                 noticeView(notice)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, ClipinChrome.groupGap)
+                    .padding(.vertical, ClipinChrome.gap)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -201,10 +201,11 @@ struct SettingsView: View {
                     sidebarRow(tab)
                 }
             }
-            .padding(.vertical, 6)
+            // 卡片内壁留 edge：选中底板填满后距卡片边恰为 edge。
+            .padding(ClipinChrome.gap)
         }
         .background(
-            ClipinContentSurface(cornerRadius: ClipinChrome.sectionCornerRadius)
+            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
         )
         .frame(width: 220)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -214,7 +215,7 @@ struct SettingsView: View {
         let isSelected = navigation.selectedTab == tab
         let isHovered = hoveredTab == tab
 
-        return HStack(spacing: 10) {
+        return HStack(spacing: ClipinChrome.gap) {
             Image(systemName: tab.icon)
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(isSelected ? Color.accentColor : ClipinInk.secondary)
@@ -222,15 +223,15 @@ struct SettingsView: View {
                 .background(
                     Group {
                         if isSelected {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                                 .fill(ClipinSelectionInk.fill)
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                                         .strokeBorder(ClipinSelectionInk.stroke.opacity(0.72), lineWidth: 0.5)
                                 )
                         } else {
                             Color.clear
-                                .clipinChromeGlass(in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .clipinChromeGlass(in: RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous))
                         }
                     }
                 )
@@ -242,8 +243,8 @@ struct SettingsView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        // 文字↔选中底板 = edge；底板填满卡片内壁（去掉旧 listRowOuterInset）。
+        .padding(ClipinChrome.gap)
         .background(
             ClipinSelectableRowBackground(
                 isSelected: isSelected,
@@ -254,7 +255,6 @@ struct SettingsView: View {
                 hoverStroke: ClipinHoverInk.stroke
             )
         )
-        .padding(.horizontal, ClipinChrome.listRowOuterInset)
         .contentShape(Rectangle())
         .onTapGesture { navigation.select(tab) }
         .onHover { hovered in hoveredTab = hovered ? tab : nil }
@@ -266,7 +266,7 @@ struct SettingsView: View {
 
     private var contentArea: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ClipinChrome.detailGroupSpacing) {
+            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 if let tab = navigation.selectedTab {
                     detailHeader(for: tab)
 
@@ -283,11 +283,11 @@ struct SettingsView: View {
                 }
             }
             .id(navigation.selectedTab?.rawValue)
-            .padding(ClipinChrome.detailContentInset)
+            .padding(ClipinChrome.gap)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(
-            ClipinContentSurface(cornerRadius: ClipinChrome.sectionCornerRadius)
+            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
         )
     }
 
@@ -296,12 +296,12 @@ struct SettingsView: View {
     private var generalContent: some View {
         VStack(spacing: contentStackSpacing) {
             contentGroup {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+                    VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                         Text("Global shortcut")
                             .font(.system(size: 13, weight: .medium))
 
-                        HStack(spacing: 10) {
+                        HStack(spacing: ClipinChrome.gap) {
                             ShortcutRecorder(
                                 shortcut: Binding(
                                     get: { settings.shortcut },
@@ -392,7 +392,7 @@ struct SettingsView: View {
             }
 
             contentGroup {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                     settingFieldRow("Appearance") {
                         Picker("", selection: $settings.appearanceOverride) {
                             ForEach(AppearanceOverride.allCases, id: \.self) { mode in
@@ -426,7 +426,7 @@ struct SettingsView: View {
 
     private var privacyContent: some View {
         VStack(spacing: contentStackSpacing) {
-            contentGroup(padding: 14) {
+            contentGroup(padding: ClipinChrome.groupGap) {
                 infoCallout(
                     icon: "checkmark.shield.fill",
                     tint: .green,
@@ -483,7 +483,7 @@ struct SettingsView: View {
     private var retentionContent: some View {
         VStack(spacing: contentStackSpacing) {
             contentGroup {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                     settingFieldRow("Keep unpinned history for", description: "Pinned items are always preserved.") {
                         Picker("", selection: normalizedRetentionDays) {
                             ForEach(Self.retentionOptions, id: \.days) { option in
@@ -527,7 +527,7 @@ struct SettingsView: View {
 
     private var transferContent: some View {
         contentGroup {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 actionRow(
                     "Export clipboard history",
                     description: "Create a JSON snapshot of your current history so it can be archived or moved elsewhere.",
@@ -548,7 +548,7 @@ struct SettingsView: View {
                     action: importArchive
                 )
 
-                HStack(spacing: 4) {
+                HStack(spacing: ClipinChrome.gap) {
                     Text("settings.archive.formatCaption")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -575,8 +575,8 @@ struct SettingsView: View {
 
             if settings.autoBackupEnabled {
                 contentGroup {
-                    VStack(alignment: .leading, spacing: 18) {
-                        VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+                        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                             Text("Backup folder")
                                 .font(.system(size: 13, weight: .medium))
                             Text(
@@ -588,7 +588,7 @@ struct SettingsView: View {
                             .lineLimit(2)
                             .truncationMode(.middle)
 
-                            HStack(spacing: 8) {
+                            HStack(spacing: ClipinChrome.gap) {
                                 Button(settings.autoBackupFolderPath == nil ? "Choose Folder…" : "Change…") {
                                     chooseBackupFolder()
                                 }
@@ -613,12 +613,12 @@ struct SettingsView: View {
 
                         groupDivider
 
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                             Text("Backup status")
                                 .font(.system(size: 13, weight: .medium))
 
-                            contentGroup(padding: 14) {
-                                HStack(spacing: 10) {
+                            contentGroup(padding: ClipinChrome.groupGap) {
+                                HStack(spacing: ClipinChrome.gap) {
                                     if let error = autoBackup.lastBackupError {
                                         Circle().fill(Color.red).frame(width: 7, height: 7)
                                         Text(localized("Backup failed: %@", error))
@@ -665,14 +665,14 @@ struct SettingsView: View {
     private var aboutContent: some View {
         VStack(spacing: contentStackSpacing) {
             contentGroup {
-                HStack(alignment: .top, spacing: 16) {
+                HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
                         .interpolation(.high)
                         .frame(width: 68, height: 68)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                         Text(appDisplayName)
                             .font(.system(size: 22, weight: .semibold))
 
@@ -689,8 +689,8 @@ struct SettingsView: View {
             }
 
             contentGroup {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+                    VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                         Text("Updates")
                             .font(.system(size: 13, weight: .medium))
 
@@ -717,7 +717,7 @@ struct SettingsView: View {
                     if let latestRelease = updateReminder.latestRelease {
                         groupDivider
 
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                             Text("Release notes")
                                 .font(.system(size: 13, weight: .medium))
 
@@ -730,8 +730,8 @@ struct SettingsView: View {
 
                         groupDivider
 
-                        HStack(alignment: .top, spacing: 18) {
-                            VStack(alignment: .leading, spacing: 5) {
+                        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
+                            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                                 Text("Get the latest build")
                                     .font(.system(size: 13, weight: .medium))
 
@@ -741,7 +741,7 @@ struct SettingsView: View {
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
 
-                            HStack(spacing: 8) {
+                            HStack(spacing: ClipinChrome.gap) {
                                 Button("View Release") {
                                     updateReminder.openReleasePage()
                                 }
@@ -758,7 +758,7 @@ struct SettingsView: View {
             }
 
             contentGroup {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                     Text("Project")
                         .font(.system(size: 13, weight: .medium))
 
@@ -794,8 +794,8 @@ struct SettingsView: View {
     // MARK: - Transfer
 
     private func detailHeader(for tab: SettingsTab) -> some View {
-        contentGroup(padding: 18) {
-            HStack(alignment: .center, spacing: 16) {
+        contentGroup(padding: ClipinChrome.groupGap) {
+            HStack(alignment: .center, spacing: ClipinChrome.groupGap) {
                 ClipinSymbolOrb(systemImage: tab.icon, size: 58, iconSize: 20)
 
                 ClipinSectionIntro(
@@ -812,7 +812,7 @@ struct SettingsView: View {
 
     private var windowBackdrop: some View {
         Color.clear
-            .clipinChromeGlass(cornerRadius: ClipinChrome.shellCornerRadius)
+            .clipinChromeGlass(cornerRadius: ClipinChrome.cornerShell)
             .ignoresSafeArea()
     }
 
@@ -823,7 +823,7 @@ struct SettingsView: View {
     }
 
     private var settingsSelectionPlaceholder: some View {
-        contentGroup(padding: 18) {
+        contentGroup(padding: ClipinChrome.groupGap) {
             ClipinSectionIntro(
                 title: "Choose a section",
                 subtitle: "Select a section from the sidebar to edit Clipin preferences.",
@@ -839,8 +839,8 @@ struct SettingsView: View {
         description: LocalizedStringKey? = nil,
         @ViewBuilder control: () -> Control
     ) -> some View {
-        HStack(alignment: description == nil ? .firstTextBaseline : .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 5) {
+        HStack(alignment: description == nil ? .firstTextBaseline : .top, spacing: ClipinChrome.groupGap) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
 
@@ -862,8 +862,8 @@ struct SettingsView: View {
         note: String? = nil,
         isOn: Binding<Bool>
     ) -> some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 5) {
+        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
 
@@ -921,8 +921,8 @@ struct SettingsView: View {
         isBusy: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 5) {
+        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
 
@@ -944,7 +944,7 @@ struct SettingsView: View {
     }
 
     private func progressButtonLabel(title: LocalizedStringKey, isBusy: Bool) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: ClipinChrome.gap) {
             if isBusy {
                 ProgressView()
                     .controlSize(.small)
@@ -955,14 +955,14 @@ struct SettingsView: View {
     }
 
     private func infoCallout(icon: String, tint: Color, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 18, alignment: .center)
                 .padding(.top, 1)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
 
@@ -974,14 +974,14 @@ struct SettingsView: View {
     }
 
     private func contentGroup<Content: View>(
-        padding: CGFloat = 18,
+        padding: CGFloat = ClipinChrome.groupGap,
         @ViewBuilder content: () -> Content
     ) -> some View {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(padding)
             .background(
-                ClipinContentSurface(cornerRadius: ClipinChrome.cardCornerRadius)
+                ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
             )
     }
 
@@ -990,7 +990,7 @@ struct SettingsView: View {
     }
 
     private func noticeView(_ notice: SettingsNotice) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: ClipinChrome.gap) {
             Circle()
                 .fill(notice.isError ? Color.red : Color.accentColor)
                 .frame(width: 8, height: 8)
@@ -998,9 +998,9 @@ struct SettingsView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(ClipinInk.secondary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.searchCornerRadius)
+        .padding(.horizontal, ClipinChrome.groupGap)
+        .padding(.vertical, ClipinChrome.gap)
+        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerControl)
     }
 
     private func showNotice(_ text: String, isError: Bool = false) {

@@ -23,11 +23,11 @@ struct FooterHoverDerivedPills: View {
     var body: some View {
         // 同一 GlassEffectContainer 内由系统融合(Apple:glass 不能采样 glass,
         // 必须容器内统一融合);克制动效(Apple "let glass rest in steady states")。
-        GlassEffectContainer(spacing: 6) {
-            VStack(alignment: .trailing, spacing: 6) {
+        GlassEffectContainer(spacing: ClipinChrome.gap) {
+            VStack(alignment: .trailing, spacing: ClipinChrome.gap) {
                 ForEach(pills) { pill in
                     Button(action: pill.action) {
-                        HStack(spacing: 6) {
+                        HStack(spacing: ClipinChrome.gap) {
                             Text(LocalizedStringKey(pill.label))
                                 .font(.system(size: 11.5, weight: .semibold))
                                 .foregroundStyle(ClipinInk.primary)

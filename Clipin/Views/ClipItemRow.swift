@@ -198,7 +198,7 @@ private struct RowFaviconView: View {
     var body: some View {
         ZStack {
             if let image {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                     .fill(Color.primary.opacity(0.05))
                 Image(nsImage: image)
                     .resizable()
@@ -208,7 +208,7 @@ private struct RowFaviconView: View {
                 RowFaviconLetterMark(host: host)
             } else {
                 // 解析不出 host（极少数 URL 字符串损坏） → 兜底 globe
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                     .fill(Color.primary.opacity(0.05))
                 Image(systemName: "globe")
                     .font(.system(size: 12, weight: .medium))
@@ -216,9 +216,9 @@ private struct RowFaviconView: View {
             }
         }
         .frame(width: 24, height: 24)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
         .task(id: url?.absoluteString ?? "") {
@@ -256,7 +256,7 @@ private struct RowFaviconLetterMark: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                 .fill(Color.primary.opacity(0.05))
             Text(letter)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -281,15 +281,15 @@ private struct ClipThumbnailImage: View {
                     .foregroundStyle(ClipinInk.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                             .fill(Color.primary.opacity(0.05))
                     )
             }
         }
         .frame(width: 24, height: 24)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
         )
         .task(id: path) {
@@ -315,7 +315,7 @@ struct ClipItemRow: View {
     let sceneState: ClipinSceneState
 
     var body: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: ClipinChrome.gap) {
             typeIndicator
                 .scaleEffect(typeIndicatorScale)
                 .animation(ClipinMotion.feedback, value: isHovered)
@@ -337,8 +337,10 @@ struct ClipItemRow: View {
                 trailingMeta
             }
         }
-        .padding(.horizontal, 13)
-        .padding(.vertical, 9)
+        // 文字↔选中底板 = edge（四边一致）。底板由外层 .background 紧贴本视图，
+        // 故这层 padding 就是「文字到选中框」那段距离。
+        .padding(.horizontal, ClipinChrome.gap)
+        .padding(.vertical, ClipinChrome.gap)
         .animation(ClipinMotion.selection, value: isSelected)
         // reveal:按序号级联、从右侧划入,优雅铺开;dismiss:无延迟快收,松开即收。
         .animation(
@@ -359,8 +361,8 @@ struct ClipItemRow: View {
             )
         } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
             ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(color)
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous).fill(color)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
             }
             .frame(width: 24, height: 24)
@@ -376,11 +378,11 @@ struct ClipItemRow: View {
                 .foregroundStyle(ClipinInk.secondary)
                 .frame(width: 24, height: 24)
                 .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                         .fill(Color.primary.opacity(0.05))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                         .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                 )
         }
@@ -400,7 +402,7 @@ struct ClipItemRow: View {
     /// trailing 区域:长按 ⌘ 时的纯数字徽标 + 选中行时间戳。
     /// 数字徽标在前 9 行均可浮现,时间戳仍仅选中行显示。
     private var trailingMeta: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: ClipinChrome.gap) {
             if hasShortcutBadge, let n = shortcutNumber {
                 shortcutBadge(n)
                     // 自粘贴项右缘冒出、向左滑到正确位置(.move 相对边缘,贴边进入)。
@@ -413,7 +415,6 @@ struct ClipItemRow: View {
                     .foregroundStyle(ClipinSelectionInk.dim)
             }
         }
-        .padding(.trailing, 2)
     }
 
     /// ⌘1-9 数字徽标:圆角矩形(`.continuous`,与列表选中态同一套圆角语言),
@@ -425,7 +426,7 @@ struct ClipItemRow: View {
             .foregroundStyle(ClipinInk.secondary)
             .frame(width: 18, height: 18)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                     .fill(Color.primary.opacity(0.06))
             )
     }

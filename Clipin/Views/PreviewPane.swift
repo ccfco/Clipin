@@ -86,15 +86,17 @@ struct PreviewPane: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     previewFooter(for: item)
-                        .padding(.top, 8)
+                        .padding(.top, ClipinChrome.gap)
                 }
         }
     }
 
     private func contentStage<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        // 预览是阅读区（非选中行），内容内距用 groupGap —— 仍是 edge 派生的统一值，
+        // 但给正文/图片/元数据留出阅读呼吸位，不像选中行那样贴到 gap。
         content()
-            .padding(.horizontal, 16)
-            .padding(.vertical, 15)
+            .padding(.horizontal, ClipinChrome.groupGap)
+            .padding(.vertical, ClipinChrome.groupGap)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.bottom, ClipinChrome.floatingFooterBand)
     }
@@ -422,9 +424,9 @@ struct PreviewPane: View {
     }
 
     private func placeholder(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey) -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: ClipinChrome.gap) {
             ZStack {
-                RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
                     .fill(Color.accentColor.opacity(0.10))
                 Image(systemName: icon)
                     .font(.system(size: 18, weight: .medium))
@@ -511,10 +513,10 @@ struct PreviewPane: View {
                 return text
             }()
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 // 仅当检测到 JSON 时才显示 toggle，避免对普通文本造成视觉噪声
                 if isJSON {
-                    HStack(spacing: 8) {
+                    HStack(spacing: ClipinChrome.gap) {
                         Label("JSON", systemImage: "curlybraces")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(ClipinInk.secondary)
@@ -522,14 +524,14 @@ struct PreviewPane: View {
                         Button {
                             renderMode = renderMode == .auto ? .raw : .auto
                         } label: {
-                            HStack(spacing: 4) {
+                            HStack(spacing: ClipinChrome.gap) {
                                 Image(systemName: renderMode == .auto ? "text.alignleft" : "text.justify.leading")
                                     .font(.system(size: 9, weight: .semibold))
                                 Text(renderMode == .auto ? "Show raw" : "Pretty")
                                     .font(.system(size: 11, weight: .medium))
                             }
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, ClipinChrome.gap)
+                            .padding(.vertical, ClipinChrome.gap)
                             .foregroundStyle(ClipinInk.secondary)
                             .clipinChromeGlass(in: Capsule(style: .continuous))
                         }
@@ -586,14 +588,14 @@ private struct FilePreviewBody: View {
         let singleImageFile = allPaths.count == 1 && isImageFile(primaryPath)
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 header(primaryPath: primaryPath, primaryURL: primaryURL, paths: allPaths)
 
                 if singleImageFile {
                     AsyncPreviewImage(path: primaryPath, maxHeight: 360) {
                         pathFallback(allPaths: allPaths)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else if allPaths.count > 1 {
                     multiFileList(paths: allPaths)
@@ -630,9 +632,9 @@ private struct FilePreviewBody: View {
 
     @ViewBuilder
     private func header(primaryPath: String, primaryURL: URL, paths: [String]) -> some View {
-        HStack(spacing: 14) {
+        HStack(spacing: ClipinChrome.groupGap) {
             ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
                     .fill(Color(nsColor: .controlColor))
                 if let img = icon(for: primaryPath) {
                     Image(nsImage: img)
@@ -642,7 +644,7 @@ private struct FilePreviewBody: View {
             }
             .frame(width: 72, height: 72)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text(FileClipboardContent.displayName(for: primaryPath))
                     .font(.system(size: 17, weight: .semibold))
                 Text(fileHeaderSubtitle(paths: paths, primaryURL: primaryURL))
@@ -658,20 +660,20 @@ private struct FilePreviewBody: View {
         let shown = Array(paths.prefix(maxRows))
         let overflow = paths.count - shown.count
 
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
             Label("Selection", systemImage: "square.stack.3d.up")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(ClipinInk.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 ForEach(shown, id: \.self) { path in
-                    HStack(spacing: 10) {
+                    HStack(spacing: ClipinChrome.gap) {
                         if let img = icon(for: path) {
                             Image(nsImage: img)
                                 .resizable()
                                 .frame(width: 18, height: 18)
                         } else {
-                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                                 .fill(Color.primary.opacity(0.06))
                                 .frame(width: 18, height: 18)
                         }
@@ -687,19 +689,20 @@ private struct FilePreviewBody: View {
                     Text(String(format: NSLocalizedString("+%d more", comment: ""), overflow))
                         .font(.system(size: 11.5))
                         .foregroundStyle(ClipinInk.secondary)
-                        .padding(.leading, 28)
-                        .padding(.top, 2)
+                        // 缩进 = 图标宽(18) + 图标↔文字间距，让 "+N more" 与上方文件名左缘对齐。
+                        .padding(.leading, 18 + ClipinChrome.gap)
+                        .padding(.top, ClipinChrome.gap)
                 }
             }
         }
-        .padding(12)
+        .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
     private func pathFallback(allPaths: [String]) -> some View {
         let fileListText = allPaths.isEmpty ? item.content : allPaths.joined(separator: "\n")
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
             Label("Path", systemImage: "folder")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(ClipinInk.secondary)
@@ -711,7 +714,7 @@ private struct FilePreviewBody: View {
             )
             .frame(minHeight: 80)
         }
-        .padding(12)
+        .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -742,7 +745,7 @@ private struct ImagePreviewBody: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 if let path = item.imagePath {
                     AsyncPreviewImage(path: path, maxHeight: 392) {
                         Label("Image not found", systemImage: "exclamationmark.triangle")
@@ -750,7 +753,7 @@ private struct ImagePreviewBody: View {
                             .foregroundStyle(ClipinInk.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.detailMediaCornerRadius, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     Label("Image not found", systemImage: "exclamationmark.triangle")
@@ -775,8 +778,8 @@ private struct ImagePreviewBody: View {
         let isShortEnough = ocr.count < 200
         let effectivelyExpanded = isShortEnough || ocrExpanded
 
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+            HStack(spacing: ClipinChrome.gap) {
                 Label("OCR text", systemImage: "text.viewfinder")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(ClipinInk.secondary)
@@ -789,14 +792,14 @@ private struct ImagePreviewBody: View {
                     pb.setString(ocr, forType: .string)
                     vm.showNotice(NSLocalizedString("OCR text copied", comment: ""))
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: ClipinChrome.gap) {
                         Image(systemName: "doc.on.doc")
                             .font(.system(size: 9, weight: .semibold))
                         Text("Copy all")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, ClipinChrome.gap)
+                    .padding(.vertical, ClipinChrome.gap)
                     .foregroundStyle(ClipinInk.secondary)
                     .clipinChromeGlass(in: Capsule(style: .continuous))
                 }
@@ -807,14 +810,14 @@ private struct ImagePreviewBody: View {
                     Button {
                         withAnimation(ClipinMotion.feedback) { ocrExpanded.toggle() }
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: ClipinChrome.gap) {
                             Image(systemName: ocrExpanded ? "chevron.up" : "chevron.down")
                                 .font(.system(size: 9, weight: .semibold))
                             Text(ocrExpanded ? "Collapse" : "Show all")
                                 .font(.system(size: 11, weight: .medium))
                         }
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, ClipinChrome.gap)
+                        .padding(.vertical, ClipinChrome.gap)
                         .foregroundStyle(ClipinInk.secondary)
                         .clipinChromeGlass(in: Capsule(style: .continuous))
                     }
@@ -836,7 +839,7 @@ private struct ImagePreviewBody: View {
                 maxHeight: effectivelyExpanded ? 1600 : collapsedOCRHeight
             )
         }
-        .padding(12)
+        .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -924,19 +927,19 @@ private struct ColorSwatchPreview: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
             ZStack {
                 // 浅灰底，当颜色有透明度时可见
                 Color(nsColor: .controlBackgroundColor)
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous))
-                RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
                     .fill(color)
-                RoundedRectangle(cornerRadius: ClipinChrome.cardCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
             }
             .frame(height: 120)
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 colorRow("HEX", value: hexString)
                 colorRow("RGB", value: rgbString)
                 colorRow("HSL", value: hslString)
@@ -945,7 +948,7 @@ private struct ColorSwatchPreview: View {
     }
 
     private func colorRow(_ label: String, value: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: ClipinChrome.groupGap) {
             Text(label)
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Color.primary.opacity(colorScheme == .dark ? 0.78 : 0.68))
@@ -963,8 +966,8 @@ private struct ColorSwatchPreview: View {
                 Image(systemName: "doc.on.doc")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(ClipinInk.secondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, ClipinChrome.gap)
+                    .padding(.vertical, ClipinChrome.gap)
                     .background(
                         Capsule(style: .continuous)
                             .fill(Color.primary.opacity(hoveredRow == label ? 0.08 : 0))
@@ -1015,7 +1018,7 @@ private struct PreviewValueBadge: View {
     let item: PreviewPane.PreviewBadgeItem
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: ClipinChrome.gap) {
             if let systemImage = item.systemImage {
                 Image(systemName: systemImage)
                     .font(.system(size: 10, weight: .semibold))
@@ -1032,8 +1035,8 @@ private struct PreviewValueBadge: View {
         }
         .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(ClipinInk.secondary)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
+        .padding(.horizontal, ClipinChrome.gap)
+        .padding(.vertical, ClipinChrome.gap)
         .clipinChromeGlass(in: Capsule(style: .continuous))
         .help(item.helpText ?? item.title)
     }
@@ -1043,10 +1046,10 @@ private struct PreviewFooterRail: View {
     let entries: [PreviewPane.PreviewRailEntry]
 
     var body: some View {
-        // 外层 previewFooter 已 .padding(.top, 8)，rail 内部不再重复加 top；
+        // 外层 previewFooter 已 .padding(.top, ClipinChrome.gap)，rail 内部不再重复加 top；
         // .horizontal/.bottom 1pt 是历史防 clip 残留（glass capsule 现已自带 padding），删除。
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: ClipinChrome.gap) {
                 ForEach(entries) { entry in
                     PreviewValueBadge(item: entry.item)
                 }
@@ -1391,25 +1394,25 @@ private struct FaviconView: View {
             //       ② 拉到 favicon → 显示图标
             //       ③ 拉取失败 / 没 host → 字母圈兜底（host 首字母 + hash 色）
             if let image {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                     .fill(Color(nsColor: .controlColor))
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .padding(12)
+                    .padding(ClipinChrome.groupGap)
             } else if loadFinished, let host = url?.host, !host.isEmpty {
                 FaviconLetterMark(host: host)
             } else {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                     .fill(Color(nsColor: .controlColor))
                 Image(systemName: "globe")
                     .font(.system(size: 24, weight: .medium))
                     .foregroundStyle(ClipinInk.secondary)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.6)
         )
         .task(id: url?.absoluteString ?? "") {
@@ -1488,7 +1491,7 @@ private struct URLPreviewView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 header
                 fullURLBlock
                 if let url, !queryItems(for: url).isEmpty {
@@ -1509,13 +1512,13 @@ private struct URLPreviewView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: ClipinChrome.groupGap) {
             FaviconView(url: url)
                 .frame(width: 64, height: 64)
 
             // title 取到 → 大字 title + 次行 host[+path]；
             // 没取到 → 退化成原来的"host 在顶、path 在副"——首屏加载完成前的稳态。
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 if let pageTitle, !pageTitle.isEmpty {
                     Text(pageTitle)
                         .font(.system(size: 17, weight: .semibold))
@@ -1548,14 +1551,14 @@ private struct URLPreviewView: View {
 
             if let url {
                 Link(destination: url) {
-                    HStack(spacing: 5) {
+                    HStack(spacing: ClipinChrome.gap) {
                         Image(systemName: "safari")
                             .font(.system(size: 11, weight: .semibold))
                         Text("Open")
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, ClipinChrome.groupGap)
+                    .padding(.vertical, ClipinChrome.gap)
                     .foregroundStyle(Color.accentColor)
                     .clipinChromeGlass(in: Capsule(style: .continuous))
                 }
@@ -1591,14 +1594,14 @@ private struct URLPreviewView: View {
                     pb.setString(cleaned, forType: .string)
                     vm.showNotice(NSLocalizedString("Clean URL copied", comment: ""))
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: ClipinChrome.gap) {
                         Image(systemName: "scissors")
                             .font(.system(size: 10, weight: .semibold))
                         Text("Clean copy")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, ClipinChrome.gap)
+                    .padding(.vertical, ClipinChrome.gap)
                     .foregroundStyle(ClipinInk.secondary)
                     .clipinChromeGlass(in: Capsule(style: .continuous))
                 }
@@ -1632,9 +1635,9 @@ private struct URLPreviewView: View {
 
     private func queryBlock(items: [(String, String)]) -> some View {
         urlInfoBlock(title: "Query parameters", systemImage: "questionmark.app") {
-            VStack(spacing: 8) {
+            VStack(spacing: ClipinChrome.gap) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, pair in
-                    HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
                         Text(pair.0)
                             .font(.system(size: 12, weight: .medium, design: .monospaced))
                             .foregroundStyle(ClipinInk.secondary)
@@ -1660,8 +1663,8 @@ private struct URLPreviewView: View {
         @ViewBuilder trailing: () -> Trailing = { EmptyView() },
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+            HStack(spacing: ClipinChrome.gap) {
                 Label(title, systemImage: systemImage)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(ClipinInk.secondary)
@@ -1670,7 +1673,7 @@ private struct URLPreviewView: View {
             }
             content()
         }
-        .padding(12)
+        .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -10,18 +10,18 @@ struct UpdateReminderView: View {
     var body: some View {
         ZStack {
             Color.clear
-                .clipinChromeGlass(cornerRadius: ClipinChrome.shellCornerRadius)
+                .clipinChromeGlass(cornerRadius: ClipinChrome.cornerShell)
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+                HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
                     ClipinSymbolOrb(
                         systemImage: "arrow.down.circle.fill",
                         size: 48,
                         iconSize: 18
                     )
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                         Text("New update available")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Color.primary)
@@ -45,13 +45,13 @@ struct UpdateReminderView: View {
                         .foregroundStyle(ClipinInk.secondary)
                         .lineLimit(5)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
+                        .padding(ClipinChrome.groupGap)
                         .background(
-                            ClipinContentSurface(cornerRadius: ClipinChrome.cardCornerRadius)
+                            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
                         )
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: ClipinChrome.gap) {
                     Button("Later", action: onLater)
                         .buttonStyle(.glass)
 
@@ -64,7 +64,7 @@ struct UpdateReminderView: View {
                         .buttonStyle(.glassProminent)
                 }
             }
-            .padding(18)
+            .padding(ClipinChrome.groupGap)
         }
         .frame(width: 360)
     }

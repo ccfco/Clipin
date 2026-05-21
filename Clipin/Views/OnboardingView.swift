@@ -68,22 +68,22 @@ struct OnboardingView: View {
             stage
             footer
         }
-        .padding(ClipinChrome.shellGap)
+        .padding(ClipinChrome.gap)
         .frame(width: 560, height: 640)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.shellCornerRadius)
+        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerShell)
         .onAppear { permission.checkNow() }
         .accessibilityElement(children: .contain)
     }
 
     private var header: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: ClipinChrome.groupGap) {
             Image(nsImage: NSApplication.shared.applicationIconImage)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 34, height: 34)
-                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text("Clipin")
                     .font(.system(size: 16, weight: .semibold))
                 Text("Keyboard-first clipboard, refined for focus.")
@@ -93,7 +93,7 @@ struct OnboardingView: View {
 
             Spacer()
 
-            HStack(spacing: 6) {
+            HStack(spacing: ClipinChrome.gap) {
                 ForEach(OnboardingFlow.Step.allCases) { candidate in
                     Capsule(style: .continuous)
                         .fill(candidate == flow.step ? Color.accentColor : ClipinHoverInk.fill)
@@ -102,17 +102,17 @@ struct OnboardingView: View {
             }
             .animation(ClipinMotion.feedback, value: flow.step)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
-        .padding(.bottom, 12)
+        .padding(.horizontal, ClipinChrome.groupGap)
+        .padding(.top, ClipinChrome.groupGap)
+        .padding(.bottom, ClipinChrome.groupGap)
     }
 
     private var stage: some View {
         ScrollView(.vertical, showsIndicators: false) {
             stageContent
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 10)
+                .padding(.horizontal, ClipinChrome.gap)
+                .padding(.bottom, ClipinChrome.gap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(ClipinMotion.panel, value: flow.step)
@@ -131,15 +131,15 @@ struct OnboardingView: View {
     }
 
     private var welcomeStage: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            surface(cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
+        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+            surface(cornerRadius: ClipinChrome.cornerSurface, padding: ClipinChrome.groupGap) {
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center, spacing: 22) {
+                    HStack(alignment: .center, spacing: ClipinChrome.groupGap) {
                         welcomeCopy
                         heroArtwork
                     }
 
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                         welcomeCopy
                         heroArtwork
                             .frame(maxWidth: .infinity)
@@ -147,7 +147,7 @@ struct OnboardingView: View {
                 }
             }
 
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: ClipinChrome.gap) {
                 featureCard(icon: "sparkles", title: "Keyboard-first", message: "Open, filter, act, and paste without leaving the home row.")
                 featureCard(icon: "text.viewfinder", title: "Search images too", message: "OCR keeps screenshots and image snippets searchable with plain text.")
                 featureCard(icon: "lock.shield", title: "Private by default", message: "Everything stays local, and sensitive clipboard writes are skipped.")
@@ -157,12 +157,12 @@ struct OnboardingView: View {
     }
 
     private var workflowStage: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            surface(cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
-                VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+            surface(cornerRadius: ClipinChrome.cornerSurface, padding: ClipinChrome.groupGap) {
+                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                     sectionHeader(title: "Three beats, then you are back to typing.", subtitle: "Clipin is built around one quiet loop: copy, open, confirm.")
 
-                    HStack(alignment: .top, spacing: 10) {
+                    HStack(alignment: .top, spacing: ClipinChrome.gap) {
                         workflowCard(index: "01", title: "Copy anything", message: "Clipin captures text, images, links, and complete file selections.")
                         workflowConnector
                         workflowCard(index: "02", title: "Press ⌘⇧V", message: "The launcher appears right where you work, ready to search and narrow.")
@@ -172,8 +172,8 @@ struct OnboardingView: View {
                 }
             }
 
-            surface(cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
-                HStack(spacing: 10) {
+            surface(cornerRadius: ClipinChrome.cornerSurface, padding: ClipinChrome.groupGap) {
+                HStack(spacing: ClipinChrome.gap) {
                     hintCard(title: "Tab", message: "Cycle clip types")
                     hintCard(title: "⌘K", message: "Open global actions")
                     hintCard(title: "⌘⇧L", message: "Keep pasting across apps")
@@ -184,9 +184,9 @@ struct OnboardingView: View {
     }
 
     private var permissionStage: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            surface(cornerRadius: ClipinChrome.sectionCornerRadius, padding: 22) {
-                VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+            surface(cornerRadius: ClipinChrome.cornerSurface, padding: ClipinChrome.groupGap) {
+                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                     sectionHeader(
                         title: permission.isAccessibilityGranted ? "You are ready to paste straight back into any app." : "One system permission unlocks the last step.",
                         subtitle: permission.isAccessibilityGranted
@@ -194,8 +194,8 @@ struct OnboardingView: View {
                             : "Accessibility access lets Clipin return the selected item to the current app the moment you press Return."
                     )
 
-                    surface(cornerRadius: ClipinChrome.detailStageCornerRadius, padding: 16) {
-                        HStack(spacing: 14) {
+                    surface(cornerRadius: ClipinChrome.cornerControl, padding: ClipinChrome.groupGap) {
+                        HStack(spacing: ClipinChrome.groupGap) {
                             ZStack {
                                 Circle().fill(permission.isAccessibilityGranted ? Color.green.opacity(0.18) : ClipinSelectionInk.fill)
                                 Image(systemName: permission.isAccessibilityGranted ? "checkmark.circle.fill" : "keyboard.badge.ellipsis")
@@ -204,7 +204,7 @@ struct OnboardingView: View {
                             }
                             .frame(width: 52, height: 52)
 
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                                 Text("Accessibility")
                                     .font(.system(size: 13, weight: .medium))
                                 Text(
@@ -221,8 +221,8 @@ struct OnboardingView: View {
                         }
                     }
 
-                    surface(cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
-                        VStack(alignment: .leading, spacing: 12) {
+                    surface(cornerRadius: ClipinChrome.cornerSurface, padding: ClipinChrome.groupGap) {
+                        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                             permissionStep("1", text: "Open System Settings.")
                             permissionStep("2", text: "Find Clipin in Privacy & Security → Accessibility.")
                             permissionStep("3", text: "Turn it on, then come back here.")
@@ -231,7 +231,7 @@ struct OnboardingView: View {
                 }
             }
 
-            surface(cornerRadius: ClipinChrome.cardCornerRadius, padding: 16) {
+            surface(cornerRadius: ClipinChrome.cornerSurface, padding: ClipinChrome.groupGap) {
                 Label("Without Accessibility, Clipin can save history but cannot paste back into other apps. Turn it on to finish setup.", systemImage: "info.circle")
                     .font(.system(size: 12))
                     .foregroundStyle(ClipinInk.secondary)
@@ -243,7 +243,7 @@ struct OnboardingView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: ClipinChrome.gap) {
             // 权限步骤未授权：用"稍后再说"替换 hint 文字；其余步骤保持原样
             if flow.step == .permission && !permission.isAccessibilityGranted {
                 Button("Maybe later") { flow.skipPermission() }
@@ -267,9 +267,9 @@ struct OnboardingView: View {
 
             primaryButton(primaryTitle, systemImage: primaryIcon, action: primaryAction)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.sectionCornerRadius)
+        .padding(.horizontal, ClipinChrome.groupGap)
+        .padding(.vertical, ClipinChrome.groupGap)
+        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerSurface)
     }
 
     private var primaryTitle: LocalizedStringKey {
@@ -308,7 +308,7 @@ struct OnboardingView: View {
 
 private extension OnboardingView {
     var welcomeCopy: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
             ClipinSectionIntro(
                 title: "A calmer home for everything you copy.",
                 subtitle: "Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus.",
@@ -317,15 +317,15 @@ private extension OnboardingView {
             )
 
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 8) {
+                HStack(alignment: .top, spacing: ClipinChrome.gap) {
                     shortcutBadge("Open Launcher", key: "⌘⇧V")
                     shortcutBadge("Paste", key: "↵")
                     shortcutBadge("Actions", key: "⌘K")
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                     shortcutBadge("Open Launcher", key: "⌘⇧V")
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: ClipinChrome.gap) {
                         shortcutBadge("Paste", key: "↵")
                         shortcutBadge("Actions", key: "⌘K")
                     }
@@ -352,21 +352,21 @@ private extension OnboardingView {
     }
 
     func shortcutBadge(_ label: LocalizedStringKey, key: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: ClipinChrome.gap) {
             Text(label)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(ClipinInk.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             ClipinKeycap(key: key, foreground: ClipinInk.secondary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.badgeCornerRadius)
+        .padding(.horizontal, ClipinChrome.gap)
+        .padding(.vertical, ClipinChrome.gap)
+        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerTile)
     }
 
     func featureCard(icon: String, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
-        surface(cornerRadius: ClipinChrome.cardCornerRadius, padding: 14) {
-            VStack(alignment: .leading, spacing: 10) {
+        surface(cornerRadius: ClipinChrome.cornerSurface, padding: ClipinChrome.groupGap) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color.accentColor)
@@ -383,8 +383,8 @@ private extension OnboardingView {
     }
 
     func workflowCard(index: String, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
-        surface(cornerRadius: ClipinChrome.detailStageCornerRadius, padding: 14) {
-            VStack(alignment: .leading, spacing: 10) {
+        surface(cornerRadius: ClipinChrome.cornerControl, padding: ClipinChrome.groupGap) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text(index)
                     .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                     .foregroundStyle(ClipinInk.secondary)
@@ -404,11 +404,11 @@ private extension OnboardingView {
         Capsule(style: .continuous)
             .fill(ClipinSelectionInk.stroke.opacity(0.7))
             .frame(width: 18, height: 2)
-            .padding(.top, 28)
+            .padding(.top, ClipinChrome.groupGap * 2)
     }
 
     func hintCard(title: String, message: LocalizedStringKey) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
             ClipinKeycap(key: title, foreground: ClipinInk.secondary)
             Text(message)
                 .font(.system(size: 11))
@@ -420,7 +420,7 @@ private extension OnboardingView {
     }
 
     func permissionStep(_ number: String, text: LocalizedStringKey) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
             Text(number)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
@@ -439,8 +439,8 @@ private extension OnboardingView {
         Text(text)
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(granted ? Color.green : ClipinInk.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, ClipinChrome.gap)
+            .padding(.vertical, ClipinChrome.gap)
             .background((granted ? Color.green.opacity(0.12) : ClipinHoverInk.fill).clipShape(Capsule(style: .continuous)))
     }
 
@@ -449,13 +449,13 @@ private extension OnboardingView {
             Label(title, systemImage: systemImage)
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(Color.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+                .padding(.horizontal, ClipinChrome.groupGap)
+                .padding(.vertical, ClipinChrome.gap)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                         .fill(Color.accentColor)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                                 .strokeBorder(ClipinSelectionInk.stroke, lineWidth: 0.75)
                         )
                 )

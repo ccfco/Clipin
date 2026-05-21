@@ -8,22 +8,22 @@ struct PermissionView: View {
     var body: some View {
         ZStack {
             Color.clear
-                .clipinChromeGlass(cornerRadius: ClipinChrome.shellCornerRadius)
+                .clipinChromeGlass(cornerRadius: ClipinChrome.cornerShell)
                 .ignoresSafeArea()
 
-            VStack(spacing: ClipinChrome.shellGap) {
+            VStack(spacing: ClipinChrome.gap) {
                 topStage
                 permissionSteps
                 bottomStrip
             }
-            .padding(ClipinChrome.shellGap)
+            .padding(ClipinChrome.gap)
         }
         .frame(width: 430, height: 486)
     }
 
     private var topStage: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .center, spacing: 16) {
+        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+            HStack(alignment: .center, spacing: ClipinChrome.groupGap) {
                 ClipinSymbolOrb(
                     systemImage: permission.isAccessibilityGranted ? "checkmark.circle.fill" : "keyboard.badge.ellipsis",
                     size: 62,
@@ -40,12 +40,12 @@ struct PermissionView: View {
                 )
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: ClipinChrome.gap) {
                 Label(permission.isAccessibilityGranted ? "Granted" : "Pending", systemImage: permission.isAccessibilityGranted ? "checkmark.seal.fill" : "clock")
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(permission.isAccessibilityGranted ? Color.green : ClipinInk.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, ClipinChrome.gap)
+                    .padding(.vertical, ClipinChrome.gap)
                     .background(
                         Capsule(style: .continuous)
                             .fill(permission.isAccessibilityGranted ? Color.green.opacity(0.14) : ClipinHoverInk.fill)
@@ -54,16 +54,16 @@ struct PermissionView: View {
                 Spacer(minLength: 0)
             }
         }
-        .padding(20)
+        .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ClipinContentSurface(cornerRadius: ClipinChrome.sectionCornerRadius)
+            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
         )
     }
 
     private var permissionSteps: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text("Turn this on in System Settings")
                     .font(.system(size: 13, weight: .semibold))
 
@@ -74,21 +74,21 @@ struct PermissionView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 permStepRow("1", text: "Open System Settings.")
                 permStepRow("2", text: "Find Clipin in Privacy & Security → Accessibility.")
                 permStepRow("3", text: "Turn it on, then come back here.")
             }
         }
-        .padding(18)
+        .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ClipinContentSurface(cornerRadius: ClipinChrome.cardCornerRadius)
+            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
         )
     }
 
     private var bottomStrip: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: ClipinChrome.gap) {
             Group {
                 if permission.isAccessibilityGranted {
                     Text("Clipin will restart automatically to apply the permission.")
@@ -114,13 +114,13 @@ struct PermissionView: View {
                       systemImage: permission.isAccessibilityGranted ? "checkmark.circle.fill" : "gearshape")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(Color.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, ClipinChrome.groupGap)
+                    .padding(.vertical, ClipinChrome.gap)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                             .fill(permission.isAccessibilityGranted ? Color.green.opacity(0.80) : Color.accentColor)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                                     .strokeBorder(ClipinSelectionInk.stroke, lineWidth: 0.75)
                             )
                     )
@@ -129,20 +129,20 @@ struct PermissionView: View {
             .keyboardShortcut(.defaultAction)
             .disabled(permission.isAccessibilityGranted)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, ClipinChrome.groupGap)
+        .padding(.vertical, ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.sectionCornerRadius)
+        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerSurface)
     }
 
     private func permStepRow(_ number: String, text: LocalizedStringKey) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: ClipinChrome.gap) {
             Text(number)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white)
                 .frame(width: 18, height: 18)
                 .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                         .fill(Color.accentColor)
                 )
             Text(text)

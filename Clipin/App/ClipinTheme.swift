@@ -21,41 +21,47 @@ enum QAFlags {
 }
 
 enum ClipinChrome {
-    // 主圆角层级（嵌套依次递减）：shell / palette 24 → section 16 → contentStage/field 14 → metadata 12 → row 12 → badge 10
-    // 动作面板是贴窗口边的浮层，圆角必须 ≤ 窗口外壳，故与 shell 同为 24（不能比容器更圆）。
-    // 链外独立量级：card 18 —— 辅助窗口（引导/权限/更新）里 ClipinContentSurface 的 grouped 卡片，介于 section 与 shell 之间。
-    static let shellCornerRadius: CGFloat = 24
-    static let sectionCornerRadius: CGFloat = 16
-    static let cardCornerRadius: CGFloat = 18
-    static let searchCornerRadius: CGFloat = 14
-    static let rowCornerRadius: CGFloat = 12
-    static let paletteCornerRadius: CGFloat = 24
-    /// ⌘K 动作面板内容区最大高度（窗口 540 − 顶部搜索区呼吸位 ~72 − 底边距 8）。
-    /// 超出则面板内层 ScrollView 滚动。
-    static let paletteMaxHeight: CGFloat = 460
-    static let badgeCornerRadius: CGFloat = 10
-    // 全局间距节奏：所有 shell→section / section→section / section 垂直节奏统一用 shellGap
-    static let shellGap: CGFloat = 8
-    static let listRowOuterInset: CGFloat = 8
-    static let detailContentInset: CGFloat = 12
-    static let detailStageInset: CGFloat = 12
-    static let detailGroupSpacing: CGFloat = 8
-    static let detailStageCornerRadius: CGFloat = 14
-    static let detailMediaCornerRadius: CGFloat = 14
-    static let footerMinHeight: CGFloat = 44
-    /// 悬浮液态玻璃底栏「外接带」高度(玻璃元件高 + 与窗口边间距)。
-    /// 列表 scroll 底部 inset 与预览卡 bottom margin 共用此单一度量,防两处各算漂移。规格单元 B。
-    static let floatingFooterBand: CGFloat = 56
-    static let footerContentInset: CGFloat = 6
-    static let heroOrbCornerRadius: CGFloat = 20
-    static let sectionIntroSpacing: CGFloat = 10
+    /// 全 app 唯一间距 / 圆角基准单位。改这一个数，整个 app 的间距与圆角等比缩放。
+    /// 设计规则见 CLAUDE.md「统一间距系统」决策：所有间距与圆角都是 edge 的整数倍，
+    /// 不允许任何组件再硬编码独立的 padding / cornerRadius 字面量。
+    static let edge: CGFloat = 6
 
-    // 预览面板文字层级。统一收口到 token 而不是各组件内 let，
-    // 避免后续做"大字号"或字号微调时四处搜源码。
+    // MARK: 间距（两档，均为 edge 的整数倍）
+
+    /// 标准间隔：文字↔选中底板、选中底板↔容器、容器↔窗口、图标↔文字、两栏之间——
+    /// 用户能在界面上指到的「一段间隔」一律是这个值。
+    static var gap: CGFloat { edge }
+    /// 分组间隔：仅用于「相邻信息块之间」需要看出分界的留白（预览段落、设置分节）。
+    static var groupGap: CGFloat { edge * 2 }
+
+    // MARK: 圆角（四档，均为 edge 的整数倍；每向内嵌套一层 −edge，保持同心）
+
+    /// 小图标块、徽标、缩略图占位。
+    static var cornerTile: CGFloat { edge }
+    /// 行、控件、搜索框、媒体卡。
+    static var cornerControl: CGFloat { edge * 2 }
+    /// 浮层面板、内容卡片。
+    static var cornerSurface: CGFloat { edge * 3 }
+    /// 窗口外壳。
+    static var cornerShell: CGFloat { edge * 4 }
+
+    // MARK: 非缩放度量（不参与 edge 体系：要么是高度档位，要么是字号）
+
+    /// ⌘K 动作面板内容区最大高度（窗口 540 − 顶部搜索区 − 底边距）。超出则内层 ScrollView 滚动。
+    static let paletteMaxHeight: CGFloat = 460
+    /// 浮动底栏为列表 / 预览预留的底部避让高度。列表 scroll 底 inset 与预览底 margin 共用此度量。
+    static let floatingFooterBand: CGFloat = 52
+
+    // MARK: 组件度量（收口到此处单一可改，但刻意不挂 edge 网格）
+
+    /// 键帽（ClipinKeycap）内距。键帽是排版微元件（单字符才 ~8pt 宽），
+    /// 套 6pt 网格会被撑成胖片，故保留紧凑比例；放在此处仍满足「一处可改」。
+    static let keycapInsetH: CGFloat = 5
+    static let keycapInsetV: CGFloat = 2.5
+
     /// 预览正文（text / OCR / URL full / file path list）字号
     static let previewBodyFontSize: CGFloat = 13.5
-    /// 预览 footer 徽章字号；与 ClipinKeycap (10.5) 区分，
-    /// 徽章信息密度高于键帽，需要在低 DPI 显示器上仍能舒适阅读。
+    /// 预览 footer 徽章字号；与 ClipinKeycap (10.5) 区分，信息密度更高需更易读。
     static let previewBadgeFontSize: CGFloat = 11
     /// 预览图片最大解码像素（缩略图档位，避免主线程解原图全尺寸）
     static let previewImageMaxPixelSize: Int = 1024
@@ -137,8 +143,8 @@ struct ClipinKeycap: View {
             .foregroundStyle(foreground)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2.5)
+            .padding(.horizontal, ClipinChrome.keycapInsetH)
+            .padding(.vertical, ClipinChrome.keycapInsetV)
             .background(
                 // iOS 26 键帽 = 小 Capsule(对齐真机 Raycast 底栏键帽片),
                 // 不再硬编码 cornerRadius 魔数。
@@ -159,16 +165,16 @@ struct ClipinSymbolOrb: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
                 .fill(Color.accentColor.opacity(0.10 + (0.05 * emphasis)))
                 .frame(width: size + 14, height: size + 14)
                 .blur(radius: 18)
                 .scaleEffect(reduceMotion ? 1 : (isFloating ? 1.04 : 0.98))
 
-            RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
                 .fill(Color.clear)
                 .frame(width: size, height: size)
-                .clipinChromeGlass(in: RoundedRectangle(cornerRadius: ClipinChrome.heroOrbCornerRadius, style: .continuous))
+                .clipinChromeGlass(in: RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
                 .scaleEffect(reduceMotion ? 1 : (isFloating ? 1.01 : 0.99))
 
             Image(systemName: systemImage)
@@ -193,7 +199,7 @@ struct ClipinSectionIntro: View {
     var subtitleFontSize: CGFloat = 13
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ClipinChrome.sectionIntroSpacing) {
+        VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
             if let eyebrow {
                 Text(eyebrow)
                     .font(.system(size: 10.5, weight: .semibold, design: .rounded))
@@ -231,11 +237,11 @@ struct ClipinSelectableRowBackground: View {
         return .clear
     }
 
-    /// 选中/hover 底板恒为固定圆角矩形(12pt continuous),与整体圆角风格一致。
+    /// 选中/hover 底板恒为固定圆角矩形(cornerControl,与行/控件同档)。
     /// 不用 ConcentricRectangle:同心半径 = 容器半径 − 到容器边距离,列表中部的
     /// 行离 shell 边很远 → 半径被算成 ~0 = **尖角**(用户实测 bug)。固定 rounded 才对。
     private var fillShape: some View {
-        RoundedRectangle(cornerRadius: ClipinChrome.rowCornerRadius, style: .continuous)
+        RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
             .fill(fillColor)
     }
 
@@ -249,8 +255,8 @@ struct ClipinSelectableRowBackground: View {
                 Capsule(style: .continuous)
                     .fill(selectionStroke.opacity(0.45))
                     .frame(width: 2)
-                    .padding(.vertical, 11)
-                    .padding(.leading, 7.5)
+                    .padding(.vertical, ClipinChrome.edge)
+                    .padding(.leading, ClipinChrome.edge)
             }
         }
     }
@@ -309,8 +315,8 @@ struct ClipinFooterGlassButtonStyle: ButtonStyle {
             let pressed = configuration.isPressed
             let highlighted = isHovered
             return configuration.label
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
+                .padding(.horizontal, ClipinChrome.groupGap)
+                .padding(.vertical, ClipinChrome.gap)
                 .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
                 .overlay(
                     Capsule(style: .continuous)
@@ -352,8 +358,8 @@ struct ClipinFooterSegmentStyle: ButtonStyle {
             let pressed = configuration.isPressed
             let highlighted = isHovered || QAFlags.forceSegmentHover
             return configuration.label
-                .padding(.horizontal, 13)
-                .padding(.vertical, 8)
+                .padding(.horizontal, ClipinChrome.groupGap)
+                .padding(.vertical, ClipinChrome.gap)
                 .background(
                     Capsule(style: .continuous)
                         .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))

@@ -9,11 +9,11 @@ struct ShortcutRecorder: View {
     var body: some View {
         ShortcutRecorderRepresentable(shortcut: $shortcut, isCapturing: $isCapturing)
             .frame(minHeight: 26)
-            .clipinChromeGlass(cornerRadius: ClipinChrome.searchCornerRadius)
+            .clipinChromeGlass(cornerRadius: ClipinChrome.cornerControl)
             // 录制激活态原先靠 AppKit accent 边框表达，迁移后改由 SwiftUI 侧
             // accent 描边覆盖，不再回到 CALayer chrome。
             .overlay(
-                RoundedRectangle(cornerRadius: ClipinChrome.searchCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                     .strokeBorder(Color.accentColor.opacity(isCapturing ? 0.55 : 0), lineWidth: 1)
             )
             .animation(ClipinMotion.feedback, value: isCapturing)

@@ -47,7 +47,7 @@ struct MainPanel: View {
         // 不冲出圆角窗形。
         panelContent
             .clipShape(
-                RoundedRectangle(cornerRadius: ClipinChrome.shellCornerRadius, style: .continuous)
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerShell, style: .continuous)
             )
     }
 
@@ -90,7 +90,7 @@ struct MainPanel: View {
                         // showsDerivedPills 立刻收掉,点击根本来不及触发。
                         // padding + .contentShape(Rectangle()) 让 padding 区域参与 hit
                         // testing,鼠标穿过缝时仍命中 pills overlay,hover 持续 → 点击有效。
-                        .padding(.bottom, 6)
+                        .padding(.bottom, ClipinChrome.gap)
                         .contentShape(Rectangle())
                         .onGeometryChange(for: CGSize.self) { $0.size } action: { derivedPillsSize = $0 }
                         .onHover { hovering in
@@ -110,7 +110,7 @@ struct MainPanel: View {
         .overlay(alignment: .bottom) {
             if let notice = viewModel.launcherNotice {
                 launcherNoticeBanner(notice)
-                    .padding(.bottom, ClipinChrome.floatingFooterBand + ClipinChrome.shellGap)
+                    .padding(.bottom, ClipinChrome.floatingFooterBand + ClipinChrome.gap)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -166,15 +166,15 @@ struct MainPanel: View {
                 viewModel.cycleBrowseMode(reverse: reverse)
             }
         )
-        .padding(.horizontal, ClipinChrome.shellGap)
-        .padding(.top, ClipinChrome.shellGap)
-        .padding(.bottom, 6)
+        .padding(.horizontal, ClipinChrome.gap)
+        .padding(.top, ClipinChrome.gap)
+        .padding(.bottom, ClipinChrome.gap)
         .offset(y: sceneState.headerLift)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     private var contentArea: some View {
-        HStack(spacing: ClipinChrome.shellGap) {
+        HStack(spacing: ClipinChrome.gap) {
             itemList
                 .frame(width: 292)
                 .opacity(sceneState.listRestingOpacity)
@@ -183,7 +183,7 @@ struct MainPanel: View {
                 .environmentObject(viewModel)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(.horizontal, ClipinChrome.shellGap)
+        .padding(.horizontal, ClipinChrome.gap)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
@@ -217,13 +217,13 @@ struct MainPanel: View {
         // macOS 26 标准:GlassEffectContainer 把相邻 .glassEffect(.regular.interactive(),
         // in: Capsule) 元件融成一条连续液态玻璃(共享 rim),hover/press 由系统原生给。
         // 前提:每颗 chip 必须先有内边距(见 ClipinFooterGlassButtonStyle),否则玻璃缩成发丝。
-        GlassEffectContainer(spacing: 6) {
+        GlassEffectContainer(spacing: ClipinChrome.gap) {
             bottomBarRow
         }
     }
 
     private var bottomBarRow: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: ClipinChrome.gap) {
             // 左侧留空:app 身份已上移到搜索栏左侧图标,条目来源在右侧预览 metadata
             // rail 已显示,底栏只承担右对齐命令簇(去掉伪按钮式来源胶囊)。
             Spacer()
@@ -232,7 +232,7 @@ struct MainPanel: View {
             // 每颗按钮用 ClipinFooterSegmentStyle 自绘内缩灰高亮+微缩放(效果②)。
             // 不再 per-button glass + glassEffectUnion(union 会把玻璃并成静态一块、
             // 杀掉逐颗 hover,二者只能取一——故改组级玻璃 + 自绘 hover)。
-            HStack(spacing: 4) {
+            HStack(spacing: ClipinChrome.gap) {
                 if viewModel.selectedListItem != nil {
                     Button { viewModel.pasteSelected() } label: {
                         pasteCallToAction(
@@ -267,19 +267,18 @@ struct MainPanel: View {
                 in: Capsule(style: .continuous)
             )
         }
-        .padding(.horizontal, ClipinChrome.footerContentInset)
-        .padding(.vertical, ClipinChrome.footerContentInset)
-        .frame(minHeight: ClipinChrome.footerMinHeight)
         .animation(ClipinMotion.commandReveal, value: showsDerivedPills)
-        .padding(.horizontal, ClipinChrome.shellGap * 2)
-        .padding(.bottom, ClipinChrome.shellGap)
+        // 玻璃胶囊距窗口右 / 下都恰为 edge —— 与 ⌘K 动作面板同角对齐，
+        // 切换 ⌘K 时右下角锚点不跳。左侧由 Spacer 吸收，不需要 padding。
+        .padding(.trailing, ClipinChrome.gap)
+        .padding(.bottom, ClipinChrome.gap)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
 
     private var continuousPastePill: some View {
         Button { viewModel.toggleContinuousPaste() } label: {
-            HStack(spacing: 7) {
+            HStack(spacing: ClipinChrome.gap) {
                 Image(systemName: "repeat.circle.fill")
                     .font(.system(size: 12.5, weight: .semibold))
 
@@ -333,7 +332,7 @@ struct MainPanel: View {
     }
 
     private func pasteCallToAction(label: String, key: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: ClipinChrome.gap) {
             Text(label)
                 // 治"底栏按钮字太黑":纯 label 在玻璃上过黑,降透明 + medium 即柔。
                 .font(.system(size: 13, weight: .medium))
@@ -349,7 +348,7 @@ struct MainPanel: View {
     }
 
     private func keyBadge(label: String, key: String) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: ClipinChrome.gap) {
             Text(LocalizedStringKey(label))
                 .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.82))
@@ -360,7 +359,7 @@ struct MainPanel: View {
     }
 
     private func launcherNoticeBanner(_ notice: LauncherNotice) -> some View {
-        HStack(spacing: 9) {
+        HStack(spacing: ClipinChrome.gap) {
             Image(systemName: noticeIcon(for: notice.style))
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(noticeTint(for: notice.style))
@@ -390,9 +389,8 @@ struct MainPanel: View {
             .help(NSLocalizedString("Dismiss", comment: ""))
             .accessibilityLabel(Text("Dismiss"))
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
-        .padding(.vertical, 9)
+        .padding(.horizontal, ClipinChrome.groupGap)
+        .padding(.vertical, ClipinChrome.gap)
         .frame(maxWidth: 430)
         // 浮动 notice = iOS 26 玻璃 Capsule toast(不硬编码 searchCornerRadius)。
         .clipinChromeGlass(in: Capsule(style: .continuous))
@@ -473,7 +471,7 @@ private struct ItemListView: View {
                             .onAppear { onLoadMore() }
                     }
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, ClipinChrome.gap)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Color.clear.frame(height: ClipinChrome.floatingFooterBand)
@@ -489,13 +487,14 @@ private struct ItemListView: View {
     }
 
     private func sectionHeader(_ title: String) -> some View {
+        // 左缘 = edge，与行内图标/文字对齐（选中底板已填满整列，行文字内缩 edge）。
         Text(title)
             .font(.system(size: 10, weight: .semibold))
             .foregroundStyle(ClipinInk.secondary)
             .tracking(0.35)
-            .padding(.horizontal, ClipinChrome.listRowOuterInset)
-            .padding(.top, 14)
-            .padding(.bottom, 4)
+            .padding(.horizontal, ClipinChrome.gap)
+            .padding(.top, ClipinChrome.groupGap)
+            .padding(.bottom, ClipinChrome.gap)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -513,8 +512,9 @@ private struct ItemListView: View {
             showsShortcutHint: showsShortcutHint,
             sceneState: sceneState
         )
-        .padding(.vertical, 2)
         .id(item.id)
+        // 选中底板填满整列：左 edge 距窗口、右 edge 距预览，均由 contentArea/列间距提供，
+        // 不再额外加 listRowOuterInset（去掉旧的「列内距 + 行外距」双层叠加）。
         .background(
             ClipinSelectableRowBackground(
                 isSelected: isSelected,
@@ -526,7 +526,6 @@ private struct ItemListView: View {
                 isPinned: item.isPinned
             )
         )
-        .padding(.horizontal, ClipinChrome.listRowOuterInset)
         .scaleEffect(isSelected ? sceneState.selectedRowScale : 1.0)
         .offset(y: isSelected ? sceneState.selectedRowLift : 0)
         .opacity(!isSelected ? sceneState.listRestingOpacity : 1.0)
@@ -550,7 +549,7 @@ private struct ItemListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: ClipinChrome.gap) {
             Image(systemName: hasActiveFilter ? "magnifyingglass" : "clipboard")
                 .font(.system(size: 24))
                 .foregroundStyle(ClipinInk.tertiary)
@@ -567,13 +566,13 @@ private struct ItemListView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 200)
 
-            HStack(spacing: 6) {
+            HStack(spacing: ClipinChrome.gap) {
                 badgeCapsule("⌘K")
                 Text(hasActiveFilter ? LocalizedStringKey("Actions") : LocalizedStringKey("Actions & Settings"))
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(ClipinInk.secondary)
             }
-            .padding(.top, 4)
+            .padding(.top, ClipinChrome.gap)
 
             if hasActiveFilter {
                 Button("Clear Search & Filters") {
@@ -582,7 +581,7 @@ private struct ItemListView: View {
                 .font(.system(size: 11.5, weight: .medium))
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .padding(.top, 4)
+                .padding(.top, ClipinChrome.gap)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
