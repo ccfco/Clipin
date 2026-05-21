@@ -133,6 +133,7 @@
 /* PreviewPane / ClipItemRow / SearchBar - type labels */
 "Text" = "Text";
 "Image" = "Image";
+"Image · %@" = "Image · %@";
 "File" = "File";
 "Link" = "Link";
 "All" = "All";

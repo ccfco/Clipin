@@ -133,6 +133,7 @@
 /* PreviewPane / ClipItemRow / SearchBar - type labels */
 "Text" = "文本";
 "Image" = "图片";
+"Image · %@" = "图片 · %@";
 "File" = "文件";
 "Link" = "链接";
 "All" = "全部";

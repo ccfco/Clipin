@@ -9,15 +9,18 @@ extension ClipListItem {
         case .text, .url:
             return Self.firstLineTruncated(preview) ?? "(empty)"
         case .image:
-            // preview 经 SQL COALESCE：有 OCR 时为识别文字，否则为占位符 "image"。
-            // 用 "image" 作为哨兵判断是否有可展示的 OCR 文字。
+            // 图片标题用元信息（来源 App + 尺寸），不用 OCR 文字。真实数据验证过：
+            // 剪贴板图片绝大多数是密集截图，本身没有「标题」，OCR 第一行几乎都是
+            // UI chrome / 乱码。OCR 结果仍写入 ocr_text 喂 FTS——图片照样可按文字
+            // 搜到，只是不再拿来当标题。
             let base: String
-            if preview != "image", let line = Self.firstLineTruncated(preview) {
-                base = line
+            if let source = sourceName, !source.isEmpty {
+                base = String(
+                    format: NSLocalizedString("Image · %@", comment: "图片标题：Image · 来源应用名"),
+                    source)
             } else {
                 base = NSLocalizedString("Image", comment: "")
             }
-            // 尺寸始终追加：无论是占位标题还是 OCR 文字，都把 (宽×高) 拼到尾部。
             guard let suffix = imageDimensionSuffix else { return base }
             return "\(base) \(suffix)"
         case .file:
