@@ -1039,7 +1039,12 @@ private struct PreviewValueBadge: View {
         .foregroundStyle(ClipinInk.secondary)
         .padding(.horizontal, ClipinChrome.gap)
         .padding(.vertical, ClipinChrome.gap)
-        .clipinChromeGlass(in: Capsule(style: .continuous))
+        // 元数据徽章是内容区 chip,不上玻璃(玻璃叠窗面会二次发白):用与 ClipinKeycap
+        // 同值的扁平半透明填充,Color.primary.opacity 明暗自适应、无需 colorScheme 分支。
+        .background(
+            Capsule(style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+        )
         .help(item.helpText ?? item.title)
     }
 }
