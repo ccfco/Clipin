@@ -785,12 +785,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard clickOutsideMonitor == nil else { return }
         clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self, !(self.viewModel?.isContinuousPasteEnabled ?? false) else { return }
-            // Quick Look 内容区是跨进程远程视图，在预览里选图片文字的点击同样会被全局
-            // 监视器收到。只有点击真的落在预览面板「之外」才关面板：落在面板内是用户在
-            // 预览里操作。坐标必须取事件自身位置——全局监视器的事件无所属窗口，
-            // locationInWindow 即屏幕坐标；用 NSEvent.mouseLocation 取到的是回调执行
-            // 时的当前指针位置，按下后立刻拖选会偏移、误判成面板外。
-            if QuickLookPreviewService.shared.previewPanelContains(screenPoint: event.locationInWindow) {
+            // Quick Look 内容区是跨进程远程视图，在预览里选图片文字的点击也会被全局监视器
+            // 收到。只有点击真的落在预览面板「之外」才关面板。坐标换算关键：event.window
+            // 是本进程内的 QLPreviewPanel（非 nil），event.locationInWindow 是相对它的窗口
+            // 坐标，必须用该窗口转成屏幕坐标，再与预览面板 frame（屏幕坐标）比较；event.window
+            // 为 nil（点到其它 app）时 locationInWindow 本就是屏幕坐标。
+            let screenPoint = event.window?.convertPoint(toScreen: event.locationInWindow)
+                ?? event.locationInWindow
+            if QuickLookPreviewService.shared.previewPanelContains(screenPoint: screenPoint) {
                 return
             }
             self.hidePanel()
