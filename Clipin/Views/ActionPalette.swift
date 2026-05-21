@@ -58,6 +58,14 @@ struct ActionPalette: View {
     /// 动作行区域的自然高度，用于把面板封顶到 paletteMaxHeight（超出则内层滚动）。
     @State private var actionsContentHeight: CGFloat = 0
 
+    /// actionList 的解析高度：内容自然高度封顶到 paletteMaxHeight；
+    /// 首个布局 pass 测量结果还是 0 时回退到 paletteMaxHeight，
+    /// 避免出现 height=0 的塌陷帧（不依赖入场过渡的 opacity 来遮掩）。
+    private var resolvedActionListHeight: CGFloat {
+        let natural = actionsContentHeight > 0 ? actionsContentHeight : ClipinChrome.paletteMaxHeight
+        return min(natural, ClipinChrome.paletteMaxHeight)
+    }
+
     private var groupedActionIndices: [[Int]] {
         var groups: [[Int]] = []
         for (index, action) in actions.enumerated() {
@@ -130,7 +138,7 @@ struct ActionPalette: View {
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { actionsContentHeight = $0 }
             }
-            .frame(height: min(actionsContentHeight, ClipinChrome.paletteMaxHeight))
+            .frame(height: resolvedActionListHeight)
             .onChange(of: selectedIndex) { _, newIndex in
                 withAnimation(ClipinMotion.feedback) {
                     proxy.scrollTo(newIndex, anchor: .center)
