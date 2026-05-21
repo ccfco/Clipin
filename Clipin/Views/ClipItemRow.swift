@@ -437,29 +437,7 @@ struct ClipItemRow: View {
         return isHovered ? 1.03 : 1.0
     }
 
-    private var displayText: String {
-        switch item.clipType {
-        case .text, .url:
-            return firstLineTruncated(item.preview) ?? "(empty)"
-        case .image:
-            // preview 经 SQL COALESCE 处理：有 OCR 结果时为识别文字，否则为固定占位符 "image"
-            // 用 "image" 作为哨兵判断是否有可展示的 OCR 文字
-            if item.preview != "image", let line = firstLineTruncated(item.preview) {
-                return line
-            }
-            return NSLocalizedString("Image", comment: "")
-        case .file:
-            return FileClipboardContent.displayTitle(for: item.preview)
-        }
-    }
-
-    /// 取文本首行，trim 后截断到 120 字符；空内容返回 nil
-    private func firstLineTruncated(_ text: String, limit: Int = 120) -> String? {
-        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
-        let trimmed = firstLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        return trimmed.count > limit ? String(trimmed.prefix(limit)) + "…" : trimmed
-    }
+    private var displayText: String { item.displayTitle }
 
     private var highlightedDisplayText: AttributedString {
         let text = displayText
@@ -483,14 +461,7 @@ struct ClipItemRow: View {
         return result
     }
 
-    private var iconName: String {
-        switch item.clipType {
-        case .text:  return "doc.text"
-        case .image: return "photo"
-        case .file:  return "folder"
-        case .url:   return "link"
-        }
-    }
+    private var iconName: String { item.typeIconName }
 
     private var timeLabel: String {
         let date = Date(timeIntervalSince1970: TimeInterval(item.createdAt) / 1000.0)
