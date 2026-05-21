@@ -82,12 +82,19 @@ struct PreviewPane: View {
 
     private func contentStage(for item: ClipItem) -> some View {
         contentStage {
-            content(for: item)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    previewFooter(for: item)
-                        .padding(.top, ClipinChrome.gap)
-                }
+            if item.clipType == .image {
+                // 图片预览的元数据底栏改为随内容滚动（见 ImagePreviewBody），不再
+                // safeAreaInset 钉死在视口底沿——短内容时底栏会被推远、撑出大空档。
+                content(for: item)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                content(for: item)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        previewFooter(for: item)
+                            .padding(.top, ClipinChrome.gap)
+                    }
+            }
         }
     }
 
@@ -137,10 +144,14 @@ struct PreviewPane: View {
             .environmentObject(vm)
 
         case .image:
-            // `.id(item.id)` 让 SwiftUI 在切换条目时把整棵 view 当新 view 重建，
-            // 避免 @State ocrExpanded 从上一条目泄漏（用户展开 A 后切到 B 仍处于展开态）。
-            ImagePreviewBody(item: item, searchQuery: searchQuery, vm: vm)
-                .id(item.id)
+            // `.id(item.id)` 让切换条目时整棵 view 重建，隔离图片/OCR 的异步加载状态。
+            ImagePreviewBody(
+                item: item,
+                searchQuery: searchQuery,
+                vm: vm,
+                footerEntries: footerEntries(for: item)
+            )
+            .id(item.id)
 
         case .file:
             // 同上：fileIcons 虽然每次 .task 都会全量覆盖，但 .id 是更稳的防御，
@@ -733,116 +744,169 @@ private struct FilePreviewBody: View {
     }
 }
 
-/// 图片预览主体单独拆出来：承载 OCR 区块的"折叠/展开" @State。
-/// 嵌在 PreviewPane.content(for:) inline 里没办法挂 @State，拆 struct 是最干净的做法。
+/// 图片预览主体：图片 + OCR 文本在可滚动区，元数据底栏固定在其下方常驻可见。
 private struct ImagePreviewBody: View {
     let item: ClipItem
     let searchQuery: String
     let vm: ClipboardViewModel
-    @State private var ocrExpanded = false
+    /// 元数据底栏的徽章数据；底栏由本视图固定渲染在滚动区下方。
+    let footerEntries: [PreviewPane.PreviewRailEntry]
 
-    /// 折叠时 OCR 块高度上限；展开后让 OCR 跟随外层 ScrollView 自然延伸。
-    /// 200pt 沿用原值，保证不会一上来就吃掉图片预览的视觉权重。
-    private let collapsedOCRHeight: CGFloat = 200
+    /// 滚动内容底部淡出渐隐段高度（scroll edge effect）。
+    private let ocrScrollFadeLength: CGFloat = 32
+    /// 可滚动内容（图片 + OCR）的自然高度，用于让滚动区按内容收缩。
+    @State private var contentHeight: CGFloat = 0
+    /// 滚动区实际渲染高度；与 contentHeight 比较即可判断是否真的在滚动。
+    @State private var scrollViewHeight: CGFloat = 0
+
+    /// 内容比滚动区高 → 正在滚动，此时才需要底部淡出柔边。
+    private var isScrolling: Bool { contentHeight > scrollViewHeight + 1 }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                if let path = item.imagePath {
-                    AsyncPreviewImage(path: path, maxHeight: 392) {
+        // 元数据底栏固定在滚动区下方、始终可见（不进滚动流）；滚动区按内容自然高度
+        // 收缩（.frame(maxHeight: contentHeight)）——短内容时底栏紧贴正文不留空档，
+        // 长内容时滚动区填满可用高度、内容在内部滚动。
+        VStack(spacing: ClipinChrome.gap) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+                    if let path = item.imagePath {
+                        AsyncPreviewImage(path: path, maxHeight: 392) {
+                            Label("Image not found", systemImage: "exclamationmark.triangle")
+                                .font(.system(size: 13))
+                                .foregroundStyle(ClipinInk.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
                         Label("Image not found", systemImage: "exclamationmark.triangle")
                             .font(.system(size: 13))
                             .foregroundStyle(ClipinInk.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Label("Image not found", systemImage: "exclamationmark.triangle")
-                        .font(.system(size: 13))
-                        .foregroundStyle(ClipinInk.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
 
-                if let ocr = item.ocrText, !ocr.isEmpty {
-                    ocrBlock(ocr)
+                    if let ocr = item.ocrText, !ocr.isEmpty {
+                        ocrBlock(ocr)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxHeight: contentHeight > 0 ? contentHeight : nil)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { scrollViewHeight = $0 }
+            .mask(scrollFadeMask)
+
+            // 元数据底栏：固定在滚动区下方，任何时候都不被滚动卷走。
+            PreviewFooterRail(entries: footerEntries)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
+    /// 滚动内容底部淡出遮罩：仅在真正滚动时渐隐；内容刚好放下时保持全黑、不淡末行。
+    private var scrollFadeMask: some View {
+        VStack(spacing: 0) {
+            Color.black
+            LinearGradient(
+                colors: isScrolling
+                    ? [Color.black, Color.black.opacity(0)]
+                    : [Color.black, Color.black],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: ocrScrollFadeLength)
+        }
+    }
+
     @ViewBuilder
     private func ocrBlock(_ ocr: String) -> some View {
-        // 估算长度：极短 OCR（一两行字）直接铺开，没必要给 Show all 按钮；
-        // 估算阈值用字符数粗算，避免依赖 NSLayoutManager 测高的同步开销。
-        let isShortEnough = ocr.count < 200
-        let effectivelyExpanded = isShortEnough || ocrExpanded
-
         VStack(alignment: .leading, spacing: ClipinChrome.gap) {
             HStack(spacing: ClipinChrome.gap) {
                 Label("OCR text", systemImage: "text.viewfinder")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(ClipinInk.secondary)
                 Spacer(minLength: 6)
-                // 复制全部 OCR：用户场景是"截图里全是文字想一次性拿出来"，
-                // 框选 N 屏滚动太烦；这个按钮永远显示（短文本也可能想整段复制）
-                Button {
+                // 复制全部 OCR：用户场景是"截图里全是文字想一次性拿出来"，框选 N 屏太烦。
+                OCRHeaderButton(systemImage: "doc.on.doc", title: "Copy all") {
                     let pb = NSPasteboard.general
                     pb.clearContents()
                     pb.setString(ocr, forType: .string)
                     vm.showNotice(NSLocalizedString("OCR text copied", comment: ""))
-                } label: {
-                    HStack(spacing: ClipinChrome.gap) {
-                        Image(systemName: "doc.on.doc")
-                            .font(.system(size: 9, weight: .semibold))
-                        Text("Copy all")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .padding(.horizontal, ClipinChrome.gap)
-                    .padding(.vertical, ClipinChrome.gap)
-                    .foregroundStyle(ClipinInk.secondary)
-                    .clipinChromeGlass(in: Capsule(style: .continuous))
                 }
-                .buttonStyle(.plain)
                 .help("Copy all OCR text")
-
-                if !isShortEnough {
-                    Button {
-                        withAnimation(ClipinMotion.feedback) { ocrExpanded.toggle() }
-                    } label: {
-                        HStack(spacing: ClipinChrome.gap) {
-                            Image(systemName: ocrExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 9, weight: .semibold))
-                            Text(ocrExpanded ? "Collapse" : "Show all")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .padding(.horizontal, ClipinChrome.gap)
-                        .padding(.vertical, ClipinChrome.gap)
-                        .foregroundStyle(ClipinInk.secondary)
-                        .clipinChromeGlass(in: Capsule(style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                    .help(ocrExpanded ? "Collapse OCR text" : "Show full OCR text")
-                }
             }
 
-            SelectableTextPreview(
-                text: ocr,
-                font: .systemFont(ofSize: 13, weight: .regular),
-                searchQuery: searchQuery,
-                vm: vm
-            )
-            .frame(
-                minHeight: 72,
-                // 展开后给一个大上限，让 OCR 占满外层 ScrollView 剩余空间；
-                // 不用 .infinity 避免 SwiftUI ScrollView 内嵌 NSTextView 高度推算无穷。
-                maxHeight: effectivelyExpanded ? 1600 : collapsedOCRHeight
-            )
+            // OCR 文本一律完整展开（无折叠 / Show all）：截图 OCR 多是噪声，用
+            // secondary 弱化、让图片占视觉重心；正文是自然高度的 SwiftUI Text，
+            // 高度交给外层 ScrollView，默认在折叠线以下、滚动才露出。
+            Text(ocrAttributedText(ocr))
+                .font(.system(size: 13))
+                .foregroundStyle(ClipinInk.secondary)
+                .lineSpacing(4)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 把 OCR 文本转成 AttributedString，大小写不敏感高亮所有搜索命中。
+    /// 命中处提到 primary 前景 + accent 底色，在 secondary 正文里跳出来。
+    private func ocrAttributedText(_ ocr: String) -> AttributedString {
+        var attributed = AttributedString(ocr)
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return attributed }
+
+        let ns = ocr as NSString
+        var cursor = 0
+        while cursor < ns.length {
+            let found = ns.range(
+                of: query,
+                options: .caseInsensitive,
+                range: NSRange(location: cursor, length: ns.length - cursor)
+            )
+            guard found.location != NSNotFound else { break }
+            if let stringRange = Range(found, in: ocr),
+               let lo = AttributedString.Index(stringRange.lowerBound, within: attributed),
+               let hi = AttributedString.Index(stringRange.upperBound, within: attributed) {
+                attributed[lo..<hi].backgroundColor = Color.accentColor.opacity(0.25)
+                attributed[lo..<hi].foregroundColor = Color.primary
+            }
+            cursor = found.location + max(found.length, 1)
+        }
+        return attributed
+    }
+}
+
+/// OCR 区块表头的次级动作按钮（Copy all）。
+/// 安静设计：静止态无背景，仅 hover 浮出与 ClipinKeycap 同值的扁平胶囊填充——
+/// 不上玻璃，避免之前玻璃胶囊在内容区里"突兀漂浮"。
+private struct OCRHeaderButton: View {
+    let systemImage: String
+    let title: LocalizedStringKey
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: ClipinChrome.gap) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(ClipinInk.secondary)
+            .padding(.horizontal, ClipinChrome.gap)
+            .padding(.vertical, ClipinChrome.gap)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.primary.opacity(isHovered ? 0.06 : 0))
+            )
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(ClipinMotion.feedback) { isHovered = hovering }
+        }
     }
 }
 
