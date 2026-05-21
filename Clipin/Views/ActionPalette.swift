@@ -111,8 +111,15 @@ struct ActionPalette: View {
         // 与面板距窗口边的 edge 一致（用户要的「选中→面板 = 面板→app」）。
         .padding(ClipinChrome.gap)
         .frame(width: 372, alignment: .leading)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerSurface)
-        .shadow(color: paletteShadowColor, radius: 28, x: 0, y: 14)
+        // 玻璃面与落影独立成层:.shadow 只栅格化这层纯玻璃圆角矩形(不含文字),
+        // 文字留在 background 之外直接合成 → 不被离屏栅格化,保持锐利。
+        // 若把 .shadow 直接压在「内容 + 玻璃」整棵子树上,半透明玻璃会逼
+        // SwiftUI 连文字一起位图化,文字丢掉像素对齐与次像素抗锯齿 → 发虚。
+        .background {
+            Color.clear
+                .clipinChromeGlass(cornerRadius: ClipinChrome.cornerSurface)
+                .shadow(color: paletteShadowColor, radius: 28, x: 0, y: 14)
+        }
         .onAppear { selectedIndex = 0 }
     }
 
