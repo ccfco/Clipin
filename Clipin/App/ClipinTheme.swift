@@ -146,9 +146,11 @@ struct ClipinKeycap: View {
             .padding(.horizontal, ClipinChrome.keycapInsetH)
             .padding(.vertical, ClipinChrome.keycapInsetV)
             .background(
-                // iOS 26 键帽 = 小 Capsule(对齐真机 Raycast 底栏键帽片),
-                // 不再硬编码 cornerRadius 魔数。
-                Capsule(style: .continuous)
+                // 键帽 = 圆角方块(cornerTile),与 ⌘1-9 数字徽标 / 筛选 chip / 图标块
+                // 共用同一套 RoundedRectangle 圆角语言。不用 Capsule:Capsule 圆角恒为
+                // 高度/2,会随键帽宽度变"圆度"(单字符像圆球、组合键像长药丸),反而是
+                // 整套统一体系里唯一圆角不统一的元件;固定 cornerTile 才真·统一。
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                     .fill(Color.primary.opacity(0.06))
             )
     }

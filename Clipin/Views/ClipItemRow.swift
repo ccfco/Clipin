@@ -417,9 +417,8 @@ struct ClipItemRow: View {
         }
     }
 
-    /// ⌘1-9 数字徽标:圆角矩形(`.continuous`,与列表选中态同一套圆角语言),
-    /// 区别于键帽胶囊的"圆数字"。圆角半径按尺寸比例缩放——选中态 12pt 圆角对应
-    /// ~42pt 行高,徽标 ~18pt 故取 6pt,占比一致才视觉协调。固定方形让 1-9 统一。
+    /// ⌘1-9 数字徽标:圆角方块(cornerTile,`.continuous`),与键帽 / 筛选 chip /
+    /// 图标块共用同一套 RoundedRectangle 圆角语言。固定 18×18 方形让 1-9 视觉统一。
     private func shortcutBadge(_ n: Int) -> some View {
         Text("\(n)")
             .font(.system(size: 11, weight: .semibold, design: .rounded))
