@@ -224,11 +224,12 @@ private struct RowFaviconView: View {
         .task(id: url?.absoluteString ?? "") {
             image = nil
             guard let url, url.host?.isEmpty == false else { return }
-            let requestedURL = url
-            let fetched = await FaviconCache.shared.icon(for: requestedURL)
-            // 快速切条目 / 列表滚动 row 复用时，旧请求的网络响应可能晚到。
-            // 必须验证当前 URL 仍是发起时的那个，否则会把 A 行 favicon 覆盖到 B 行。
-            guard !Task.isCancelled, requestedURL == url else { return }
+            let fetched = await FaviconCache.shared.icon(for: url)
+            // 快速切条目 / 列表滚动 row 复用时旧请求的网络响应可能晚到：
+            // `.task(id:)` 在 id 变化时会自动取消旧 task，await 返回后 `Task.isCancelled`
+            // 即为 true，直接丢弃陈旧结果。（闭包捕获的 `url` 是 task 创建时的值，
+            // 不会变，所以不需要额外的 requestedURL == url 自比较。）
+            guard !Task.isCancelled else { return }
             image = fetched
         }
     }

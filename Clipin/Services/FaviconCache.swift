@@ -1,13 +1,13 @@
 import Foundation
 import AppKit
 
-/// 远程 favicon 缓存：actor 串行化 + pending dedup + 磁盘持久化 + 多源回退。
+/// 远程 favicon 缓存：actor 串行化 + pending dedup + 磁盘持久化 + 浏览器风格抓取。
 ///
-/// 旧实现单上游写死 `google.com/s2/favicons`，重启即丢、且在中国大陆/离线场景容易长期 nil。
 /// 当前实现：
 /// 1. 启动即从磁盘 `~/Library/Application Support/Clipin/favicons/<origin>.png` 异步读回
 ///    in-memory cache；
-/// 2. 取 favicon 时按"origin 直连 `/favicon.ico` → 根域 → HTML head 解析 → Google s2 兜底"顺序；
+/// 2. 取 favicon 时按"候选收集 → 评分选最佳 → 单次下载"的浏览器风格抓取
+///    （参考 Chromium FaviconHandler / Firefox places favicon service）；
 /// 3. 命中后异步写磁盘，TTL 7 天（避免站点换 favicon 后永久不更新）。
 ///
 /// **关键设计：cache 持有 immutable `Data`（PNG），每次 `icon(for:)` 调用即时构造
@@ -34,8 +34,21 @@ actor FaviconCache {
     private var cache: [String: Data] = [:]
     private var pending: [String: Task<Data?, Never>] = [:]
 
+    /// in-memory LRU：避免长 session 里用户复制大量不同站点 URL 导致 cache 无界增长。
+    /// 命中/写入时 touch，超 maxEntries 时淘汰最久未访问的。磁盘文件不受影响（仍由 7 天 TTL 管）。
+    private var lru: [String] = []
+    private let maxEntries = 500
+
     /// 7 天 TTL：favicon 改动频率远低于此，但也不至于让旧文件永远滞留。
     private static let diskTTL: TimeInterval = 7 * 24 * 3600
+
+    /// favicon 图片下载大小上限 5MB：正常 favicon < 1MB（GitHub 512×512 PNG 约 50KB），
+    /// 5MB 足够覆盖极端高分辨率 icon，又能挡住恶意服务器返回的 GB 级"图片炸弹"。
+    private static let maxImageBytes = 5 * 1024 * 1024
+
+    /// HTML head 下载大小上限 256KB：Range 头只请求前 64KB，但服务端可忽略 Range
+    /// 返回完整页面；256KB 给重型 SPA 的 head 留足空间，又能挡住超大响应。
+    private static let maxHTMLBytes = 256 * 1024
 
     private static let diskDir: URL = {
         let fm = FileManager.default
@@ -48,7 +61,10 @@ actor FaviconCache {
     func icon(for url: URL) async -> NSImage? {
         guard let origin = Self.origin(of: url) else { return nil }
 
-        if let data = cache[origin] { return NSImage(data: data) }
+        if let data = cache[origin] {
+            touch(origin)
+            return NSImage(data: data)
+        }
         if let task = pending[origin] {
             if let data = await task.value { return NSImage(data: data) }
             return nil
@@ -56,7 +72,7 @@ actor FaviconCache {
 
         // 磁盘命中：填充 in-memory 后返回
         if let data = readDisk(origin: origin) {
-            cache[origin] = data
+            store(origin, data: data)
             return NSImage(data: data)
         }
 
@@ -67,7 +83,7 @@ actor FaviconCache {
         let result = await task.value
         pending[origin] = nil
         if let data = result {
-            cache[origin] = data
+            store(origin, data: data)
             // 写磁盘只需 Data，不再共享 NSImage 实例
             writeDisk(origin: origin, data: data)
             return NSImage(data: data)
@@ -75,10 +91,27 @@ actor FaviconCache {
         return nil
     }
 
+    /// 写入 cache 并维护 LRU：超 maxEntries 时淘汰最久未访问条目。
+    private func store(_ origin: String, data: Data) {
+        cache[origin] = data
+        touch(origin)
+        while cache.count > maxEntries, let evict = lru.first {
+            cache.removeValue(forKey: evict)
+            lru.removeFirst()
+        }
+    }
+
+    /// 把 origin 标记为最近访问：从 lru 序列里移到末尾。
+    private func touch(_ origin: String) {
+        lru.removeAll { $0 == origin }
+        lru.append(origin)
+    }
+
     /// 把 URL normalize 成 origin 字符串：scheme + host + 非默认 port。
     /// - `https://github.com` → `"https://github.com"`
     /// - `https://github.com:443/foo` → `"https://github.com"`（443 是 https 默认）
     /// - `http://112.44.253.74:9210/x` → `"http://112.44.253.74:9210"`
+    /// - `http://[::1]:8080/x` → `"http://[::1]:8080"`（IPv6 host 必须 [] 包裹）
     /// - 非 http(s) scheme / 无 host → nil（不可缓存的 URL，调用方走兜底显示）
     ///
     /// host 大小写 normalize：DNS 不区分大小写，统一小写避免 GitHub.com / github.com 双份缓存。
@@ -86,11 +119,14 @@ actor FaviconCache {
         guard let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = url.host, !host.isEmpty else { return nil }
+        // IPv6 host（`url.host` 返回裸 `::1`，不带方括号）必须 `[]` 包裹才是合法 URL，
+        // 否则 `http://::1:8080` 里的 `:` 会被 URL 解析器当成 scheme/port 分隔符。
         let normalizedHost = host.lowercased()
+        let formattedHost = normalizedHost.contains(":") ? "[\(normalizedHost)]" : normalizedHost
         if let port = url.port, !isDefaultPort(port, scheme: scheme) {
-            return "\(scheme)://\(normalizedHost):\(port)"
+            return "\(scheme)://\(formattedHost):\(port)"
         }
-        return "\(scheme)://\(normalizedHost)"
+        return "\(scheme)://\(formattedHost)"
     }
 
     private static func isDefaultPort(_ port: Int, scheme: String) -> Bool {
@@ -156,16 +192,59 @@ actor FaviconCache {
             ))
         }
 
-        // === 阶段 3: 评分排序 → 下载 top-2 ===
-        // top-2 是 best 失败时的 fallback：apple-touch-icon 链接如果服务器 404（站点 HTML 错），
-        // 我们仍能下载到次优 icon。极端最坏 2 × 4s = 8s。
+        // === 阶段 3: 评分排序 + 去重 → 下载 top-2 ===
+        // 去重：HTML 可能已声明 `<link rel="icon" href="/favicon.ico">`，与阶段 2 追加的
+        // 隐式 /favicon.ico 解析到同一 URL；不去重会连续等两次相同的 4s 超时。
+        // 排序在前、去重在后 → 同 URL 的多个候选保留分数最高那个。
+        // top-2 是 best 失败时的 fallback：apple-touch-icon 链接如果服务器 404
+        //（站点 HTML 配错），仍能下载到次优 icon。极端最坏 2 × 4s = 8s。
         let sorted = allCandidates.sorted { score(of: $0) > score(of: $1) }
-        for candidate in sorted.prefix(2) {
+        var seenURLs = Set<String>()
+        var downloadTargets: [URL] = []
+        for candidate in sorted {
+            // sorted 降序，遇到第一个非 favicon（score < 0）后面全是非 favicon，停。
+            // 实际 parseIconLinks 已过滤非 favicon rel，这里是防御性兜底。
+            guard score(of: candidate) >= 0 else { break }
             guard let resolved = URL(string: candidate.href, relativeTo: candidate.baseURL)?.absoluteURL,
-                  let data = await downloadAndNormalize(url: resolved) else { continue }
-            return data
+                  seenURLs.insert(resolved.absoluteString).inserted else { continue }
+            downloadTargets.append(resolved)
+            if downloadTargets.count == 2 { break }
+        }
+        for target in downloadTargets {
+            if let data = await downloadAndNormalize(url: target) { return data }
         }
         return nil
+    }
+
+    /// 限制响应大小的下载：用 `URLSession.bytes` streaming 边读边累积，超阈值立即放弃。
+    ///
+    /// 两道防线挡"响应炸弹"——恶意服务器忽略 `Range` 头返回 GB 级数据导致进程 OOM：
+    /// 1. `expectedContentLength` 预检：拦截诚实声明 Content-Length 的服务器
+    /// 2. streaming 累积检查：拦截"声明小、实际发大"的恶意服务器（Content-Length 不可信）
+    ///
+    /// 用 streaming（而非 `data(for:)` 一次性拿完再判断）的原因：`data(for:)` 会先把
+    /// 完整响应缓冲进内存才返回，恶意 GB 级响应在"判断大小"之前就已经把内存撑爆了。
+    ///
+    /// internal（非 private）：URLMetadataCache 拉 URL 页面 title 也走 URLSession，
+    /// 同样需要响应大小防护——这是同 module 内共享的网络安全工具，不是 FaviconCache 私有。
+    nonisolated static func downloadWithLimit(_ request: URLRequest, maxBytes: Int) async -> Data? {
+        do {
+            let (asyncBytes, response) = try await URLSession.shared.bytes(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                return nil
+            }
+            if response.expectedContentLength > Int64(maxBytes) { return nil }
+            var data = Data()
+            let hint = Int(response.expectedContentLength)
+            if hint > 0 { data.reserveCapacity(min(hint, maxBytes)) }
+            for try await byte in asyncBytes {
+                data.append(byte)
+                if data.count > maxBytes { return nil }
+            }
+            return data
+        } catch {
+            return nil
+        }
     }
 
     /// 拉 `<origin>/` 的 HTML head 64KB，解析所有 `<link rel="...icon...">` 候选。
@@ -185,43 +264,31 @@ actor FaviconCache {
             "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
             forHTTPHeaderField: "User-Agent"
         )
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                return []
-            }
-            guard let html = String(data: data, encoding: .utf8)
-                  ?? String(data: data, encoding: .isoLatin1) else { return [] }
-            return parseIconLinks(in: html, baseURL: url)
-        } catch {
-            return []
-        }
+        guard let data = await downloadWithLimit(request, maxBytes: maxHTMLBytes) else { return [] }
+        guard let html = String(data: data, encoding: .utf8)
+              ?? String(data: data, encoding: .isoLatin1) else { return [] }
+        return parseIconLinks(in: html, baseURL: url)
     }
 
     /// 下载单个 URL → 校验是真实图片 → normalize 成 PNG Data。
     /// 抽出独立函数让各源共用，避免 fetchRemote 主流程被 NSImage/NSBitmapImageRep
     /// 校验码淹没（之前所有源都重复一遍 校验+转 PNG 的样板）。
+    ///
+    /// 下载经 downloadWithLimit 限制到 maxImageBytes，杜绝恶意"图片炸弹"撑爆内存。
     private nonisolated static func downloadAndNormalize(url: URL) async -> Data? {
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                return nil
-            }
-            // 校验是真实图片且非 1×1 透明占位：本地 NSImage 仅用于校验，校验完即丢
-            guard let probe = NSImage(data: data), probe.size.width > 1 else { return nil }
-            // Normalize 到 PNG：ico / svg / unknown 格式统一编码，磁盘读回来能直接构造 NSImage
-            if let tiff = probe.tiffRepresentation,
-               let rep = NSBitmapImageRep(data: tiff),
-               let png = rep.representation(using: .png, properties: [:]) {
-                return png
-            }
-            // 罕见：probe 成功但转 PNG 失败 → 兜底原始 data
-            return data
-        } catch {
-            return nil
+        guard let data = await downloadWithLimit(request, maxBytes: maxImageBytes) else { return nil }
+        // 校验是真实图片且非 1×1 透明占位：本地 NSImage 仅用于校验，校验完即丢
+        guard let probe = NSImage(data: data), probe.size.width > 1 else { return nil }
+        // Normalize 到 PNG：ico / svg / unknown 格式统一编码，磁盘读回来能直接构造 NSImage
+        if let tiff = probe.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            return png
         }
+        // 罕见：probe 成功但转 PNG 失败 → 兜底原始 data
+        return data
     }
 
     /// 解析 HTML 里所有 `<link rel="...icon..." href="...">` 标签，返回 IconCandidate 数组。
@@ -254,7 +321,9 @@ actor FaviconCache {
         for match in matches {
             let tag = nsHead.substring(with: match.range)
             guard let rel = extractAttribute(name: "rel", in: tag)?.lowercased(),
-                  rel.contains("icon"),
+                  // 只收真正的彩色 raster favicon（icon / shortcut icon / apple-touch-icon）。
+                  // 排除 mask-icon / fluid-icon —— 它们 rel 含 "icon" 但不是常规 favicon。
+                  iconRelKind(rel) != nil,
                   let href = extractAttribute(name: "href", in: tag),
                   !href.isEmpty,
                   // 排除 data:image/svg+xml 之类的内联 SVG —— 通常是 1×1 灰度占位，
@@ -266,17 +335,40 @@ actor FaviconCache {
         return results
     }
 
-    /// 对单个候选评分：apple-touch-icon（高分辨率 PNG）> 大 sizes 的 icon > 小 icon > shortcut icon。
+    /// 可用作彩色 favicon 的 rel 类型。
+    private enum IconRelKind {
+        case appleTouch  // apple-touch-icon[-precomposed]：通常高分辨率 PNG
+        case standard    // icon / shortcut icon
+    }
+
+    /// 判定 rel 是否是可用的 raster favicon，并返回其类型。
+    ///
+    /// **必须按空格分词精确匹配，不能用 `contains`/`hasSuffix`**：HTML 里有一类含 "icon"
+    /// 字样但不是常规 favicon 的 link——`mask-icon`（Safari pinned tab 的**单色矢量蒙版**，
+    /// 选中会得到纯色剪影而非彩色 logo）、`fluid-icon`（Fluid.app 专用）。
+    /// `"mask-icon".hasSuffix("icon")` 是 true，模糊匹配会把它们误纳入候选。
+    /// 分词后 `"mask-icon"` 是单 token `["mask-icon"]`，不含独立的 `"icon"` token → 被排除；
+    /// `"shortcut icon"` 分词为 `["shortcut", "icon"]` → 含 `"icon"` → 正确保留。
+    private nonisolated static func iconRelKind(_ rel: String) -> IconRelKind? {
+        let tokens = Set(rel.lowercased().split(separator: " ").map(String.init))
+        if tokens.contains("apple-touch-icon") || tokens.contains("apple-touch-icon-precomposed") {
+            return .appleTouch
+        }
+        if tokens.contains("icon") {  // "icon" 或 "shortcut icon"
+            return .standard
+        }
+        return nil  // mask-icon / fluid-icon / 非 icon 类型
+    }
+
+    /// 对单个候选评分：apple-touch-icon（高分辨率 PNG）> 带大 sizes 的 icon > 普通 icon。
     /// 这套优先级是 Safari 自己也用的——预览面板 64pt @2x = 128px，apple-touch-icon
     /// 默认 180px 完全够，且通常是 PNG 比 ICO 渲染干净。
     ///
-    /// 提到 file-level 是因为 fetchRemote 阶段 3 的排序也要用同一份评分逻辑——把它锁在
-    /// chooseBestIcon 内部会导致 sort 时要重复实现一遍。
+    /// 非 favicon 类型（mask-icon 等）返回 -1，排序后排在末尾，fetchRemote 不会下载。
+    /// 提到 file-level 是因为 fetchRemote 阶段 3 的排序也要用同一份评分逻辑。
     private nonisolated static func score(of candidate: IconCandidate) -> Int {
-        var s = 0
-        if candidate.rel.contains("apple-touch-icon") { s += 100 }
-        if candidate.rel == "icon" || candidate.rel.contains(" icon") || candidate.rel.hasSuffix("icon") { s += 50 }
-        if candidate.rel.contains("shortcut") { s += 10 }
+        guard let kind = iconRelKind(candidate.rel) else { return -1 }
+        var s = (kind == .appleTouch) ? 100 : 50
         // sizes 包含明确像素数（如 "192x192"）的优先
         if let sizes = candidate.sizes, sizes.contains("x") {
             let dims = sizes.lowercased().split(separator: "x")
@@ -331,13 +423,17 @@ actor FaviconCache {
     }
 
     /// origin → 磁盘文件名 sanitize。
-    /// origin 含 `://` 和可能的 `:port`，FileManager 会把 `/` 当路径分隔符，必须替换。
+    /// origin 含 `://`、可能的 `:port` 和 IPv6 的 `[]`，FileManager 会把 `/` 当路径分隔符，
+    /// `[]` 在文件名里虽合法但易引发 shell/glob 歧义，统一替换为 `_`。
     /// 例：`http://112.44.253.74:9210` → `http___112.44.253.74_9210.png`
+    ///     `http://[::1]:8080` → `http____::1__8080.png`（`[` `]` `:` 都转 `_`）
     private static func diskName(for origin: String) -> String {
         var safe = origin
         safe = safe.replacingOccurrences(of: "://", with: "___")
         safe = safe.replacingOccurrences(of: ":", with: "_")
         safe = safe.replacingOccurrences(of: "/", with: "_")
+        safe = safe.replacingOccurrences(of: "[", with: "_")
+        safe = safe.replacingOccurrences(of: "]", with: "_")
         return safe
     }
 

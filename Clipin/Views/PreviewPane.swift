@@ -1243,8 +1243,36 @@ private actor URLMetadataCache {
         lru.append(key)
     }
 
+    /// HTML head 下载大小上限 256KB：与 FaviconCache 同款防护（防服务器忽略 Range 返回超大页面）。
+    private static let maxHTMLBytes = 256 * 1024
+
+    /// query 里出现这些关键字时，跳过 title 抓取——避免"选中即 GET"消费一次性 token。
+    ///
+    /// 背景：用户从邮件/聊天里复制的链接常带一次性 token（magic link / 邮箱验证 /
+    /// 退订链接）。RESTful 规范说 GET 应幂等无副作用，但真实 Web 里这类链接经常
+    /// "GET 即消费"。Clipin 在用户"只是选中条目预览"时就自动 GET，比浏览器（要主动点击）
+    /// 更激进——所以含敏感 token 的 URL 一律不抓 title，预览面板退化成只显示 URL 本身。
+    ///
+    /// 这是黑名单，不可能穷尽（攻击者可用任意 key 名），但能挡住绝大多数常见命名。
+    private static let sensitiveQueryKeys: Set<String> = [
+        "token", "access_token", "id_token", "auth", "authorization",
+        "verify", "verification", "confirm", "confirmation",
+        "unsubscribe", "session", "sessionid", "sid",
+        "code", "otp", "magic", "secret", "apikey", "api_key", "key",
+        "reset", "password", "passwd", "signature", "sig",
+    ]
+
+    /// URL 是否带敏感 token query —— 命中则不应自动 GET。
+    private nonisolated static func hasSensitiveToken(_ url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = components.queryItems else { return false }
+        return items.contains { sensitiveQueryKeys.contains($0.name.lowercased()) }
+    }
+
     private nonisolated static func fetch(urlString: String) async -> Snapshot {
         guard let url = URL(string: urlString) else { return Snapshot(title: nil) }
+        // 含一次性 token 的链接：不自动 GET，避免在用户仅"选中预览"时消费掉 token
+        if hasSensitiveToken(url) { return Snapshot(title: nil) }
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
         // 限制下载量：HTML head 在前 64KB 内的概率 >95%，部分 CDN 忽略 Range 也有 4s 兜底
@@ -1254,19 +1282,15 @@ private actor URLMetadataCache {
             "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
             forHTTPHeaderField: "User-Agent"
         )
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                return Snapshot(title: nil)
-            }
-            guard let html = String(data: data, encoding: .utf8)
-                  ?? String(data: data, encoding: .isoLatin1) else {
-                return Snapshot(title: nil)
-            }
-            return Snapshot(title: extractTitle(from: html))
-        } catch {
+        // 经 FaviconCache.downloadWithLimit 限制响应大小，防服务器忽略 Range 返回超大页面
+        guard let data = await FaviconCache.downloadWithLimit(request, maxBytes: maxHTMLBytes) else {
             return Snapshot(title: nil)
         }
+        guard let html = String(data: data, encoding: .utf8)
+              ?? String(data: data, encoding: .isoLatin1) else {
+            return Snapshot(title: nil)
+        }
+        return Snapshot(title: extractTitle(from: html))
     }
 
     /// 提取 title 优先级：og:title > twitter:title > <title>。
@@ -1396,11 +1420,10 @@ private struct FaviconView: View {
                 loadFinished = true
                 return
             }
-            let requestedURL = url
-            let fetched = await FaviconCache.shared.icon(for: requestedURL)
-            // 快速切 URL 时旧请求的网络响应可能晚到，必须验证当前仍是同一 URL，
-            // 否则会把上一条 URL 的 favicon 覆盖到新条目上。
-            guard !Task.isCancelled, requestedURL == url else { return }
+            let fetched = await FaviconCache.shared.icon(for: url)
+            // 快速切 URL 时旧请求的网络响应可能晚到：`.task(id:)` 在 id 变化时自动取消
+            // 旧 task，await 返回后 `Task.isCancelled` 即为 true，丢弃陈旧结果。
+            guard !Task.isCancelled else { return }
             image = fetched
             loadFinished = true
         }
