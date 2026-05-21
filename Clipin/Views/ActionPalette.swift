@@ -52,7 +52,7 @@ struct ActionPalette: View {
     @Binding var isPresented: Bool
     let actions: [PaletteAction]
     @Binding var selectedIndex: Int
-    let sceneState: ClipinSceneState
+    let selectedItem: ClipListItem?
     let onSelect: (Int) -> Void
     @State private var hoveredIndex: Int?
 
@@ -77,8 +77,8 @@ struct ActionPalette: View {
                 .onTapGesture { dismiss() }
 
             palettePanel
-                .padding(.trailing, ClipinChrome.shellGap)
-                .padding(.bottom, ClipinChrome.floatingFooterBand + ClipinChrome.shellGap)
+                .padding(.trailing, ClipinChrome.shellGap * 2)
+                .padding(.bottom, ClipinChrome.shellGap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
@@ -106,16 +106,34 @@ struct ActionPalette: View {
         .padding(12)
         .frame(width: 372, alignment: .leading)
         .clipinChromeGlass(cornerRadius: ClipinChrome.paletteCornerRadius)
+        .shadow(color: paletteShadowColor, radius: 28, x: 0, y: 14)
         .onAppear { selectedIndex = 0 }
+    }
+
+    /// native glassEffect 只给发丝 rim、不给落影；底栏淡出后右下角无第二层玻璃，
+    /// 这层落影让面板干净地浮在内容之上。dark 模式窗体暗、需更深的影才立得住。
+    private var paletteShadowColor: Color {
+        Color.black.opacity(colorScheme == .dark ? 0.40 : 0.22)
     }
 
     private var paletteHeader: some View {
         HStack(spacing: 8) {
-            Text("Actions")
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(ClipinInk.secondary)
+            if let item = selectedItem {
+                Image(systemName: item.typeIconName)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(ClipinInk.secondary)
+                Text(item.displayTitle)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(ClipinInk.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            } else {
+                Text("Actions")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(ClipinInk.secondary)
+            }
 
-            Spacer()
+            Spacer(minLength: 8)
 
             ClipinKeycap(
                 key: "Esc",

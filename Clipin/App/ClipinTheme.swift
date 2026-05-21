@@ -31,6 +31,9 @@ enum ClipinChrome {
     static let searchCornerRadius: CGFloat = 14
     static let rowCornerRadius: CGFloat = 12
     static let paletteCornerRadius: CGFloat = 26
+    /// ⌘K 动作面板内容区最大高度（窗口 540 − 顶部搜索区呼吸位 ~72 − 底边距 8）。
+    /// 超出则面板内层 ScrollView 滚动。
+    static let paletteMaxHeight: CGFloat = 460
     static let badgeCornerRadius: CGFloat = 10
     // 全局间距节奏：所有 shell→section / section→section / section 垂直节奏统一用 shellGap
     static let shellGap: CGFloat = 8

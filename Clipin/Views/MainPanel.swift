@@ -129,7 +129,7 @@ struct MainPanel: View {
                     ),
                     actions: viewModel.paletteActions,
                     selectedIndex: $viewModel.selectedActionIndex,
-                    sceneState: sceneState,
+                    selectedItem: viewModel.selectedListItem,
                     onSelect: { index in
                         viewModel.executePaletteAction(at: index)
                     }
