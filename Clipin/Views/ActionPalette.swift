@@ -87,7 +87,7 @@ struct ActionPalette: View {
                 .onTapGesture { dismiss() }
 
             palettePanel
-                .padding(.trailing, ClipinChrome.shellGap * 2)
+                .padding(.trailing, ClipinChrome.shellGap)
                 .padding(.bottom, ClipinChrome.shellGap)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -157,16 +157,16 @@ struct ActionPalette: View {
         HStack(spacing: 8) {
             if let item = selectedItem {
                 Image(systemName: item.typeIconName)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(ClipinInk.secondary)
                 Text(item.displayTitle)
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(ClipinInk.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
             } else {
                 Text("Actions")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(ClipinInk.secondary)
             }
 
@@ -193,25 +193,27 @@ struct ActionPalette: View {
         return HStack(spacing: 0) {
             Label {
                 Text(action.localizedTitle)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 13.5, weight: .regular))
                     .lineLimit(1)
                     .truncationMode(.tail)
             } icon: {
                 Image(systemName: action.systemImage)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13.5, weight: .regular))
             }
             .foregroundStyle(
                 action.isDestructive
                     ? (isSelected ? selectedInk : Color.red)
-                    : (isSelected ? selectedInk : ClipinInk.primary)
+                    : (isSelected ? selectedInk : Color.primary.opacity(0.82))
             )
 
             Spacer()
 
-            ClipinKeycap(
-                key: action.badge,
-                foreground: isSelected ? selectedSecondaryInk : ClipinInk.secondary
-            )
+            if !action.badge.isEmpty {
+                ClipinKeycap(
+                    key: action.badge,
+                    foreground: isSelected ? selectedSecondaryInk : ClipinInk.secondary
+                )
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
@@ -267,10 +269,8 @@ struct ActionPaletteBuilder {
         var list: [PaletteAction] = []
 
         if let selected = viewModel.selectedListItem {
-            // 不带 badge：Paste 是 palette 默认选中的第一项，"选中+Return=执行" 已由
-            // selection 高亮表达；行右侧固定画 ↵ 会让用户在切到其它行时仍误以为
-            // Return 直接粘贴，违反"展示出来的快捷键必须是真快捷键"约束。
-            list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", section: .primary) {
+            // Paste 是 palette 默认选中的首项，↵ 执行的就是它——↵ 是它的真实快捷键。
+            list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", section: .primary) {
                 viewModel.pasteSelected()
             })
 
@@ -279,7 +279,7 @@ struct ActionPaletteBuilder {
                 list.append(contentsOf: viewModel.representationActions(for: item))
             }
 
-            list.append(PaletteAction("Paste as Plain Text", systemImage: "textformat", shortcut: .pastePlain, section: .primary) {
+            list.append(PaletteAction("Paste as Plain Text", systemImage: "doc.plaintext", shortcut: .pastePlain, section: .primary) {
                 viewModel.pastePlainSelected()
             })
 

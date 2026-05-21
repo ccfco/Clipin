@@ -21,16 +21,15 @@ enum QAFlags {
 }
 
 enum ClipinChrome {
-    // 主圆角层级（嵌套依次递减）：shell 24 → section 16 → contentStage/field 14 → metadata 12 → row 12 → badge 10
-    // 链外两个独立量级（不参与嵌套递减，按用途单列）：
-    //   card 18 —— 辅助窗口（引导/权限/更新）里 ClipinContentSurface 的 grouped 卡片，介于 section 与 shell 之间
-    //   palette 26 —— 动作面板浮在最顶层，刻意比 shell 略大以强调悬浮层级
+    // 主圆角层级（嵌套依次递减）：shell / palette 24 → section 16 → contentStage/field 14 → metadata 12 → row 12 → badge 10
+    // 动作面板是贴窗口边的浮层，圆角必须 ≤ 窗口外壳，故与 shell 同为 24（不能比容器更圆）。
+    // 链外独立量级：card 18 —— 辅助窗口（引导/权限/更新）里 ClipinContentSurface 的 grouped 卡片，介于 section 与 shell 之间。
     static let shellCornerRadius: CGFloat = 24
     static let sectionCornerRadius: CGFloat = 16
     static let cardCornerRadius: CGFloat = 18
     static let searchCornerRadius: CGFloat = 14
     static let rowCornerRadius: CGFloat = 12
-    static let paletteCornerRadius: CGFloat = 26
+    static let paletteCornerRadius: CGFloat = 24
     /// ⌘K 动作面板内容区最大高度（窗口 540 − 顶部搜索区呼吸位 ~72 − 底边距 8）。
     /// 超出则面板内层 ScrollView 滚动。
     static let paletteMaxHeight: CGFloat = 460
