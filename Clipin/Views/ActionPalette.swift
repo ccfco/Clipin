@@ -14,6 +14,8 @@ struct PaletteAction: Identifiable {
     let title: String
     var localizedTitle: LocalizedStringKey { .init(title) }
     let systemImage: String
+    /// 真实 App 图标(如「粘贴到 XX」行);非 nil 时优先于 systemImage 渲染。
+    let appIcon: NSImage?
     let badge: String
     let shortcut: PaletteActionShortcut?
     let section: PaletteActionSection
@@ -24,6 +26,7 @@ struct PaletteAction: Identifiable {
     init(
         _ title: String,
         systemImage: String,
+        appIcon: NSImage? = nil,
         badge: String? = nil,
         shortcut: PaletteActionShortcut? = nil,
         section: PaletteActionSection = .secondary,
@@ -33,6 +36,7 @@ struct PaletteAction: Identifiable {
     ) {
         self.title = title
         self.systemImage = systemImage
+        self.appIcon = appIcon
         self.badge = badge ?? shortcut?.badge ?? ""
         self.shortcut = shortcut
         self.section = section
@@ -113,13 +117,27 @@ struct ActionPalette: View {
         // 与面板距窗口边的 edge 一致（用户要的「选中→面板 = 面板→app」）。
         .padding(ClipinChrome.gap)
         .frame(width: 372, alignment: .leading)
-        // 玻璃面与落影独立成层:.shadow 只栅格化这层纯玻璃圆角矩形(不含文字),
+        // 玻璃面与落影独立成层:.shadow 只栅格化这层玻璃+描边圆角矩形(不含文字),
         // 文字留在 background 之外直接合成 → 不被离屏栅格化,保持锐利。
         // 若把 .shadow 直接压在「内容 + 玻璃」整棵子树上,半透明玻璃会逼
         // SwiftUI 连文字一起位图化,文字丢掉像素对齐与次像素抗锯齿 → 发虚。
         .background {
+            let shape = RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
             Color.clear
-                .clipinChromeGlass(cornerRadius: ClipinChrome.cornerSurface)
+                // 保留半透明玻璃,但亮色给玻璃加明显的白 tint —— 面板比窗体玻璃更白,
+                // 一白一灰自然分层(对齐 Raycast:靠面板更白拉开层次,不靠压暗背景)。
+                // 暗色不 tint(.regular 玻璃在暗窗体上本就偏亮浮起,已自带层次)。
+                .glassEffect(
+                    colorScheme == .dark ? .regular : .regular.tint(Color.white.opacity(0.55)),
+                    in: shape
+                )
+                // hairline 描边勾出面板边缘,玻璃叠玻璃时也能看清边界。
+                .overlay(
+                    shape.strokeBorder(
+                        Color.primary.opacity(colorScheme == .dark ? 0.16 : 0.10),
+                        lineWidth: 0.5
+                    )
+                )
                 .shadow(color: paletteShadowColor, radius: 28, x: 0, y: 14)
         }
         .onAppear { selectedIndex = 0 }
@@ -201,23 +219,24 @@ struct ActionPalette: View {
         let selectedInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.92 : 0.82) : Color.accentColor
         let selectedSecondaryInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.72 : 0.64) : ClipinInk.secondary
 
-        return HStack(spacing: 0) {
-            Label {
-                Text(action.localizedTitle)
-                    .font(.system(size: 13.5, weight: .regular))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            } icon: {
-                Image(systemName: action.systemImage)
-                    .font(.system(size: 13.5, weight: .regular))
-            }
-            .foregroundStyle(
-                action.isDestructive
-                    ? (isSelected ? selectedInk : Color.red)
-                    : (isSelected ? selectedInk : Color.primary.opacity(0.82))
-            )
+        // 该黑的黑(对齐 Raycast):未选中动作标题用纯 primary,选中走 accent/红。
+        let foreground: Color = action.isDestructive
+            ? (isSelected ? selectedInk : Color.red)
+            : (isSelected ? selectedInk : Color.primary)
 
-            Spacer()
+        return HStack(spacing: ClipinChrome.gap) {
+            // 固定图标列:真 App 图标(满色)或 SF Symbol(随文字着色),
+            // 所有动作行图标在同一列对齐(对齐 Raycast)。
+            actionIcon(action, tint: foreground)
+                .frame(width: 18, height: 18)
+
+            Text(action.localizedTitle)
+                .font(.system(size: 13.5, weight: .regular))
+                .foregroundStyle(foreground)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: ClipinChrome.gap)
 
             if !action.badge.isEmpty {
                 ClipinKeycap(
@@ -251,6 +270,21 @@ struct ActionPalette: View {
         .animation(ClipinMotion.feedback, value: isSelected)
     }
 
+    /// 动作行图标:有真实 App 图标则满色渲染,否则用 SF Symbol 跟随文字着色。
+    @ViewBuilder
+    private func actionIcon(_ action: PaletteAction, tint: Color) -> some View {
+        if let appIcon = action.appIcon {
+            Image(nsImage: appIcon)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+        } else {
+            Image(systemName: action.systemImage)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(tint)
+        }
+    }
+
     private var emptyState: some View {
         VStack(spacing: ClipinChrome.gap) {
             Image(systemName: "command")
@@ -281,7 +315,11 @@ struct ActionPaletteBuilder {
 
         if let selected = viewModel.selectedListItem {
             // Paste 是 palette 默认选中的首项，↵ 执行的就是它——↵ 是它的真实快捷键。
-            list.append(PaletteAction("Paste", systemImage: "arrowshape.turn.up.left.fill", badge: "↵", section: .primary) {
+            // 有目标 App 时文案带 App 名 + 真实 App 图标(对齐 Raycast「Paste to XX」)。
+            let pasteTitle = viewModel.targetAppName.map {
+                String(format: NSLocalizedString("Paste to %@", comment: ""), $0)
+            } ?? NSLocalizedString("Paste", comment: "")
+            list.append(PaletteAction(pasteTitle, systemImage: "arrowshape.turn.up.left.fill", appIcon: viewModel.targetAppIcon, badge: "↵", section: .primary) {
                 viewModel.pasteSelected()
             })
 

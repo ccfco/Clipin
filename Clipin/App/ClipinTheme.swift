@@ -11,6 +11,8 @@ enum QAFlags {
 
     /// 启动即显主面板,不依赖全局热键 / 状态栏。
     static var showPanelOnLaunch: Bool { on("CLIPIN_QA_SHOW_PANEL") }
+    /// 启动即打开 ⌘K 动作面板(自截图验收动作面板视觉,免去合成键盘发 ⌘K)。
+    static var showActionsOnLaunch: Bool { on("CLIPIN_QA_SHOW_ACTIONS") }
     /// 去掉 .nonactivatingPanel 并跳过失焦自关,让合成鼠标能触发真 hover。
     static var hoverablePanel: Bool { on("CLIPIN_QA_HOVERABLE") }
     /// 强制常显派生簇(合成鼠标对 nonactivating panel 的 .onHover 不可靠)。
@@ -24,7 +26,7 @@ enum ClipinChrome {
     /// 全 app 唯一间距 / 圆角基准单位。改这一个数，整个 app 的间距与圆角等比缩放。
     /// 设计规则见 CLAUDE.md「统一间距系统」决策：所有间距与圆角都是 edge 的整数倍，
     /// 不允许任何组件再硬编码独立的 padding / cornerRadius 字面量。
-    static let edge: CGFloat = 6
+    static let edge: CGFloat = 8
 
     // MARK: 间距（两档，均为 edge 的整数倍）
 

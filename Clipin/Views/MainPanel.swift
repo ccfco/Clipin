@@ -334,9 +334,10 @@ struct MainPanel: View {
     private func pasteCallToAction(label: String, key: String) -> some View {
         HStack(spacing: ClipinChrome.gap) {
             Text(label)
-                // 治"底栏按钮字太黑":纯 label 在玻璃上过黑,降透明 + medium 即柔。
+                // Paste 是底栏主操作,文字用纯黑突出(该黑的黑);Actions 等次级
+                // 命令仍走柔化灰,主次分明。
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Color.primary.opacity(0.82))
+                .foregroundStyle(Color.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
 

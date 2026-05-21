@@ -325,12 +325,12 @@ struct ClipItemRow: View {
                 .animation(ClipinMotion.feedback, value: isHovered)
 
             Text(highlightedDisplayText)
-                // 选中 → accent(蓝),对齐 Spotlight 选中高亮的 accent 心智(用户明确要求);
-                // 未选 → 字重 .regular(原 .medium 在玻璃上显"太黑",降重即变柔,不动系统 label 色)。
-                .font(.system(size: 13.5, weight: isSelected ? .semibold : .regular))
-                // 未选标题用柔化 primary(用户反馈纯 label 在玻璃上"太黑");
-                // 选中走 accent(蓝)。
-                .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.82)))
+                // 字重恒为 .regular:对齐 Raycast,选中行不再加粗——选中感全交给
+                // accent 色 + 高亮底板,字重保持一致,整列文字粗细统一。
+                .font(.system(size: 13.5, weight: .regular))
+                // 未选 → 纯 primary(该黑的黑,对齐 Raycast 列表纯黑标题);
+                // 选中 → accent(蓝),对齐 Spotlight 选中高亮心智(用户明确要求)。
+                .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
 

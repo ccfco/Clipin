@@ -43,6 +43,9 @@ final class ClipboardViewModel: ObservableObject {
     @Published var browseMode: LauncherBrowseMode = .all
     @Published private(set) var sections: [ClipSection] = []
     @Published var targetAppName: String?
+    /// 目标 App 图标,供动作面板 Paste 行渲染真实 App 图标(对齐 Raycast)。
+    /// 与 targetAppName 同源同步更新,统一走 updateTargetApp(_:)。
+    @Published var targetAppIcon: NSImage?
     @Published var isShowingActions = false
     @Published var selectedActionIndex = 0
     @Published private(set) var paletteActions: [PaletteAction] = []
@@ -503,13 +506,19 @@ final class ClipboardViewModel: ObservableObject {
         return true
     }
 
-    func prepareForLauncherPresentation(targetAppName: String?, selectLatest: Bool) {
+    func prepareForLauncherPresentation(targetApp: NSRunningApplication?, selectLatest: Bool) {
         skipNextDebouncedLoad = true
         sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
         searchQuery = ""
         browseMode = sessionBaseBrowseMode
-        self.targetAppName = targetAppName
+        updateTargetApp(targetApp)
         loadItems(selectLatest: selectLatest)
+    }
+
+    /// 目标 App 名与图标的唯一写入口,保证二者同源不漂移。
+    func updateTargetApp(_ app: NSRunningApplication?) {
+        targetAppName = app?.localizedName
+        targetAppIcon = app?.icon
     }
 
     func togglePinSelected() {

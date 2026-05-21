@@ -204,10 +204,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()
         backfillImageDimensionsForExistingImages()
-        // QA 自截图钩子(语义见 QAFlags)。
+        // QA 自截图钩子(语义见 QAFlags)。用 showPanel() 而非 togglePanel():
+        // showLaunchExperienceIfNeeded() 现在可能已在启动时点亮面板,
+        // toggle 会把已可见的面板反向关掉;QA 钩子的意图是「确保面板可见」,showPanel 幂等。
         if QAFlags.showPanelOnLaunch {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-                self?.togglePanel()
+                self?.showPanel()
+                if QAFlags.showActionsOnLaunch {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                        self?.viewModel?.showActionsPalette()
+                    }
+                }
             }
         }
     }
@@ -622,7 +629,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             previousApp = front
         }
         viewModel?.prepareForLauncherPresentation(
-            targetAppName: previousApp?.localizedName,
+            targetApp: previousApp,
             selectLatest: true
         )
 
@@ -776,7 +783,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                   let panel = self.panel,
                   panel.isVisible else { return }
             panel.makeKeyAndOrderFront(nil)
-            self.viewModel?.targetAppName = self.resolveTargetApp()?.localizedName
+            self.viewModel?.updateTargetApp(self.resolveTargetApp())
             NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
         }
     }
@@ -817,14 +824,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ) { [weak self] notification in
             let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             let bundleId = app?.bundleIdentifier
-            let name = app?.localizedName
             Task { @MainActor [weak self] in
                 guard let self,
                       self.viewModel?.isContinuousPasteEnabled == true,
                       let app,
                       bundleId != Bundle.main.bundleIdentifier else { return }
                 self.previousApp = app
-                self.viewModel?.targetAppName = name
+                self.viewModel?.updateTargetApp(app)
             }
         }
     }
@@ -1463,6 +1469,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             hadExistingStorageBeforeBootstrap: appState.hadExistingStorageBeforeBootstrap
         ) {
             openOnboardingWindow(permission: permission)
+            // 引导结束后由 finishOnboarding() 负责亮出面板，这里不再叠一层。
+            return
+        }
+
+        // 不走引导的冷启动也必须给出可见反馈：菜单栏 app 启动后唯一信号是 16pt 小图标，
+        // 不点亮面板会让用户以为 app 没启动成功。但开启「登录时启动」意味着用户主动选择了
+        // 后台静默自启，登录时不该弹面板；未开启时每一次启动都来自用户手动双击，值得亮出面板。
+        //
+        // 关键：showPanel() 必须延后到下一个 run loop 轮次，不能在 applicationDidFinishLaunching
+        // 的同步上下文里直接调用——实测同步调用时面板不会显示出来。延后一轮等启动序列收尾，
+        // showPanel() 才和热键路径在同样的稳态时机执行（QA 自截图钩子早先也用 asyncAfter 绕过此问题）。
+        if !settings.launchAtLoginEnabled {
+            DispatchQueue.main.async { [weak self] in
+                self?.showPanel()
+            }
         }
         // 权限提示只在用户主动粘贴时按需触发（executePasteFlow），避免每次启动都弹窗打扰
     }
