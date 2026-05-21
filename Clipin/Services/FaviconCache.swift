@@ -97,61 +97,105 @@ actor FaviconCache {
         (scheme == "https" && port == 443) || (scheme == "http" && port == 80)
     }
 
-    /// fetchRemote 返回 PNG-encoded Data：在 detached task 内一次性把网络数据 normalize
-    /// 成 PNG（用 NSBitmapImageRep 转码），后续 cache/磁盘/UI 三个消费方都基于这份
-    /// immutable Data 各自构造独立 NSImage，杜绝跨线程共享 NSImage 实例。
+    /// 单个 icon 候选：HTML `<link rel="...">` 标签或隐式 `/favicon.ico` 都用同一种类型表达。
+    /// 通过统一候选模型，所有可能的 favicon 信源都参与同一次评分排序——避免之前 4 源串行
+    /// "试一个等超时再试下一个"的累加延迟。
+    private struct IconCandidate {
+        let rel: String        // "icon" / "apple-touch-icon" / "shortcut icon"
+        let href: String       // 可能是相对路径（"/icon.png"）或绝对 URL
+        let sizes: String?     // "32x32" / "180x180" / nil（隐式 /favicon.ico 没 sizes 信息）
+        let baseURL: URL       // 用于 resolve 相对 href 到完整 URL
+    }
+
+    /// 浏览器风格 favicon 抓取（借鉴 Chromium FaviconHandler + Firefox places favicon service）：
     ///
-    /// 多源回退顺序（按"命中率 × 速度"权衡）：
-    /// 1. **origin 直连** `<origin>/favicon.ico` —— 保留传入 URL 的 scheme + port，
-    ///    覆盖 IP+port 服务（vite/dev server、内网面板等）；约 50% 公网站点命中
-    /// 2. **根域直连** `https://<root>/favicon.ico` —— 覆盖 SPA 子域：
-    ///    docs.feishu.cn 没有但 feishu.cn 有。仅对域名生效，IP 跳过
-    /// 3. **HTML head 解析** `<link rel="icon">` —— 覆盖飞书/Notion/各种 SaaS 把
-    ///    favicon 放在 CDN 的场景；保留原 origin，相对路径 resolve 到 origin 上
-    /// 4. **Google s2 服务** —— 仅对域名走（s2 只查 DNS 域名），IP 跳过避免浪费 4s
+    /// **核心哲学**：先轻量收集所有候选元数据（href + sizes 声明），再用评分函数选最佳，
+    /// 最后单次下载选定的图片字节。区别于之前的"多源串行回退"——后者会在最佳源失败后
+    /// 退而求其次下载次优 icon（如 32×32 ico 而不是 180×180 apple-touch-icon）。
+    ///
+    /// 三阶段：
+    /// 1. **候选收集**（并行）：拉 origin / 根域的 HTML head 64KB，解析 `<link rel="icon">`。
+    ///    候选只是 href 元数据，**不下载图片字节**——这是性能关键，HTML head 64KB 比图片
+    ///    完整下载轻 10×
+    /// 2. **隐式 fallback 候选**：始终给候选列表追加 `<origin>/favicon.ico`（IP 服务）和
+    ///    `https://<root>/favicon.ico`（域名）。这是浏览器对"HTML 没声明 icon"的隐式
+    ///    fallback——大多数老站点不声明 icon link，但 /favicon.ico 路径有图
+    /// 3. **评分排序 + top-K 下载**：chooseBestIcon 按 apple-touch-icon > icon > sizes
+    ///    从高到低排序。下载 top-2，第一个成功就用。top-2 是为了 best 失败时还能 fallback
+    ///    到次优，最坏 2 × 4s = 8s（vs 之前 4 源串行最坏 24s）
+    ///
+    /// 删除 Google s2 第三方代理：浏览器从不用代理，s2 自己也是用 HTML+ico 抓 favicon，
+    /// 我们直连比绕一层更准；ATS 放开后没有"HTTP 拉不到只能靠 s2 HTTPS"的需求。
     private nonisolated static func fetchRemote(url: URL, origin: String) async -> Data? {
-        var triedURLs = Set<String>()
-
-        func tryURL(_ urlString: String) async -> Data? {
-            guard !triedURLs.contains(urlString), let u = URL(string: urlString) else { return nil }
-            triedURLs.insert(urlString)
-            return await downloadAndNormalize(url: u)
-        }
-
         let host = url.host ?? ""
         let hostIsIP = isIPAddress(host)
+        let root = hostIsIP ? nil : rootDomain(of: host)
+        let needsRootFallback = !hostIsIP && root != nil && root != host
 
-        // 第 1 源：origin 直连（保留 scheme + port，关键能力）
-        if let data = await tryURL("\(origin)/favicon.ico") { return data }
+        // === 阶段 1: 并行收集 HTML 候选 ===
+        // origin HTML 几乎总要看（除非 origin 拉不通）；根域 HTML 仅对子域有意义。
+        async let originCandidates = collectCandidates(from: origin)
+        async let rootCandidates: [IconCandidate] = needsRootFallback
+            ? collectCandidates(from: "https://\(root!)")
+            : []
 
-        // 第 2 源：根域回退（仅对域名生效；IP 没有"根域"概念）
-        if !hostIsIP, let root = rootDomain(of: host), root != host {
-            if let data = await tryURL("https://\(root)/favicon.ico") { return data }
-            if let data = await tryURL("https://www.\(root)/favicon.ico") { return data }
+        var allCandidates = await originCandidates
+        allCandidates.append(contentsOf: await rootCandidates)
+
+        // === 阶段 2: 加入隐式 /favicon.ico 候选 ===
+        // 评分基础分 50（与 rel="icon" 同分），低于 apple-touch-icon（100）。
+        // 如果 HTML 声明了高优先级 icon link，会优先选 HTML 的；HTML 没声明的话隐式 ico 兜底。
+        if let originURL = URL(string: origin) {
+            allCandidates.append(IconCandidate(
+                rel: "icon", href: "/favicon.ico", sizes: nil, baseURL: originURL
+            ))
+        }
+        if needsRootFallback, let r = root, let rootURL = URL(string: "https://\(r)") {
+            allCandidates.append(IconCandidate(
+                rel: "icon", href: "/favicon.ico", sizes: nil, baseURL: rootURL
+            ))
         }
 
-        // 第 3 源：HTML head 解析。优先用传入的 origin（保留 port 和 scheme），
-        // 失败再回退根域 https://；IP 只试自身 origin。
-        var htmlOrigins: [String] = [origin]
-        if !hostIsIP, let root = rootDomain(of: host) {
-            let rootOrigin = "https://\(root)"
-            if !htmlOrigins.contains(rootOrigin) { htmlOrigins.append(rootOrigin) }
-        }
-        for htmlOrigin in htmlOrigins where !triedURLs.contains("html:\(htmlOrigin)") {
-            triedURLs.insert("html:\(htmlOrigin)")
-            if let iconHref = await fetchIconFromHTML(origin: htmlOrigin),
-               let data = await tryURL(iconHref) {
-                return data
-            }
-        }
-
-        // 第 4 源：Google s2 兜底（仅域名）
-        if !hostIsIP,
-           let data = await tryURL("https://www.google.com/s2/favicons?domain=\(host)&sz=128") {
+        // === 阶段 3: 评分排序 → 下载 top-2 ===
+        // top-2 是 best 失败时的 fallback：apple-touch-icon 链接如果服务器 404（站点 HTML 错），
+        // 我们仍能下载到次优 icon。极端最坏 2 × 4s = 8s。
+        let sorted = allCandidates.sorted { score(of: $0) > score(of: $1) }
+        for candidate in sorted.prefix(2) {
+            guard let resolved = URL(string: candidate.href, relativeTo: candidate.baseURL)?.absoluteURL,
+                  let data = await downloadAndNormalize(url: resolved) else { continue }
             return data
         }
-
         return nil
+    }
+
+    /// 拉 `<origin>/` 的 HTML head 64KB，解析所有 `<link rel="...icon...">` 候选。
+    /// 失败（网络错 / 非 2xx / 解析失败）返回空数组——不抛错，让上层用其它候选 fallback。
+    ///
+    /// 注意：函数名从"fetchIconFromHTML（返回单个 best href）"改成"collectCandidates（返回所有候选）"，
+    /// 反映新的设计哲学——HTML 解析只负责"提供候选"，"选最佳"留给上层统一评分。
+    private nonisolated static func collectCandidates(from origin: String) async -> [IconCandidate] {
+        guard let url = URL(string: "\(origin)/") else { return [] }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 4
+        // Range 64KB：绝大多数站点 head 在前 64KB 内，避免下载完整页面浪费带宽。
+        // 部分 CDN 忽略 Range 返回完整 HTML —— 4s 超时是兜底安全网。
+        request.setValue("bytes=0-65535", forHTTPHeaderField: "Range")
+        // Safari UA：部分站点按 UA 切版本（移动版 vs PC 版），通用 UA 拿到完整 head
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
+            forHTTPHeaderField: "User-Agent"
+        )
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                return []
+            }
+            guard let html = String(data: data, encoding: .utf8)
+                  ?? String(data: data, encoding: .isoLatin1) else { return [] }
+            return parseIconLinks(in: html, baseURL: url)
+        } catch {
+            return []
+        }
     }
 
     /// 下载单个 URL → 校验是真实图片 → normalize 成 PNG Data。
@@ -180,43 +224,13 @@ actor FaviconCache {
         }
     }
 
-    /// 拉 HTML head 部分，提取 `<link rel="...icon...">` 的 href。
-    /// 使用 `Range: bytes=0-65535` 限制下载量（绝大多数站点 head 在前 64KB 内），
-    /// 但有些 CDN 会忽略 Range 头返回完整 HTML —— 4s 超时是兜底安全网。
-    private nonisolated static func fetchIconFromHTML(origin: String) async -> String? {
-        guard let url = URL(string: "\(origin)/") else { return nil }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 4
-        request.setValue("bytes=0-65535", forHTTPHeaderField: "Range")
-        // 部分站点根据 UA 切首页（移动版/PC 版），用通用 Safari UA 拿到完整 HTML
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
-            forHTTPHeaderField: "User-Agent"
-        )
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                return nil
-            }
-            guard let html = String(data: data, encoding: .utf8)
-                  ?? String(data: data, encoding: .isoLatin1) else { return nil }
-
-            // 解析候选：rel 必须包含 icon 字样；优先级 apple-touch-icon > icon > shortcut icon
-            // （apple-touch-icon 通常是高分辨率 PNG，最适合预览面板的 64×64 显示尺寸）
-            let candidates = parseIconLinks(in: html)
-            guard let best = chooseBestIcon(candidates) else { return nil }
-
-            // resolve 相对路径到完整 URL，相对的 base 就是 origin/，保留 port + scheme
-            return URL(string: best, relativeTo: url)?.absoluteString
-        } catch {
-            return nil
-        }
-    }
-
-    /// 解析 HTML 里所有 `<link rel="...icon..." href="...">` 标签。
+    /// 解析 HTML 里所有 `<link rel="...icon..." href="...">` 标签，返回 IconCandidate 数组。
     /// 用 NSRegularExpression 比 swift-html-parser 类的第三方库更轻量，
     /// favicon meta 标签结构简单稳定，正则覆盖足够。
-    private nonisolated static func parseIconLinks(in html: String) -> [(rel: String, href: String, sizes: String?)] {
+    ///
+    /// baseURL 用于后续 resolve 相对 href（"/icon.png" → "https://example.com/icon.png"）；
+    /// 这里不立即 resolve 而是把 baseURL 存进 IconCandidate，让上层评分排序后再 resolve。
+    private nonisolated static func parseIconLinks(in html: String, baseURL: URL) -> [IconCandidate] {
         // 只截取 <head>...</head> 区间，避免扫到 body 里的伪 link
         let headRange: Range<String.Index>
         if let openTag = html.range(of: "<head", options: .caseInsensitive),
@@ -236,7 +250,7 @@ actor FaviconCache {
         let nsHead = head as NSString
         let matches = linkRegex.matches(in: head, range: NSRange(location: 0, length: nsHead.length))
 
-        var results: [(String, String, String?)] = []
+        var results: [IconCandidate] = []
         for match in matches {
             let tag = nsHead.substring(with: match.range)
             guard let rel = extractAttribute(name: "rel", in: tag)?.lowercased(),
@@ -247,33 +261,30 @@ actor FaviconCache {
                   // NSImage 拿到也是无意义图标
                   !href.hasPrefix("data:") else { continue }
             let sizes = extractAttribute(name: "sizes", in: tag)
-            results.append((rel, href, sizes))
+            results.append(IconCandidate(rel: rel, href: href, sizes: sizes, baseURL: baseURL))
         }
         return results
     }
 
-    /// 在候选里挑最优 icon：apple-touch-icon（高分辨率 PNG）> 大 sizes 的 icon > 小 icon > shortcut icon。
+    /// 对单个候选评分：apple-touch-icon（高分辨率 PNG）> 大 sizes 的 icon > 小 icon > shortcut icon。
     /// 这套优先级是 Safari 自己也用的——预览面板 64pt @2x = 128px，apple-touch-icon
     /// 默认 180px 完全够，且通常是 PNG 比 ICO 渲染干净。
-    private nonisolated static func chooseBestIcon(_ candidates: [(rel: String, href: String, sizes: String?)]) -> String? {
-        guard !candidates.isEmpty else { return nil }
-
-        func score(_ candidate: (rel: String, href: String, sizes: String?)) -> Int {
-            var s = 0
-            if candidate.rel.contains("apple-touch-icon") { s += 100 }
-            if candidate.rel == "icon" || candidate.rel.contains(" icon") || candidate.rel.hasSuffix("icon") { s += 50 }
-            if candidate.rel.contains("shortcut") { s += 10 }
-            // sizes 包含明确像素数（如 "192x192"）的优先
-            if let sizes = candidate.sizes, sizes.contains("x") {
-                let dims = sizes.lowercased().split(separator: "x")
-                if let w = dims.first.flatMap({ Int($0) }) {
-                    s += min(w, 512) / 8  // 上限避免 1024x1024 的 icon 拖垮决分
-                }
+    ///
+    /// 提到 file-level 是因为 fetchRemote 阶段 3 的排序也要用同一份评分逻辑——把它锁在
+    /// chooseBestIcon 内部会导致 sort 时要重复实现一遍。
+    private nonisolated static func score(of candidate: IconCandidate) -> Int {
+        var s = 0
+        if candidate.rel.contains("apple-touch-icon") { s += 100 }
+        if candidate.rel == "icon" || candidate.rel.contains(" icon") || candidate.rel.hasSuffix("icon") { s += 50 }
+        if candidate.rel.contains("shortcut") { s += 10 }
+        // sizes 包含明确像素数（如 "192x192"）的优先
+        if let sizes = candidate.sizes, sizes.contains("x") {
+            let dims = sizes.lowercased().split(separator: "x")
+            if let w = dims.first.flatMap({ Int($0) }) {
+                s += min(w, 512) / 8  // 上限避免 1024x1024 的 icon 拖垮决分
             }
-            return s
         }
-
-        return candidates.max(by: { score($0) < score($1) })?.href
+        return s
     }
 
     private nonisolated static func extractAttribute(name: String, in tag: String) -> String? {
