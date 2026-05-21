@@ -955,12 +955,13 @@ struct SettingsView: View {
     }
 
     private func infoCallout(icon: String, tint: Color, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
-        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
+        // 用 firstTextBaseline 让 SwiftUI 按标题文字基线对齐 SF 图标——
+        // 替代旧的 .top + 1pt 手动微调，扛字号变化、无魔数。
+        HStack(alignment: .firstTextBaseline, spacing: ClipinChrome.groupGap) {
             Image(systemName: icon)
                 .foregroundStyle(tint)
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 18, alignment: .center)
-                .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                 Text(title)

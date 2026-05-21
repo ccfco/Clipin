@@ -659,6 +659,8 @@ private struct FilePreviewBody: View {
     private func multiFileList(paths: [String]) -> some View {
         let shown = Array(paths.prefix(maxRows))
         let overflow = paths.count - shown.count
+        // 文件行图标边长。命名后既驱动图标 frame，又驱动 "+N more" 的对齐缩进。
+        let iconSize: CGFloat = 18
 
         VStack(alignment: .leading, spacing: ClipinChrome.gap) {
             Label("Selection", systemImage: "square.stack.3d.up")
@@ -671,11 +673,11 @@ private struct FilePreviewBody: View {
                         if let img = icon(for: path) {
                             Image(nsImage: img)
                                 .resizable()
-                                .frame(width: 18, height: 18)
+                                .frame(width: iconSize, height: iconSize)
                         } else {
                             RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                                 .fill(Color.primary.opacity(0.06))
-                                .frame(width: 18, height: 18)
+                                .frame(width: iconSize, height: iconSize)
                         }
                         Text(FileClipboardContent.displayName(for: path))
                             .font(.system(size: 12.5))
@@ -689,8 +691,8 @@ private struct FilePreviewBody: View {
                     Text(String(format: NSLocalizedString("+%d more", comment: ""), overflow))
                         .font(.system(size: 11.5))
                         .foregroundStyle(ClipinInk.secondary)
-                        // 缩进 = 图标宽(18) + 图标↔文字间距，让 "+N more" 与上方文件名左缘对齐。
-                        .padding(.leading, 18 + ClipinChrome.gap)
+                        // 缩进 = 图标宽 + 图标↔文字间距，让 "+N more" 与上方文件名左缘对齐。
+                        .padding(.leading, iconSize + ClipinChrome.gap)
                         .padding(.top, ClipinChrome.gap)
                 }
             }

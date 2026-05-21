@@ -59,6 +59,10 @@ enum ClipinChrome {
     static let keycapInsetH: CGFloat = 5
     static let keycapInsetV: CGFloat = 2.5
 
+    /// 底栏按钮 hover 高亮相对玻璃胶囊边的内缩量——高亮比按钮小一圈、露出一圈玻璃 rim。
+    /// 纯渲染细节，远小于最小网格单位，不挂 edge。
+    static let footerHoverRimInset: CGFloat = 2
+
     /// 预览正文（text / OCR / URL full / file path list）字号
     static let previewBodyFontSize: CGFloat = 13.5
     /// 预览 footer 徽章字号；与 ClipinKeycap (10.5) 区分，信息密度更高需更易读。
@@ -323,7 +327,7 @@ struct ClipinFooterGlassButtonStyle: ButtonStyle {
                 .overlay(
                     Capsule(style: .continuous)
                         .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
-                        .padding(2) // 内缩一圈,露出外层玻璃 capsule 边
+                        .padding(ClipinChrome.footerHoverRimInset) // 内缩一圈,露出外层玻璃 capsule 边
                         .allowsHitTesting(false) // 高亮层不抢 Button 的命中
                 )
                 .scaleEffect(pressed ? 0.97 : 1)
@@ -365,7 +369,7 @@ struct ClipinFooterSegmentStyle: ButtonStyle {
                 .background(
                     Capsule(style: .continuous)
                         .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
-                        .padding(2) // 内缩一圈:高亮比按钮小一圈,露出外层连续玻璃
+                        .padding(ClipinChrome.footerHoverRimInset) // 内缩一圈:高亮比按钮小一圈,露出外层连续玻璃
                 )
                 .scaleEffect(pressed ? 0.97 : 1)
                 .contentShape(Capsule(style: .continuous))

@@ -195,6 +195,10 @@ private struct RowFaviconView: View {
     let url: URL?
     @State private var image: NSImage?
 
+    /// favicon 图在 24×24 块内的四周内缩——抓到的 favicon 多是满幅方图，
+    /// 留这一圈让它和「SF 图标坐灰块上」的其它行图标视觉统一，而不是一整块彩色方图。
+    private let glyphInset: CGFloat = 3
+
     var body: some View {
         ZStack {
             if let image {
@@ -203,7 +207,7 @@ private struct RowFaviconView: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .padding(3)
+                    .padding(glyphInset)
             } else if let host = url?.host, !host.isEmpty {
                 RowFaviconLetterMark(host: host)
             } else {
