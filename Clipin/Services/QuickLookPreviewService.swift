@@ -11,7 +11,10 @@ final class QuickLookPreviewService: NSObject, @unchecked Sendable {
     }
 
     private var previewEntries: [PreviewPanelEntry] = []
-    private(set) var isPresenting = false
+    /// 上次已广播的预览可见性——仅用于 setPreviewVisibility 去重。
+    /// 「预览此刻是否在屏上」的真相一律走 isQuickLookOnScreen 直接查系统单例，
+    /// 不靠这个缓存标志：QLPreviewPanel 的关闭回调不在所有路径都可靠触发，缓存会漂移。
+    private var publishedVisibility = false
 
     @MainActor
     func present(session: ClipPreviewSession) {
@@ -43,10 +46,26 @@ final class QuickLookPreviewService: NSObject, @unchecked Sendable {
         setPreviewVisibility(false)
     }
 
+    /// Quick Look 预览面板此刻是否真的在屏上。直接查系统共享单例，不依赖任何缓存标志——
+    /// 这段代码绕过了 QLPreviewPanelController 责任链，previewPanelWillClose 关闭回调
+    /// 并不在所有路径都可靠触发，缓存标志会漂移成「预览已关但标志仍为真」。
+    @MainActor
+    var isQuickLookOnScreen: Bool {
+        QLPreviewPanel.sharedPreviewPanelExists() && (QLPreviewPanel.shared()?.isVisible ?? false)
+    }
+
+    /// 给定屏幕坐标是否落在可见的预览面板范围内。全局点击监视器用它区分
+    /// 「在预览里操作（选 Live Text 文字）」和「点到了预览之外」。
+    @MainActor
+    func previewPanelContains(screenPoint: NSPoint) -> Bool {
+        guard isQuickLookOnScreen, let panel = QLPreviewPanel.shared() else { return false }
+        return panel.frame.contains(screenPoint)
+    }
+
     @MainActor
     private func setPreviewVisibility(_ isVisible: Bool) {
-        guard isPresenting != isVisible else { return }
-        isPresenting = isVisible
+        guard publishedVisibility != isVisible else { return }
+        publishedVisibility = isVisible
         NotificationCenter.default.post(
             name: .clipinPreviewVisibilityDidChange,
             object: self,

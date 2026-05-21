@@ -754,7 +754,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// resignKey 入口和 150ms 后的延迟入口都用这个判断，避免重复条件漂移。
     private var canRestoreContinuousPasteFocus: Bool {
         !suppressResignKey
-            && !QuickLookPreviewService.shared.isPresenting
+            && !QuickLookPreviewService.shared.isQuickLookOnScreen
             && viewModel?.isContinuousPasteEnabled == true
             && settingsWindow?.isVisible != true
             && permissionWindow?.isVisible != true
@@ -783,8 +783,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startClickOutsideMonitor() {
         guard clickOutsideMonitor == nil else { return }
-        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+        clickOutsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
             guard let self, !(self.viewModel?.isContinuousPasteEnabled ?? false) else { return }
+            // Quick Look 内容区是跨进程远程视图，在预览里选图片文字的点击同样会被全局
+            // 监视器收到。只有点击真的落在预览面板「之外」才关面板：落在面板内是用户在
+            // 预览里操作。坐标必须取事件自身位置——全局监视器的事件无所属窗口，
+            // locationInWindow 即屏幕坐标；用 NSEvent.mouseLocation 取到的是回调执行
+            // 时的当前指针位置，按下后立刻拖选会偏移、误判成面板外。
+            if QuickLookPreviewService.shared.previewPanelContains(screenPoint: event.locationInWindow) {
+                return
+            }
             self.hidePanel()
         }
     }
