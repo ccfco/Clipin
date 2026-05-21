@@ -530,8 +530,13 @@ private struct ItemListView: View {
         .animation(ClipinMotion.selection, value: isSelected)
         .animation(ClipinMotion.feedback, value: isHovered)
         .contentShape(Rectangle())
+        // 单击选中必须用 simultaneousGesture：若与下面的双击手势同为普通 gesture，
+        // SwiftUI 会把两者设为互斥，单击需等系统双击间隔（~0.3s）确认"不是双击"
+        // 才触发，造成点击条目后选中明显卡顿。声明为 simultaneous 即退出仲裁、
+        // 立即选中；双击时第一下照常选中（幂等），第二下再 onActivate 粘贴，
+        // 与原生 macOS 列表"每次点击即选中、第二击额外激活"的行为一致。
         .onTapGesture(count: 2) { onActivate(item) }
-        .onTapGesture { selection.wrappedValue = item.id }
+        .simultaneousGesture(TapGesture(count: 1).onEnded { selection.wrappedValue = item.id })
         .onHover { hovered in hoveredID = hovered ? item.id : nil }
         .contextMenu {
             Button("Paste") { onActivate(item) }
