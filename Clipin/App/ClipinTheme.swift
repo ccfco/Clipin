@@ -68,6 +68,10 @@ enum ClipinMotion {
     static let statePulse = Animation.spring(response: 0.42, dampingFraction: 0.82)
     static let ambient = Animation.easeInOut(duration: 7.6)
     static let panel = commandReveal
+    /// ⌘K 动作面板入场：从右下角 ⌘K 按钮缩放展开，带一点生气、不过弹。
+    static let paletteReveal = Animation.spring(response: 0.30, dampingFraction: 0.80)
+    /// ⌘K 动作面板退场：向右下角快速收回，不回弹、收得干脆。
+    static let paletteDismiss = Animation.spring(response: 0.20, dampingFraction: 0.92)
 }
 
 /// 主面板共享状态语法。把“正在搜索 / 打开命令面板 / 连续粘贴”等状态
