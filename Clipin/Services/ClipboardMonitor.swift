@@ -183,6 +183,16 @@ final class ClipboardMonitor: ObservableObject {
                         sourceName: sourceName,
                         imagePath: path
                     )
+                    // 入库后立即读图片头写回尺寸，让列表首次渲染就带 (宽×高)。
+                    // 读尺寸失败不阻断采集（fire-and-forget），历史 backfill 会再补。
+                    if let size = ImageDimensions.read(at: path) {
+                        do {
+                            try core.updateImageDimensions(
+                                id: saved.id, width: size.width, height: size.height)
+                        } catch {
+                            print("⚠️ 图片尺寸写入失败 (id=\(saved.id)): \(error)")
+                        }
+                    }
                     // 图片入库后立即刷新列表，让条目即时出现，不等 OCR
                     guard let self else { return }
                     await self.notifyNewItem()

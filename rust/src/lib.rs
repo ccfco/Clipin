@@ -178,6 +178,21 @@ impl ClipinCore {
         self.storage.get_unprocessed_images(limit)
     }
 
+    /// 写入图片像素尺寸（图片保存后异步调用）
+    pub fn update_image_dimensions(
+        &self,
+        id: String,
+        width: i32,
+        height: i32,
+    ) -> Result<(), ClipinError> {
+        self.storage.update_image_dimensions(&id, width, height)
+    }
+
+    /// 获取尚未测量尺寸的图片条目（image_width IS NULL），用于 backfill
+    pub fn get_unsized_images(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
+        self.storage.get_unsized_images(limit)
+    }
+
     /// 粘贴时调用：paste_count +1，作为首要搜索排序信号
     pub fn increment_paste_count(&self, id: String) -> Result<(), ClipinError> {
         self.storage.increment_paste_count(&id)

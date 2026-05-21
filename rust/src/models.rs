@@ -61,6 +61,9 @@ pub struct ClipListItem {
     pub char_count: i32,
     pub paste_count: i32,
     pub copy_count: i32,
+    /// 图片像素尺寸，仅 image 类型有值；采集时与历史 backfill 异步写入
+    pub image_width: Option<i32>,
+    pub image_height: Option<i32>,
 }
 
 /// 错误类型

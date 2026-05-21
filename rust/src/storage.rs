@@ -145,6 +145,9 @@ impl Storage {
         if from_version < 9 {
             Self::migrate_to_v9(&self.conn())?;
         }
+        if from_version < 10 {
+            Self::migrate_to_v10(&self.conn())?;
+        }
         Ok(())
     }
 
@@ -421,6 +424,28 @@ impl Storage {
             PRAGMA user_version = 9;
             ",
         )?;
+        Ok(())
+    }
+
+    fn migrate_to_v10(conn: &Connection) -> Result<(), ClipinError> {
+        // 图片像素尺寸列：仅 image 类型有值，采集时与历史 backfill 异步写入。
+        // 可空 INTEGER：NULL = 尚未测量（backfill 据此定位），ADD COLUMN 不重写表。
+        //
+        // SQLite 的 ADD COLUMN 不支持 IF NOT EXISTS，且每条 ALTER 各自 autocommit——
+        // 若第一条 ALTER 已提交、user_version 还没推进时进程崩溃，下次重进 migrate_to_v10
+        // 会因 duplicate column 永久失败。同 migrate_to_v6：用 PRAGMA table_info 逐列判存，
+        // 缺哪列补哪列，保证整个迁移可重入。
+        let existing: Vec<String> = conn
+            .prepare("PRAGMA table_info(clip_items)")?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        if !existing.iter().any(|n| n == "image_width") {
+            conn.execute_batch("ALTER TABLE clip_items ADD COLUMN image_width INTEGER;")?;
+        }
+        if !existing.iter().any(|n| n == "image_height") {
+            conn.execute_batch("ALTER TABLE clip_items ADD COLUMN image_height INTEGER;")?;
+        }
+        conn.execute_batch("PRAGMA user_version = 10;")?;
         Ok(())
     }
 
@@ -837,7 +862,8 @@ impl Storage {
                 let sql = format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height
                      FROM clip_items
                      WHERE clip_type = ?1 AND is_pinned = ?2
                      ORDER BY is_pinned DESC, created_at DESC
@@ -856,7 +882,8 @@ impl Storage {
                 let sql = format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height
                      FROM clip_items
                      WHERE clip_type = ?1
                      ORDER BY is_pinned DESC, created_at DESC
@@ -873,7 +900,8 @@ impl Storage {
                 let sql = format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height
                      FROM clip_items
                      WHERE is_pinned = ?1
                      ORDER BY is_pinned DESC, created_at DESC
@@ -889,7 +917,8 @@ impl Storage {
                 let sql = format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height
                      FROM clip_items
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT ?1 OFFSET ?2",
@@ -1157,7 +1186,7 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            clip_fts.rank
+                            ci.image_width, ci.image_height, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
@@ -1170,7 +1199,7 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            clip_fts.rank
+                            ci.image_width, ci.image_height, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
@@ -1197,7 +1226,8 @@ impl Storage {
                 format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height
                      FROM clip_items
                      WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
@@ -1209,7 +1239,8 @@ impl Storage {
                 format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height
                      FROM clip_items
                      WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
@@ -1253,7 +1284,7 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            clip_fts.rank
+                            ci.image_width, ci.image_height, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
@@ -1266,7 +1297,7 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            clip_fts.rank
+                            ci.image_width, ci.image_height, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
@@ -1294,7 +1325,8 @@ impl Storage {
                 format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height
                      FROM clip_items
                      WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
@@ -1306,7 +1338,8 @@ impl Storage {
                 format!(
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height
                      FROM clip_items
                      WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
@@ -1395,11 +1428,47 @@ impl Storage {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    /// 尺寸 backfill 专用：查 image_width IS NULL 的图片（含已 OCR 的历史条目）。
+    /// 与 get_unprocessed_images 同构——直接查 NULL 列，无 offset，不受新增条目影响。
+    pub fn get_unsized_images(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT id, content, clip_type, source_app, source_name,
+                    is_pinned, created_at, image_path, char_count, copy_count,
+                    first_copied_at, ocr_text, paste_count
+             FROM clip_items
+             WHERE clip_type = 'image' AND image_width IS NULL
+             ORDER BY created_at ASC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], Self::row_to_item)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     pub fn update_ocr_text(&self, id: &str, ocr_text: &str) -> Result<(), ClipinError> {
         let conn = self.conn();
         let affected = conn.execute(
             "UPDATE clip_items SET ocr_text = ?1 WHERE id = ?2",
             params![ocr_text, id],
+        )?;
+        if affected == 0 {
+            return Err(ClipinError::NotFound { id: id.to_string() });
+        }
+        Ok(())
+    }
+
+    /// 写入图片像素尺寸（图片保存后 / backfill 时异步调用）。
+    /// image_width / image_height 不在 FTS 触发器字段内，更新不会重写索引。
+    pub fn update_image_dimensions(
+        &self,
+        id: &str,
+        width: i32,
+        height: i32,
+    ) -> Result<(), ClipinError> {
+        let conn = self.conn();
+        let affected = conn.execute(
+            "UPDATE clip_items SET image_width = ?1, image_height = ?2 WHERE id = ?3",
+            params![width, height, id],
         )?;
         if affected == 0 {
             return Err(ClipinError::NotFound { id: id.to_string() });
@@ -1682,13 +1751,16 @@ impl Storage {
             char_count: row.get(8)?,
             paste_count: row.get(9).unwrap_or(0),
             copy_count: row.get(10).unwrap_or(1),
+            image_width: row.get(11)?,
+            image_height: row.get(12)?,
         })
     }
 
     fn row_to_list_search_hit(row: &rusqlite::Row) -> rusqlite::Result<SearchHit<ClipListItem>> {
         Ok(SearchHit {
             item: Self::row_to_list_item(row)?,
-            raw_rank: row.get(11)?,
+            // image_width / image_height 占 11、12，FTS rank 后移到 13
+            raw_rank: row.get(13)?,
         })
     }
 
@@ -1779,7 +1851,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 9, "新建数据库应为 v9");
+        assert_eq!(storage.schema_version(), 10, "新建数据库应为 v10");
     }
 
     #[test]
@@ -1798,7 +1870,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 9, "旧数据库应 migrate 到 v9");
+        assert_eq!(storage.schema_version(), 10, "旧数据库应 migrate 到 v10");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -1825,7 +1897,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 9);
+        assert_eq!(s2.schema_version(), 10);
     }
 
     #[test]
@@ -1878,6 +1950,62 @@ mod migration_tests {
             )
             .unwrap();
         assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn test_v10_image_dimensions_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+        let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+        // save_item 对 image 类型会读文件算内容 hash，需先落一个真实文件
+        let png_path = tmp.path().join("images").join("x.png");
+        std::fs::write(&png_path, b"fake-png-bytes").unwrap();
+        let png_path = png_path.to_string_lossy().to_string();
+        let item = storage
+            .save_item("image", &ClipType::Image, None, None, Some(&png_path))
+            .unwrap();
+
+        // 新图片尚未测量尺寸：backfill 查询能扫到，ClipListItem 尺寸为 None
+        let pending = storage.get_unsized_images(10).unwrap();
+        assert_eq!(pending.len(), 1, "未测量图片应进入 backfill 候选");
+        let before = storage.get_list_items(10, 0, None).unwrap();
+        assert_eq!(before[0].image_width, None);
+        assert_eq!(before[0].image_height, None);
+
+        // 写入尺寸后：ClipListItem 暴露宽高，backfill 候选清空
+        storage
+            .update_image_dimensions(&item.id, 1920, 1080)
+            .unwrap();
+        let after = storage.get_list_items(10, 0, None).unwrap();
+        assert_eq!(after[0].image_width, Some(1920));
+        assert_eq!(after[0].image_height, Some(1080));
+        assert!(
+            storage.get_unsized_images(10).unwrap().is_empty(),
+            "已测量图片不应再进入 backfill 候选"
+        );
+    }
+
+    #[test]
+    fn test_v10_migration_is_reentrant() {
+        // 模拟「v10 的 ALTER 已提交、user_version 还没推进就崩溃」：列已存在、
+        // 版本回退到 9。重新打开不应因 duplicate column 报错——migrate_to_v10
+        // 的 table_info 逐列判存保证可重入。
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+
+        Storage::new(&db_path, &img_dir).unwrap(); // 正常建库到 v10
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch("PRAGMA user_version = 9;").unwrap();
+        }
+        // 列还在、版本回到 9 → migrate_to_v10 必须跳过 ALTER 直接补 user_version
+        let storage = Storage::new(&db_path, &img_dir).unwrap();
+        assert_eq!(storage.schema_version(), 10);
     }
 
     #[test]

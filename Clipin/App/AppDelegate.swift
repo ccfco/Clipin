@@ -139,6 +139,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isProgrammaticMove = false
     private var savePositionTask: Task<Void, Never>?
     private var backfillTask: Task<Void, Never>?
+    private var dimensionBackfillTask: Task<Void, Never>?
     private var updateReminderSubscription: AnyCancellable?
     private var updateBadgeSubscription: AnyCancellable?
     private var isRestoringFailedShortcut = false
@@ -202,6 +203,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateReminder.start()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()
+        backfillImageDimensionsForExistingImages()
         // QA 自截图钩子(语义见 QAFlags)。
         if QAFlags.showPanelOnLaunch {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
@@ -978,9 +980,56 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 为历史图片补测像素尺寸（仅处理 image_width 为 NULL 的条目，分页直到处理完毕）。
+    /// 与 OCR backfill 同构，但每条都必须写回一个值：成功写真实尺寸，文件缺失 / 不可解析
+    /// 写 0×0 哨兵——否则 getUnsizedImages 会反复返回同一批，while 循环无法收敛。
+    /// 读尺寸只解析图片头，开销极小，用 .background 串行处理不影响 UI。
+    private func backfillImageDimensionsForExistingImages() {
+        let core = appState.core
+        dimensionBackfillTask = Task.detached(priority: .background) {
+            let pageSize: Int32 = 50
+            var totalProcessed = 0
+
+            backfillLoop: while !Task.isCancelled {
+                let pending: [ClipItem]
+                do {
+                    pending = try core.getUnsizedImages(limit: pageSize)
+                } catch {
+                    print("⚠️ 尺寸 backfill 查询失败，本次中止: \(error)")
+                    break
+                }
+                if pending.isEmpty { break }
+
+                for item in pending {
+                    guard !Task.isCancelled else { break }
+                    // 文件缺失 / 不可解析时落 0×0 哨兵，让条目离开 image_width IS NULL
+                    // 集合，避免下次分页再次扫到造成死循环。displayTitle 对 0 尺寸不渲染。
+                    let size = item.imagePath.flatMap { ImageDimensions.read(at: $0) }
+                    let (width, height) = size ?? (0, 0)
+                    do {
+                        try core.updateImageDimensions(
+                            id: item.id, width: width, height: height)
+                        totalProcessed += 1
+                    } catch {
+                        // 写入失败若只 print+continue，该条仍是 image_width IS NULL，
+                        // 下一页会再次扫到 → tight loop。按 "不兜底"：中止本次 backfill，
+                        // log 后让下次启动重试（DB 写失败是系统性问题，硬扛无意义）。
+                        print("⚠️ 尺寸 backfill 写入失败，本次中止 (id=\(item.id)): \(error)")
+                        break backfillLoop
+                    }
+                }
+            }
+
+            if totalProcessed > 0 {
+                print("ℹ️ 图片尺寸 backfill 完成: \(totalProcessed) 张")
+            }
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         viewModel?.finalizePendingDeletion()
         backfillTask?.cancel()
+        dimensionBackfillTask?.cancel()
         tearDownEventObservers()
     }
 
