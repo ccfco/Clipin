@@ -150,33 +150,22 @@ actor FaviconCache {
     /// 退而求其次下载次优 icon（如 32×32 ico 而不是 180×180 apple-touch-icon）。
     ///
     /// 三阶段：
-    /// 1. **候选收集**（并行）：拉 origin / 根域的 HTML head 64KB，解析 `<link rel="icon">`。
-    ///    候选只是 href 元数据，**不下载图片字节**——这是性能关键，HTML head 64KB 比图片
-    ///    完整下载轻 10×
-    /// 2. **隐式 fallback 候选**：始终给候选列表追加 `<origin>/favicon.ico`（IP 服务）和
-    ///    `https://<root>/favicon.ico`（域名）。这是浏览器对"HTML 没声明 icon"的隐式
-    ///    fallback——大多数老站点不声明 icon link，但 /favicon.ico 路径有图
-    /// 3. **评分排序 + top-K 下载**：chooseBestIcon 按 apple-touch-icon > icon > sizes
-    ///    从高到低排序。下载 top-2，第一个成功就用。top-2 是为了 best 失败时还能 fallback
-    ///    到次优，最坏 2 × 4s = 8s（vs 之前 4 源串行最坏 24s）
+    /// 1. **候选收集**：拉 origin 的 HTML head 64KB，解析 `<link rel="icon">`。候选只是
+    ///    href 元数据，**不下载图片字节**——这是性能关键，HTML head 64KB 比图片完整下载轻 10×
+    /// 2. **隐式 fallback 候选**：始终给候选列表追加 `<origin>/favicon.ico`。这是浏览器对
+    ///    "HTML 没声明 icon"的隐式 fallback——老站点不声明 icon link，但 /favicon.ico 有图
+    /// 3. **评分排序 + 去重 + top-2 下载**：按 apple-touch-icon > icon > sizes 从高到低
+    ///    排序，下载 top-2，第一个成功就用。top-2 是 best 失败时的 fallback。
     ///
-    /// 删除 Google s2 第三方代理：浏览器从不用代理，s2 自己也是用 HTML+ico 抓 favicon，
-    /// 我们直连比绕一层更准；ATS 放开后没有"HTTP 拉不到只能靠 s2 HTTPS"的需求。
+    /// **只抓 origin 自身、不做"根域回退"**：与浏览器一致——浏览器访问 `docs.feishu.cn`
+    /// 只解析该页 HTML + 试 `docs.feishu.cn/favicon.ico`，绝不会拉 `feishu.cn` 的 favicon
+    /// 安上去。现代 SPA（Next.js/Vite/CRA）的 favicon 声明在所有子域共享的 index.html 里，
+    /// 子域 HTML 自带 `<link rel=icon>`，origin 解析已自足。根域回退既要猜 TLD 边界
+    /// （`a.x.co.uk` 易切错成 `co.uk`，回退拉到错误站点的 favicon），又对现代站点几乎
+    /// 永不命中——是净负资产，删除。
     private nonisolated static func fetchRemote(url: URL, origin: String) async -> Data? {
-        let host = url.host ?? ""
-        let hostIsIP = isIPAddress(host)
-        let root = hostIsIP ? nil : rootDomain(of: host)
-        let needsRootFallback = !hostIsIP && root != nil && root != host
-
-        // === 阶段 1: 并行收集 HTML 候选 ===
-        // origin HTML 几乎总要看（除非 origin 拉不通）；根域 HTML 仅对子域有意义。
-        async let originCandidates = collectCandidates(from: origin)
-        async let rootCandidates: [IconCandidate] = needsRootFallback
-            ? collectCandidates(from: "https://\(root!)")
-            : []
-
-        var allCandidates = await originCandidates
-        allCandidates.append(contentsOf: await rootCandidates)
+        // === 阶段 1: 收集 origin 的 HTML 候选 ===
+        var allCandidates = await collectCandidates(from: origin)
 
         // === 阶段 2: 加入隐式 /favicon.ico 候选 ===
         // 评分基础分 50（与 rel="icon" 同分），低于 apple-touch-icon（100）。
@@ -184,11 +173,6 @@ actor FaviconCache {
         if let originURL = URL(string: origin) {
             allCandidates.append(IconCandidate(
                 rel: "icon", href: "/favicon.ico", sizes: nil, baseURL: originURL
-            ))
-        }
-        if needsRootFallback, let r = root, let rootURL = URL(string: "https://\(r)") {
-            allCandidates.append(IconCandidate(
-                rel: "icon", href: "/favicon.ico", sizes: nil, baseURL: rootURL
             ))
         }
 
@@ -389,37 +373,6 @@ actor FaviconCache {
         guard let match = regex.firstMatch(in: tag, range: NSRange(location: 0, length: nsTag.length)),
               match.numberOfRanges >= 2 else { return nil }
         return nsTag.substring(with: match.range(at: 1))
-    }
-
-    /// 提取 host 的根域（去掉 www / 子域）。
-    /// 简化版：把 host 切成 labels，保留最后两段；不处理 .co.uk / .com.cn 等多级 TLD
-    /// （会把 example.com.cn 错切成 com.cn，但 favicon 仍可能在该域命中——这种情况
-    /// 极少出现在剪贴板里）。返回 nil 表示传入的就是单段（如 localhost）。
-    ///
-    /// **入口已经过滤 IP**（fetchRemote 里 hostIsIP 检测），这里不必再判一次。
-    private nonisolated static func rootDomain(of host: String) -> String? {
-        let labels = host.split(separator: ".")
-        guard labels.count >= 2 else { return nil }
-        // 已经是两段（example.com），返回自身让上层与原 host 比较后跳过
-        if labels.count == 2 { return host }
-        // www 子域：去 www 后剩 2+ 段，递归调用一次
-        if labels.first == "www" {
-            return labels.dropFirst().joined(separator: ".")
-        }
-        // 普通子域 → 取最后两段
-        return labels.suffix(2).joined(separator: ".")
-    }
-
-    /// 检测 host 是否是 IP 地址（IPv4 或 IPv6）。IP 不走根域回退也不走 s2 兜底。
-    /// IPv4: 严格 4 段、每段 0..255。IPv6: host 含 `:`（IPv6 必含 `:`，域名永远不含）。
-    private nonisolated static func isIPAddress(_ host: String) -> Bool {
-        if host.contains(":") { return true } // IPv6
-        let parts = host.split(separator: ".")
-        guard parts.count == 4 else { return false }
-        return parts.allSatisfy { part in
-            guard let n = Int(part) else { return false }
-            return (0...255).contains(n)
-        }
     }
 
     /// origin → 磁盘文件名 sanitize。
