@@ -15,7 +15,9 @@ final class ClipPreviewResolverTests: XCTestCase {
                 imagePath: nil,
                 charCount: 0,
                 pasteCount: 0,
-                copyCount: 1
+                copyCount: 1,
+                imageWidth: nil,
+                imageHeight: nil
             )
         }
         var loadedIDs: [String] = []
