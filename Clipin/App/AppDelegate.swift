@@ -1153,6 +1153,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         }
 
+        // 「粘贴为…」子面板打开时,↑↓/Return/Esc 路由到子面板;
+        // Esc 只回退到主命令面板(不关整个面板),⌘K 仍整体关闭。
+        if vm.isShowingSubPalette {
+            switch event.keyCode {
+            case KeyCode.arrowUp:
+                vm.navigateSubPalette(delta: -1)
+                return nil
+            case KeyCode.arrowDown:
+                vm.navigateSubPalette(delta: 1)
+                return nil
+            case KeyCode.returnKey where flags.isEmpty:
+                vm.executeSelectedSubPaletteAction()
+                return nil
+            case KeyCode.letterK where flags == .command:
+                vm.hideActionsPalette(restoreFocus: true)
+                return nil
+            case KeyCode.escape:
+                vm.closeSubPalette()
+                return nil
+            case KeyCode.tab, KeyCode.delete:
+                return nil
+            default:
+                return nil
+            }
+        }
+
         switch event.keyCode {
         case KeyCode.arrowUp:
             vm.navigatePalette(delta: -1)

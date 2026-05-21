@@ -93,6 +93,7 @@
 "%d actions" = "%d 个动作";
 
 /* ActionPalette - action titles */
+"Paste as…" = "粘贴为…";
 "Paste as Plain Text" = "粘贴为纯文本";
 "Copy to Clipboard" = "复制到剪贴板";
 "Clear Search & Filters" = "清空搜索和筛选";

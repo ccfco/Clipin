@@ -56,6 +56,10 @@ final class ClipboardViewModel: ObservableObject {
     @Published private(set) var launcherNotice: LauncherNotice?
     @Published private(set) var isPreparingPreview = false
     @Published private(set) var selectedRepresentationUTIs: [String] = []
+    /// 「粘贴为…」子面板:非空即子面板显示中。
+    @Published private(set) var subPaletteActions: [PaletteAction] = []
+    @Published var selectedSubActionIndex: Int = 0
+    var isShowingSubPalette: Bool { !subPaletteActions.isEmpty }
 
     func navigatePalette(delta: Int) {
         let count = paletteActions.count
@@ -70,6 +74,11 @@ final class ClipboardViewModel: ObservableObject {
     func executePaletteAction(at index: Int) {
         guard index >= 0, index < paletteActions.count else { return }
         let action = paletteActions[index]
+        // 带 submenu 的动作:激活 = 打开子面板,不执行 handler、不关闭命令面板。
+        if let submenu = action.submenu {
+            openSubPalette(submenu)
+            return
+        }
         let shouldRestoreSearchFocus = isShowingActions && action.restoresSearchFocus
         action.handler()
 
@@ -82,12 +91,54 @@ final class ClipboardViewModel: ObservableObject {
 
     @discardableResult
     func executePaletteShortcut(_ shortcut: PaletteActionShortcut) -> Bool {
-        guard isShowingActions,
-              let index = paletteActions.firstIndex(where: { $0.shortcut == shortcut }) else {
+        guard isShowingActions else { return false }
+        // 子面板打开时,快捷键只在子面板范围内匹配——主面板的 ⌘O/⌘C/Space 等
+        // 不应穿透到子面板执行,否则键盘焦点没有真正收束到子面板。
+        // 主面板态:representation 动作收进了「粘贴为…」submenu,匹配需穿透 submenu,
+        // 让 ⇧↵/⌥H/⌥R 在命令面板打开时仍能直接命中。
+        let scope: [PaletteAction] = isShowingSubPalette
+            ? subPaletteActions
+            : paletteActions.flatMap { [$0] + ($0.submenu ?? []) }
+        guard let action = scope.first(where: { $0.shortcut == shortcut }) else {
             return false
         }
-        executePaletteAction(at: index)
+        action.handler()
+        hideActionsPalette(restoreFocus: action.restoresSearchFocus)
         return true
+    }
+
+    // MARK: - 「粘贴为…」子面板
+
+    func openSubPalette(_ actions: [PaletteAction]) {
+        guard !actions.isEmpty else { return }
+        selectedSubActionIndex = 0
+        withAnimation(ClipinMotion.paletteReveal) {
+            subPaletteActions = actions
+        }
+    }
+
+    func closeSubPalette() {
+        withAnimation(ClipinMotion.paletteDismiss) {
+            subPaletteActions = []
+        }
+        selectedSubActionIndex = 0
+    }
+
+    func navigateSubPalette(delta: Int) {
+        let count = subPaletteActions.count
+        guard count > 0 else { return }
+        selectedSubActionIndex = (selectedSubActionIndex + delta + count) % count
+    }
+
+    func executeSelectedSubPaletteAction() {
+        executeSubPaletteAction(at: selectedSubActionIndex)
+    }
+
+    func executeSubPaletteAction(at index: Int) {
+        guard index >= 0, index < subPaletteActions.count else { return }
+        let action = subPaletteActions[index]
+        action.handler()
+        hideActionsPalette(restoreFocus: action.restoresSearchFocus)
     }
 
     func toggleActionsPalette() {
@@ -110,6 +161,8 @@ final class ClipboardViewModel: ObservableObject {
         }
         paletteActions = []
         selectedActionIndex = 0
+        subPaletteActions = []
+        selectedSubActionIndex = 0
 
         if restoreFocus {
             NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)

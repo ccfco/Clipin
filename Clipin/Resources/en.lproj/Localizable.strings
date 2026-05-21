@@ -93,6 +93,7 @@
 "%d actions" = "%d actions";
 
 /* ActionPalette - action titles */
+"Paste as…" = "Paste as…";
 "Paste as Plain Text" = "Paste as Plain Text";
 "Copy to Clipboard" = "Copy to Clipboard";
 "Clear Search & Filters" = "Clear Search & Filters";

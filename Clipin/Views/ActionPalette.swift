@@ -21,6 +21,8 @@ struct PaletteAction: Identifiable {
     let section: PaletteActionSection
     let isDestructive: Bool
     let restoresSearchFocus: Bool
+    /// 非 nil 时本动作不执行 handler,而是打开由这组子动作组成的子面板(如「粘贴为…」)。
+    let submenu: [PaletteAction]?
     let handler: () -> Void
 
     init(
@@ -32,6 +34,7 @@ struct PaletteAction: Identifiable {
         section: PaletteActionSection = .secondary,
         isDestructive: Bool = false,
         restoresSearchFocus: Bool = true,
+        submenu: [PaletteAction]? = nil,
         handler: @escaping () -> Void
     ) {
         self.title = title
@@ -42,6 +45,7 @@ struct PaletteAction: Identifiable {
         self.section = section
         self.isDestructive = isDestructive
         self.restoresSearchFocus = restoresSearchFocus
+        self.submenu = submenu
         self.handler = handler
     }
 }
@@ -58,9 +62,16 @@ struct ActionPalette: View {
     @Binding var selectedIndex: Int
     let selectedItem: ClipListItem?
     let onSelect: (Int) -> Void
+    /// 「粘贴为…」子面板:非空即子面板显示中。
+    let subActions: [PaletteAction]
+    @Binding var selectedSubIndex: Int
+    let onSelectSub: (Int) -> Void
     @State private var hoveredIndex: Int?
+    @State private var subHoveredIndex: Int?
     /// 动作行区域的自然高度，用于把面板封顶到 paletteMaxHeight（超出则内层滚动）。
     @State private var actionsContentHeight: CGFloat = 0
+
+    private var isShowingSub: Bool { !subActions.isEmpty }
 
     /// actionList 的解析高度：内容自然高度封顶到 paletteMaxHeight；
     /// 首个布局 pass 测量结果还是 0 时回退到 paletteMaxHeight，
@@ -90,9 +101,21 @@ struct ActionPalette: View {
                 .contentShape(Rectangle())
                 .onTapGesture { dismiss() }
 
+            // 子面板打开时主面板退到身后:压暗 + 不可点,把焦点交给子面板。
             palettePanel
+                .opacity(isShowingSub ? 0.55 : 1)
+                .allowsHitTesting(!isShowingSub)
                 .padding(.trailing, ClipinChrome.gap)
                 .padding(.bottom, ClipinChrome.gap)
+
+            if isShowingSub {
+                subPalettePanel
+                    .padding(.trailing, ClipinChrome.gap)
+                    .padding(.bottom, ClipinChrome.gap)
+                    .transition(
+                        .scale(scale: 0.92, anchor: .bottomTrailing).combined(with: .opacity)
+                    )
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     }
@@ -121,26 +144,68 @@ struct ActionPalette: View {
         // 文字留在 background 之外直接合成 → 不被离屏栅格化,保持锐利。
         // 若把 .shadow 直接压在「内容 + 玻璃」整棵子树上,半透明玻璃会逼
         // SwiftUI 连文字一起位图化,文字丢掉像素对齐与次像素抗锯齿 → 发虚。
-        .background {
-            let shape = RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
-            Color.clear
-                // 保留半透明玻璃,但亮色给玻璃加明显的白 tint —— 面板比窗体玻璃更白,
-                // 一白一灰自然分层(对齐 Raycast:靠面板更白拉开层次,不靠压暗背景)。
-                // 暗色不 tint(.regular 玻璃在暗窗体上本就偏亮浮起,已自带层次)。
-                .glassEffect(
-                    colorScheme == .dark ? .regular : .regular.tint(Color.white.opacity(0.55)),
-                    in: shape
-                )
-                // hairline 描边勾出面板边缘,玻璃叠玻璃时也能看清边界。
-                .overlay(
-                    shape.strokeBorder(
-                        Color.primary.opacity(colorScheme == .dark ? 0.16 : 0.10),
-                        lineWidth: 0.5
-                    )
-                )
-                .shadow(color: paletteShadowColor, radius: 28, x: 0, y: 14)
-        }
+        .background { paletteGlassBackground }
         .onAppear { selectedIndex = 0 }
+    }
+
+    /// 命令面板/子面板共用的玻璃底:半透明玻璃 + 亮色白 tint + hairline 描边 + 落影。
+    @ViewBuilder
+    private var paletteGlassBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
+        Color.clear
+            // 保留半透明玻璃,但亮色给玻璃加明显的白 tint —— 面板比窗体玻璃更白,
+            // 一白一灰自然分层(对齐 Raycast:靠面板更白拉开层次,不靠压暗背景)。
+            // 暗色不 tint(.regular 玻璃在暗窗体上本就偏亮浮起,已自带层次)。
+            .glassEffect(
+                colorScheme == .dark ? .regular : .regular.tint(Color.white.opacity(0.55)),
+                in: shape
+            )
+            // hairline 描边勾出面板边缘,玻璃叠玻璃时也能看清边界。
+            .overlay(
+                shape.strokeBorder(
+                    Color.primary.opacity(colorScheme == .dark ? 0.16 : 0.10),
+                    lineWidth: 0.5
+                )
+            )
+            .shadow(color: paletteShadowColor, radius: 28, x: 0, y: 14)
+    }
+
+    /// 「粘贴为…」子面板:浮在主面板右下角、比主面板窄一档,主面板从其左上方露出。
+    private var subPalettePanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            subPaletteHeader
+
+            VStack(spacing: 0) {
+                ForEach(Array(subActions.enumerated()), id: \.offset) { index, action in
+                    actionRow(
+                        action: action,
+                        isSelected: selectedSubIndex == index,
+                        isHovered: subHoveredIndex == index,
+                        onTap: {
+                            selectedSubIndex = index
+                            onSelectSub(index)
+                        },
+                        onHoverChange: { subHoveredIndex = $0 ? index : nil }
+                    )
+                }
+            }
+        }
+        .padding(ClipinChrome.gap)
+        .frame(width: 320, alignment: .leading)
+        .background { paletteGlassBackground }
+    }
+
+    private var subPaletteHeader: some View {
+        HStack(spacing: ClipinChrome.gap) {
+            Text("Paste as…")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(ClipinInk.secondary)
+
+            Spacer(minLength: ClipinChrome.gap)
+
+            ClipinKeycap(key: "Esc", foreground: ClipinInk.secondary)
+        }
+        .padding(ClipinChrome.gap)
     }
 
     /// 动作行区域：分组之间插 hairline 分隔线；包进内层 ScrollView 并按
@@ -159,8 +224,17 @@ struct ActionPalette: View {
                         }
                         VStack(spacing: 0) {
                             ForEach(group, id: \.self) { index in
-                                actionRow(action: actions[index], index: index)
-                                    .id(index)
+                                actionRow(
+                                    action: actions[index],
+                                    isSelected: selectedIndex == index,
+                                    isHovered: hoveredIndex == index,
+                                    onTap: {
+                                        selectedIndex = index
+                                        onSelect(index)
+                                    },
+                                    onHoverChange: { hoveredIndex = $0 ? index : nil }
+                                )
+                                .id(index)
                             }
                         }
                     }
@@ -211,9 +285,13 @@ struct ActionPalette: View {
         .padding(ClipinChrome.gap)
     }
 
-    private func actionRow(action: PaletteAction, index: Int) -> some View {
-        let isSelected = selectedIndex == index
-        let isHovered = hoveredIndex == index
+    private func actionRow(
+        action: PaletteAction,
+        isSelected: Bool,
+        isHovered: Bool,
+        onTap: @escaping () -> Void,
+        onHoverChange: @escaping (Bool) -> Void
+    ) -> some View {
         let selectedFill = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.18 : 0.12) : ClipinSelectionInk.fill
         let selectedStroke = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.30 : 0.22) : ClipinSelectionInk.stroke
         let selectedInk = action.isDestructive ? Color.red.opacity(colorScheme == .dark ? 0.92 : 0.82) : Color.accentColor
@@ -260,13 +338,8 @@ struct ActionPalette: View {
             )
         )
         .contentShape(Rectangle())
-        .onTapGesture {
-            selectedIndex = index
-            onSelect(index)
-        }
-        .onHover { hovered in
-            hoveredIndex = hovered ? index : nil
-        }
+        .onTapGesture { onTap() }
+        .onHover { onHoverChange($0) }
         .animation(ClipinMotion.feedback, value: isSelected)
     }
 
@@ -323,14 +396,24 @@ struct ActionPaletteBuilder {
                 viewModel.pasteSelected()
             })
 
-            // HTML/RTF representation actions（仅 text/url 且有对应 UTI 时出现）
+            // 「粘贴为…」收成子面板(对齐 Raycast):纯文本 + HTML/RTF
+            // (后两者仅 text/url 且有对应 UTI 时出现)。子面板各项仍带真实快捷键,
+            // ⇧↵/⌥H/⌥R 在命令面板打开时仍可直接命中(executePaletteShortcut 会穿透 submenu)。
+            var pasteAsChildren: [PaletteAction] = [
+                PaletteAction("Paste as Plain Text", systemImage: "doc.plaintext", shortcut: .pastePlain) {
+                    viewModel.pastePlainSelected()
+                }
+            ]
             if let item = viewModel.currentSelectedItem() {
-                list.append(contentsOf: viewModel.representationActions(for: item))
+                pasteAsChildren.append(contentsOf: viewModel.representationActions(for: item))
             }
-
-            list.append(PaletteAction("Paste as Plain Text", systemImage: "doc.plaintext", shortcut: .pastePlain, section: .primary) {
-                viewModel.pastePlainSelected()
-            })
+            list.append(PaletteAction(
+                "Paste as…",
+                systemImage: "doc.on.clipboard",
+                appIcon: viewModel.targetAppIcon,
+                section: .primary,
+                submenu: pasteAsChildren
+            ) {})
 
             if viewModel.canPreviewSelectedItem {
                 list.append(PaletteAction("Preview", systemImage: "eye", shortcut: .preview, section: .primary, restoresSearchFocus: false) {

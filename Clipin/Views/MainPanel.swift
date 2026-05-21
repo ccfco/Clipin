@@ -134,6 +134,11 @@ struct MainPanel: View {
                     selectedItem: viewModel.selectedListItem,
                     onSelect: { index in
                         viewModel.executePaletteAction(at: index)
+                    },
+                    subActions: viewModel.subPaletteActions,
+                    selectedSubIndex: $viewModel.selectedSubActionIndex,
+                    onSelectSub: { index in
+                        viewModel.executeSubPaletteAction(at: index)
                     }
                 )
                 .transition(
