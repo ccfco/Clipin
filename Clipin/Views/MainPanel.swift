@@ -196,6 +196,7 @@ struct MainPanel: View {
             hasActiveFilter: viewModel.hasActiveFilter,
             hasMore: viewModel.hasMore,
             searchQuery: viewModel.searchQuery,
+            showsShortcutHint: viewModel.isShortcutHintVisible,
             sceneState: sceneState,
             selection: Binding(
                 get: { viewModel.selectedItemID },
@@ -429,6 +430,8 @@ private struct ItemListView: View {
     let hasActiveFilter: Bool
     let hasMore: Bool
     let searchQuery: String
+    /// 「长按 ⌘」是否已触发 — 决定是否在前 9 行浮出快速粘贴数字徽标。
+    let showsShortcutHint: Bool
     let sceneState: ClipinSceneState
     let selection: Binding<String?>
     let onActivate: (ClipListItem) -> Void
@@ -508,6 +511,7 @@ private struct ItemListView: View {
             searchQuery: searchQuery,
             isSelected: isSelected,
             isHovered: isHovered,
+            showsShortcutHint: showsShortcutHint,
             sceneState: sceneState
         )
         .padding(.vertical, 2)

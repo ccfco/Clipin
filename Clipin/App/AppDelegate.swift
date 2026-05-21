@@ -142,11 +142,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateReminderSubscription: AnyCancellable?
     private var updateBadgeSubscription: AnyCancellable?
     private var isRestoringFailedShortcut = false
+    /// 「长按 ⌘」检测:当前是否处于「纯 ⌘ 按住」(未叠加 Shift/Option/Control),
+    /// 以及尚未触发的延迟显示任务。
+    private var isPureCommandHeld = false
+    private var commandHoldTask: Task<Void, Never>?
 
     private enum PanelPositionKeys {
         static let originX = "panel.savedOriginX"
         static let originY = "panel.savedOriginY"
     }
+
+    /// 「长按 ⌘」阈值:⌘ 需持续按住超过此时长才浮出数字提示。
+    /// 取值偏长(刻意的「长按」手势):太短会在用户只是顺手碰一下 ⌘、
+    /// 或快速敲组合键时频繁弹出打扰用户;太长则手感迟钝。
+    private static let commandHoldRevealDelay: Duration = .milliseconds(600)
 
     /// ⌥+顶排数字键 → 浏览模式映射。文件级常量，避免每次 keyDown 重建字典。
     private static let optionDigitBrowseMode: [UInt16: LauncherBrowseMode] = [
@@ -421,6 +430,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         panel.collectionBehavior = [.moveToActiveSpace, .transient, .fullScreenAuxiliary]
         panel.becomesKeyOnlyIfNeeded = false
         panel.onResignKey = { [weak self] in
+            // 面板失焦后本 app 收不到 .flagsChanged,fail-closed 复位「长按 ⌘」状态,
+            // 否则再次获得焦点时可能残留过期的数字提示。
+            self?.resetShortcutHint()
             // QA hover 模式:不因失焦自关,保证 screencapture 前面板常驻可被合成鼠标 hover。
             if qaHoverable { return }
             self?.handlePanelResignKey()
@@ -646,6 +658,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func hidePanel(restorePreviousApp: Bool = true) {
         guard let panel else { return }
         viewModel?.isContinuousPasteEnabled = false
+        // 面板关闭时复位「长按 ⌘」状态,避免下次打开残留旧的数字提示
+        resetShortcutHint()
         viewModel?.hideActionsPalette()
         viewModel?.cancelPreviewPreparation()
         QuickLookPreviewService.shared.dismiss()
@@ -814,9 +828,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func startKeyMonitor() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
             guard let self else { return event }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+            // 修饰键变化:驱动「长按 ⌘」浮出快速粘贴数字提示。必须 return event
+            // 不消费,否则会破坏系统对修饰键的正常处理。
+            if event.type == .flagsChanged {
+                // 仅当焦点在主面板(含其动作面板 overlay)时才驱动数字提示:
+                // 设置 / 引导窗口是独立 window,在那里长按 ⌘ 不应触发,否则会
+                // 写脏 isShortcutHintVisible 且无对应复位路径。⌘K 后上下文变为
+                // .actionsPalette,松开 ⌘ 的事件仍需被处理来收起提示——它和
+                // .mainPanel 同属主面板那一个 window,故一并放行。
+                switch self.keyboardContext {
+                case .mainPanel, .actionsPalette:
+                    // 仅「纯 ⌘」长按才浮出:叠加 Shift/Option/Control 说明在组装
+                    // ⌘⇧P 这类组合键(或刚用 ⌘⇧V 热键唤起面板还没松手),不是长按。
+                    let isPureCommand = flags.contains(.command)
+                        && flags.isDisjoint(with: [.shift, .option, .control])
+                    self.updateCommandHoldState(isHeld: isPureCommand)
+                default:
+                    break
+                }
+                return event
+            }
+
+            // 真实按键到达 = 用户在按组合键(⌘K / ⌘1…),不是纯长按 ⌘ →
+            // 取消尚未触发的延迟显示。已浮出的提示不在此隐藏(松开 ⌘ 才收)。
+            self.cancelPendingShortcutHintReveal()
 
             switch self.keyboardContext {
             case .onboarding(let flow):
@@ -831,6 +870,53 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return event
             }
         }
+    }
+
+    // MARK: - 「长按 ⌘」数字提示
+
+    /// 处理「纯 ⌘ 按住」状态的进入 / 退出。进入后延迟 `commandHoldRevealDelay`
+    /// 再浮出数字提示,形成真正的「长按」手势(区别于 ⌘K / ⌘1 这类瞬时组合键);
+    /// 退出(松开 ⌘ 或叠加其它修饰键)立即收起。
+    private func updateCommandHoldState(isHeld: Bool) {
+        // 仅在「纯 ⌘ 按住」状态真正翻转时处理,重复回调直接忽略。
+        guard isHeld != isPureCommandHeld else { return }
+        isPureCommandHeld = isHeld
+
+        guard isHeld else {
+            // 退出纯 ⌘ 状态(松开 ⌘ 或叠加其它修饰键):取消待定计时并立即收起提示。
+            cancelPendingShortcutHintReveal()
+            setShortcutHintVisible(false)
+            return
+        }
+
+        // 进入纯 ⌘ 状态:排一个延迟任务,期满时若仍是纯 ⌘ 按住且未被按键打断才浮出。
+        commandHoldTask?.cancel()
+        commandHoldTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.commandHoldRevealDelay)
+            guard !Task.isCancelled, let self, self.isPureCommandHeld else { return }
+            self.commandHoldTask = nil
+            self.setShortcutHintVisible(true)
+        }
+    }
+
+    /// 取消尚未触发的「长按 ⌘」延迟显示任务(已浮出的提示不受影响)。
+    private func cancelPendingShortcutHintReveal() {
+        commandHoldTask?.cancel()
+        commandHoldTask = nil
+    }
+
+    /// 幂等写入数字提示可见性——避免无谓的列表重渲染。
+    private func setShortcutHintVisible(_ visible: Bool) {
+        guard let vm = viewModel, vm.isShortcutHintVisible != visible else { return }
+        vm.isShortcutHintVisible = visible
+    }
+
+    /// 彻底复位「长按 ⌘」状态。面板关闭或失焦后本 app 收不到 .flagsChanged,
+    /// 必须在这些路径上 fail-closed 复位,否则会残留过期的数字提示。
+    private func resetShortcutHint() {
+        cancelPendingShortcutHintReveal()
+        isPureCommandHeld = false
+        setShortcutHintVisible(false)
     }
 
     /// 为历史图片补跑 OCR（仅处理 ocr_text 为 NULL 的条目，分页直到处理完毕）

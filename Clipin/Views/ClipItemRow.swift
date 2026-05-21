@@ -310,6 +310,8 @@ struct ClipItemRow: View {
     var searchQuery: String = ""
     var isSelected: Bool = false
     var isHovered: Bool = false
+    /// 是否显示 ⌘1-9 快速粘贴数字提示(由"按住 ⌘"驱动)。
+    var showsShortcutHint: Bool = false
     let sceneState: ClipinSceneState
 
     var body: some View {
@@ -331,13 +333,20 @@ struct ClipItemRow: View {
             // pin 信号已交给左侧中性细 rail（ClipinSelectableRowBackground.isPinned），
             // 这里不再放 pin.fill icon，避免列表 row 视觉重量过高。
 
-            if isSelected {
+            if isSelected || hasShortcutBadge {
                 trailingMeta
             }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 9)
         .animation(ClipinMotion.selection, value: isSelected)
+        // reveal:按序号级联、从右侧划入,优雅铺开;dismiss:无延迟快收,松开即收。
+        .animation(
+            showsShortcutHint
+                ? ClipinMotion.commandReveal.delay(shortcutRevealDelay)
+                : ClipinMotion.feedback,
+            value: showsShortcutHint
+        )
     }
 
     /// 类型指示器：图片显示缩略图，颜色值显示色块，其他显示单色图标
@@ -377,21 +386,48 @@ struct ClipItemRow: View {
         }
     }
 
-    /// trailing 区域：⌘N + 时间戳，无胶囊背景，贴边显示。
-    /// 仅在选中行显示（非选中时整体隐藏），常驻中性色调。
+    /// 列表前 9 行且当前按住 ⌘ 时,才显示数字徽标(Raycast 式 hold-to-reveal)。
+    private var hasShortcutBadge: Bool {
+        showsShortcutHint && shortcutNumber != nil
+    }
+
+    /// 数字徽标按序号做轻微级联:⌘1 最先浮现、⌘9 最后,营造从上到下铺开的节奏。
+    private var shortcutRevealDelay: Double {
+        guard let n = shortcutNumber else { return 0 }
+        return Double(n - 1) * 0.02
+    }
+
+    /// trailing 区域:长按 ⌘ 时的纯数字徽标 + 选中行时间戳。
+    /// 数字徽标在前 9 行均可浮现,时间戳仍仅选中行显示。
     private var trailingMeta: some View {
         HStack(spacing: 7) {
-            if let n = shortcutNumber {
-                Text("⌘\(n)")
-                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                    .foregroundStyle(ClipinSelectionInk.dim)
+            if hasShortcutBadge, let n = shortcutNumber {
+                shortcutBadge(n)
+                    // 自粘贴项右缘冒出、向左滑到正确位置(.move 相对边缘,贴边进入)。
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
 
-            Text(timeLabel)
-                .font(.system(size: 10.5, weight: .regular))
-                .foregroundStyle(ClipinSelectionInk.dim)
+            if isSelected {
+                Text(timeLabel)
+                    .font(.system(size: 10.5, weight: .regular))
+                    .foregroundStyle(ClipinSelectionInk.dim)
+            }
         }
         .padding(.trailing, 2)
+    }
+
+    /// ⌘1-9 数字徽标:圆角矩形(`.continuous`,与列表选中态同一套圆角语言),
+    /// 区别于键帽胶囊的"圆数字"。圆角半径按尺寸比例缩放——选中态 12pt 圆角对应
+    /// ~42pt 行高,徽标 ~18pt 故取 6pt,占比一致才视觉协调。固定方形让 1-9 统一。
+    private func shortcutBadge(_ n: Int) -> some View {
+        Text("\(n)")
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(ClipinInk.secondary)
+            .frame(width: 18, height: 18)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
+            )
     }
 
     private var typeIndicatorScale: CGFloat {

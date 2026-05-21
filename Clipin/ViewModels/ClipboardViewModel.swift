@@ -47,6 +47,9 @@ final class ClipboardViewModel: ObservableObject {
     @Published var selectedActionIndex = 0
     @Published private(set) var paletteActions: [PaletteAction] = []
     @Published var isContinuousPasteEnabled: Bool = false
+    /// 是否显示 ⌘1-9 快速粘贴数字提示。由 AppDelegate 在用户「长按 ⌘」
+    /// 达到阈值后置 true、松开或离开面板时置 false,驱动 Raycast 式 hold-to-reveal。
+    @Published var isShortcutHintVisible: Bool = false
     @Published private(set) var launcherNotice: LauncherNotice?
     @Published private(set) var isPreparingPreview = false
     @Published private(set) var selectedRepresentationUTIs: [String] = []
