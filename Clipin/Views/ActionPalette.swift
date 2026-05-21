@@ -98,7 +98,9 @@ struct ActionPalette: View {
     }
 
     private var palettePanel: some View {
-        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+        // spacing 0：表头与动作行各自带 .padding(gap)，间距由两侧 padding 自行拼出，
+        // VStack 不再叠加 spacing，使「顶/表头↔列表/行↔行/底」保持统一的 2×edge 节奏。
+        VStack(alignment: .leading, spacing: 0) {
             paletteHeader
 
             if actions.isEmpty {
@@ -186,8 +188,9 @@ struct ActionPalette: View {
                 foreground: ClipinInk.secondary
             )
         }
-        // 左缘 = edge：与下方动作行的文字对齐（行文字 = 选中底板内缩 edge）。
-        .padding(.horizontal, ClipinChrome.gap)
+        // 四边 = edge：与动作行同样的 .padding(gap)，表头文字四边都距面板内壁 edge，
+        // 叠加面板自身 .padding(gap) 后为 2×edge，与行文字、面板上下边距完全一致。
+        .padding(ClipinChrome.gap)
     }
 
     private func actionRow(action: PaletteAction, index: Int) -> some View {
