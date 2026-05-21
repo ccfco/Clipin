@@ -52,6 +52,10 @@ targets:
           - "@executable_path/../Frameworks"
         SWIFT_VERSION: "6.0"
     preBuildScripts:
+      - name: Check Spacing Tokens
+        script: |
+          "${SRCROOT}/scripts/check-spacing-tokens.sh"
+        basedOnDependencyAnalysis: false
       - name: Build Rust Core
         script: |
           "${SRCROOT}/scripts/build-rust.sh"
