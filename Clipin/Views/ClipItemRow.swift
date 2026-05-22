@@ -307,6 +307,34 @@ private struct ClipThumbnailImage: View {
     }
 }
 
+/// 改名输入框，独立成 view 并以 @ObservedObject 订阅 EditingDraft——
+/// 打字时只有它自己重渲染，不波及列表其余行。
+private struct RenameField: View {
+    @ObservedObject var draft: EditingDraft
+    let onCommit: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField("", text: $draft.text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13.5, weight: .regular))
+            .focused($focused)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onSubmit { onCommit() }
+            .onChange(of: focused) { _, isFocused in
+                // 访达式：失焦即自动提交。commitRenaming 幂等，重复调用安全。
+                if !isFocused { onCommit() }
+            }
+            .onAppear {
+                focused = true
+                // SwiftUI TextField 无全选 API：获焦后异步选中 field editor 文本。
+                DispatchQueue.main.async {
+                    (NSApp.keyWindow?.firstResponder as? NSTextView)?.selectAll(nil)
+                }
+            }
+    }
+}
+
 /// 列表中的单行剪贴板项 — 极简单行布局
 struct ClipItemRow: View {
     let item: ClipListItem
@@ -319,7 +347,6 @@ struct ClipItemRow: View {
     let sceneState: ClipinSceneState
 
     @EnvironmentObject private var vm: ClipboardViewModel
-    @FocusState private var aliasFieldFocused: Bool
 
     private var isRenaming: Bool { vm.renamingItemID == item.id }
 
@@ -332,26 +359,7 @@ struct ClipItemRow: View {
             // 重命名后不画额外标记：访达式——别名直接当标题（displayTitle 已别名优先），
             // 名字本身就是信号。真实内容随时在右侧预览可见，无需行首徽标。
             if isRenaming {
-                TextField("", text: $vm.renameDraft)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13.5, weight: .regular))
-                    .focused($aliasFieldFocused)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onSubmit { vm.commitRenaming() }
-                    .onChange(of: aliasFieldFocused) { _, focused in
-                        // 访达式：TextField 失焦（点击其他行 / 面板外部 / 面板关闭）即自动提交。
-                        // commitRenaming 幂等——renamingItemID 为 nil 时直接 return，
-                        // 故 Return(onSubmit) 与 Esc(cancelRenaming) 先行清空后，此处不会重复写库。
-                        if !focused { vm.commitRenaming() }
-                    }
-                    .onAppear {
-                        aliasFieldFocused = true
-                        // SwiftUI TextField 无直接全选 API：获焦后异步选中 field editor 文本，
-                        // 让用户可一键整体替换（访达改名肌肉记忆）。
-                        DispatchQueue.main.async {
-                            (NSApp.keyWindow?.firstResponder as? NSTextView)?.selectAll(nil)
-                        }
-                    }
+                RenameField(draft: vm.renameDraft, onCommit: { vm.commitRenaming() })
             } else {
                 // 非编辑态：保持 ClipItemRow 现有只读标题样式 —— 字重恒为 .regular，
                 // 选中走 accent 色、未选纯 Color.primary。务必照搬当前代码，

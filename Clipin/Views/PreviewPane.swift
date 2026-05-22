@@ -17,13 +17,17 @@ struct PreviewPane: View {
     /// 比同步阻塞主线程更顺。
     @State private var metadataRevision: Int = 0
 
-    @FocusState private var contentEditorFocused: Bool
-
     var body: some View {
         Group {
             if let item {
                 if vm.editingContentItemID == item.id {
-                    contentEditor(for: item)
+                    contentStage {
+                        ContentEditorView(
+                            draft: vm.editingContentDraft,
+                            onSave: { vm.commitEditContent() },
+                            onCancel: { vm.cancelEditContent() }
+                        )
+                    }
                 } else {
                     contentStage(for: item)
                 }
@@ -101,44 +105,6 @@ struct PreviewPane: View {
                             .padding(.top, ClipinChrome.gap)
                     }
             }
-        }
-    }
-
-    private func contentEditor(for item: ClipItem) -> some View {
-        contentStage {
-            // 间距/圆角走 ClipinChrome token（CLAUDE.md「统一间距系统」决策、构建期 spacing 守卫强制）。
-            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                TextEditor(text: $vm.editingContentDraft)
-                    .font(.system(size: 13))
-                    .scrollContentBackground(.hidden)
-                    .focused($contentEditorFocused)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
-                    )
-
-                HStack(spacing: ClipinChrome.gap) {
-                    Spacer()
-                    Button(LocalizedStringKey("Cancel")) {
-                        vm.cancelEditContent()
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(ClipinInk.secondary)
-
-                    Button {
-                        vm.commitEditContent()
-                    } label: {
-                        HStack(spacing: ClipinChrome.gap) {
-                            Text(LocalizedStringKey("Save"))
-                            ClipinKeycap(key: "⌘↵", foreground: ClipinInk.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-                }
-            }
-            .onAppear { contentEditorFocused = true }
         }
     }
 
@@ -613,6 +579,51 @@ struct PreviewPane: View {
         .systemFont(ofSize: ClipinChrome.previewBodyFontSize, weight: .regular)
     }
 
+}
+
+/// 内容编辑器，独立成 view 并以 @ObservedObject 订阅 EditingDraft——
+/// 打字时只有它自己重渲染，不波及左侧列表。
+private struct ContentEditorView: View {
+    @ObservedObject var draft: EditingDraft
+    let onSave: () -> Void
+    let onCancel: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        // 间距/圆角走 ClipinChrome token（CLAUDE.md「统一间距系统」决策、构建期 spacing 守卫强制）。
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+            TextEditor(text: $draft.text)
+                .font(.system(size: 13))
+                .scrollContentBackground(.hidden)
+                .focused($focused)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                )
+
+            HStack(spacing: ClipinChrome.gap) {
+                Spacer()
+                Button(LocalizedStringKey("Cancel")) {
+                    onCancel()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(ClipinInk.secondary)
+
+                Button {
+                    onSave()
+                } label: {
+                    HStack(spacing: ClipinChrome.gap) {
+                        Text(LocalizedStringKey("Save"))
+                        ClipinKeycap(key: "⌘↵", foreground: ClipinInk.secondary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+            }
+        }
+        .onAppear { focused = true }
+    }
 }
 
 /// 文件预览主体单独拆出来：承载多文件 icon 异步加载 + mini list。
