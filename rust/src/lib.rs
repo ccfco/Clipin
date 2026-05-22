@@ -338,6 +338,21 @@ mod tests {
     }
 
     #[test]
+    fn test_search_matches_alias_text() {
+        let core = setup_core();
+        let item = core
+            .save_item("ghp_abcdefghABCDEF".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.set_alias(item.id.clone(), Some("GitHub PAT".into())).unwrap();
+
+        // 长查询走 FTS 路径
+        assert_eq!(core.search("GitHub".into(), None).unwrap().len(), 1);
+        assert_eq!(core.search_list_items("GitHub".into(), None).unwrap().len(), 1);
+        // 短查询走 LIKE 路径
+        assert_eq!(core.search("PA".into(), None).unwrap().len(), 1);
+    }
+
+    #[test]
     fn test_save_and_get() {
         let core = setup_core();
 

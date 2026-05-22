@@ -82,7 +82,7 @@ impl Storage {
         SearchQuery {
             raw_fts: Self::build_fts5_query_for_columns(
                 &raw,
-                &["content", "source_name", "ocr_text"],
+                &["content", "source_name", "ocr_text", "alias"],
             ),
             raw_like: Self::escape_like_pattern(&raw),
             normalized_pinyin: Self::normalize_pinyin_query(&raw),
@@ -1120,7 +1120,7 @@ impl Storage {
                 "SELECT id, content, clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias
                  FROM clip_items
-                 WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\')
+                 WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
                    AND clip_type = ?2
                  ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
@@ -1128,7 +1128,7 @@ impl Storage {
                 "SELECT id, content, clip_type, source_app, source_name,
                         is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias
                  FROM clip_items
-                 WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\'
+                 WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
                  ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                  LIMIT 200"
             };
@@ -1285,7 +1285,7 @@ impl Storage {
                             created_at, image_path, char_count, paste_count, copy_count,
                             image_width, image_height
                      FROM clip_items
-                     WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\')
+                     WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
@@ -1298,7 +1298,7 @@ impl Storage {
                             created_at, image_path, char_count, paste_count, copy_count,
                             image_width, image_height
                      FROM clip_items
-                     WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\'
+                     WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200",
                     p = Self::LIST_PREVIEW_CHARS
