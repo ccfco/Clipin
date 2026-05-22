@@ -919,7 +919,7 @@ impl Storage {
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height
+                            image_width, image_height, alias
                      FROM clip_items
                      WHERE clip_type = ?1 AND is_pinned = ?2
                      ORDER BY is_pinned DESC, created_at DESC
@@ -939,7 +939,7 @@ impl Storage {
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height
+                            image_width, image_height, alias
                      FROM clip_items
                      WHERE clip_type = ?1
                      ORDER BY is_pinned DESC, created_at DESC
@@ -957,7 +957,7 @@ impl Storage {
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height
+                            image_width, image_height, alias
                      FROM clip_items
                      WHERE is_pinned = ?1
                      ORDER BY is_pinned DESC, created_at DESC
@@ -974,7 +974,7 @@ impl Storage {
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height
+                            image_width, image_height, alias
                      FROM clip_items
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT ?1 OFFSET ?2",
@@ -1242,7 +1242,7 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            ci.image_width, ci.image_height, clip_fts.rank
+                            ci.image_width, ci.image_height, ci.alias, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
@@ -1255,7 +1255,7 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            ci.image_width, ci.image_height, clip_fts.rank
+                            ci.image_width, ci.image_height, ci.alias, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
@@ -1283,7 +1283,7 @@ impl Storage {
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height
+                            image_width, image_height, alias
                      FROM clip_items
                      WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
@@ -1296,7 +1296,7 @@ impl Storage {
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height
+                            image_width, image_height, alias
                      FROM clip_items
                      WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
@@ -1340,7 +1340,7 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            ci.image_width, ci.image_height, clip_fts.rank
+                            ci.image_width, ci.image_height, ci.alias, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
@@ -1353,7 +1353,7 @@ impl Storage {
                     "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
                             ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            ci.image_width, ci.image_height, clip_fts.rank
+                            ci.image_width, ci.image_height, ci.alias, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
@@ -1382,7 +1382,7 @@ impl Storage {
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height
+                            image_width, image_height, alias
                      FROM clip_items
                      WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
@@ -1395,7 +1395,7 @@ impl Storage {
                     "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
                             created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height
+                            image_width, image_height, alias
                      FROM clip_items
                      WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
@@ -1838,14 +1838,15 @@ impl Storage {
             copy_count: row.get(10).unwrap_or(1),
             image_width: row.get(11)?,
             image_height: row.get(12)?,
+            alias: row.get(13)?,
         })
     }
 
     fn row_to_list_search_hit(row: &rusqlite::Row) -> rusqlite::Result<SearchHit<ClipListItem>> {
         Ok(SearchHit {
             item: Self::row_to_list_item(row)?,
-            // image_width / image_height 占 11、12，FTS rank 后移到 13
-            raw_rank: row.get(13)?,
+            // image_width/image_height 占 11、12，alias 占 13，FTS rank 后移到 14
+            raw_rank: row.get(14)?,
         })
     }
 

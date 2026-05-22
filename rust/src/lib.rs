@@ -353,6 +353,26 @@ mod tests {
     }
 
     #[test]
+    fn test_list_item_carries_alias() {
+        let core = setup_core();
+        let item = core
+            .save_item("ghp_secret_token_value".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        // 未命名：list item alias 为 None，preview 为内容兜底
+        let before = core.get_list_items(10, 0, None).unwrap();
+        assert_eq!(before[0].alias, None);
+        assert_eq!(before[0].preview, "ghp_secret_token_value");
+
+        // 命名后：list item alias 有值；preview 仍是内容兜底
+        // （"别名优先"的显示名逻辑在 Swift displayTitle，不在 SQL）
+        core.set_alias(item.id.clone(), Some("GitHub PAT".into())).unwrap();
+        let after = core.get_list_items(10, 0, None).unwrap();
+        assert_eq!(after[0].alias.as_deref(), Some("GitHub PAT"));
+        assert_eq!(after[0].preview, "ghp_secret_token_value");
+    }
+
+    #[test]
     fn test_save_and_get() {
         let core = setup_core();
 

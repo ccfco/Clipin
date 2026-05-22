@@ -66,6 +66,9 @@ pub struct ClipListItem {
     /// 图片像素尺寸，仅 image 类型有值；采集时与历史 backfill 异步写入
     pub image_width: Option<i32>,
     pub image_height: Option<i32>,
+    /// 用户自定义别名。None 表示未命名；非 None 时列表行画"有别名"视觉信号，
+    /// 且 Swift displayTitle 按"别名优先"推导显示名。
+    pub alias: Option<String>,
 }
 
 /// 错误类型
