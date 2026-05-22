@@ -138,6 +138,7 @@ enum ArchiveService {
                     imagePath: imagePath,
                     isPinned: item.isPinned,
                     createdAt: item.createdAt,
+                    alias: item.alias,
                     representations: coreReps
                 )
             } catch {
@@ -220,7 +221,8 @@ enum ArchiveService {
                     isPinned: item.isPinned,
                     createdAt: item.createdAt,
                     imageDataBase64: imageData.base64EncodedString(),
-                    representations: archiveReps
+                    representations: archiveReps,
+                    alias: item.alias
                 ))
                 continue
             }
@@ -232,7 +234,8 @@ enum ArchiveService {
                 isPinned: item.isPinned,
                 createdAt: item.createdAt,
                 imageDataBase64: nil,
-                representations: archiveReps
+                representations: archiveReps,
+                alias: item.alias
             ))
         }
 
@@ -298,6 +301,8 @@ private struct ArchiveItem: Codable, Sendable {
     let imageDataBase64: String?
     /// v2 起：多 UTI representations。v1 archive 没有该字段，Optional 保证向后兼容解码。
     let representations: [ArchiveRepresentation]?
+    /// v2.1 起：用户别名。旧 archive 没有该字段，Optional 保证向后兼容解码。
+    let alias: String?
 }
 
 private struct ArchiveRepresentation: Codable, Sendable {
