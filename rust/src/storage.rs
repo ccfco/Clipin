@@ -148,6 +148,9 @@ impl Storage {
         if from_version < 10 {
             Self::migrate_to_v10(&self.conn())?;
         }
+        if from_version < 11 {
+            Self::migrate_to_v11(&self.conn())?;
+        }
         Ok(())
     }
 
@@ -446,6 +449,58 @@ impl Storage {
             conn.execute_batch("ALTER TABLE clip_items ADD COLUMN image_height INTEGER;")?;
         }
         conn.execute_batch("PRAGMA user_version = 10;")?;
+        Ok(())
+    }
+
+    fn migrate_to_v11(conn: &Connection) -> Result<(), ClipinError> {
+        // 用户别名列。可空：NULL 表示未命名，列表显示名回退到按类型推导的标题。
+        // 幂等检查：崩溃重启重跑时不能重复 ALTER（同 migrate_to_v6/v10 套路）。
+        let has_alias: bool = conn
+            .prepare("PRAGMA table_info(clip_items)")?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .any(|n| n.as_deref() == Ok("alias"));
+        if !has_alias {
+            conn.execute_batch("ALTER TABLE clip_items ADD COLUMN alias TEXT;")?;
+        }
+
+        // 重建 FTS5：把 alias 纳为可搜索列，与 content/ocr_text/pinyin 同构。
+        // clip_items_au 沿用 v8 的收窄写法（AFTER UPDATE OF ...），列集追加 alias，
+        // 使 set_alias 的别名变更能驱动 FTS 同步，而 paste_count/created_at 仍不重写 FTS。
+        conn.execute_batch(
+            "DROP TRIGGER IF EXISTS clip_items_ai;
+             DROP TRIGGER IF EXISTS clip_items_ad;
+             DROP TRIGGER IF EXISTS clip_items_au;
+             DROP TABLE   IF EXISTS clip_fts;
+
+             CREATE VIRTUAL TABLE clip_fts USING fts5(
+                 content, source_name, ocr_text, alias, pinyin_flat, pinyin_initials,
+                 content='clip_items', content_rowid='rowid', tokenize='trigram'
+             );
+
+             CREATE TRIGGER clip_items_ai AFTER INSERT ON clip_items BEGIN
+                 INSERT INTO clip_fts(rowid,content,source_name,ocr_text,alias,pinyin_flat,pinyin_initials)
+                 VALUES(new.rowid,new.content,new.source_name,new.ocr_text,new.alias,new.pinyin_flat,new.pinyin_initials);
+             END;
+
+             CREATE TRIGGER clip_items_ad AFTER DELETE ON clip_items BEGIN
+                 INSERT INTO clip_fts(clip_fts,rowid,content,source_name,ocr_text,alias,pinyin_flat,pinyin_initials)
+                 VALUES('delete',old.rowid,old.content,old.source_name,old.ocr_text,old.alias,old.pinyin_flat,old.pinyin_initials);
+             END;
+
+             CREATE TRIGGER clip_items_au
+             AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initials
+             ON clip_items BEGIN
+                 INSERT INTO clip_fts(clip_fts,rowid,content,source_name,ocr_text,alias,pinyin_flat,pinyin_initials)
+                 VALUES('delete',old.rowid,old.content,old.source_name,old.ocr_text,old.alias,old.pinyin_flat,old.pinyin_initials);
+                 INSERT INTO clip_fts(rowid,content,source_name,ocr_text,alias,pinyin_flat,pinyin_initials)
+                 VALUES(new.rowid,new.content,new.source_name,new.ocr_text,new.alias,new.pinyin_flat,new.pinyin_initials);
+             END;
+
+             INSERT INTO clip_fts(rowid,content,source_name,ocr_text,alias,pinyin_flat,pinyin_initials)
+             SELECT rowid,content,source_name,ocr_text,alias,pinyin_flat,pinyin_initials FROM clip_items;
+
+             PRAGMA user_version = 11;",
+        )?;
         Ok(())
     }
 
@@ -1851,7 +1906,7 @@ mod migration_tests {
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 10, "新建数据库应为 v10");
+        assert_eq!(storage.schema_version(), 11, "新建数据库应为 v11");
     }
 
     #[test]
@@ -1870,7 +1925,7 @@ mod migration_tests {
 
         // Storage::new 应自动 migrate 到 v1
         let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 10, "旧数据库应 migrate 到 v10");
+        assert_eq!(storage.schema_version(), 11, "旧数据库应 migrate 到 v11");
 
         // 数据表应已创建
         let conn = storage.conn.lock().unwrap();
@@ -1897,7 +1952,7 @@ mod migration_tests {
 
         // 第二次 open 不应出错
         let s2 = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(s2.schema_version(), 10);
+        assert_eq!(s2.schema_version(), 11);
     }
 
     #[test]
@@ -1928,8 +1983,10 @@ mod migration_tests {
                 |r| r.get(0),
             )
             .unwrap();
+        // v8 收窄了 clip_items_au 的 UPDATE OF 列集；v11 重建 FTS 时在该列集追加了 alias。
+        // 此处断言的是当前 head schema 的触发器形态，故跟随 v11 的列集。
         assert!(trigger_sql.contains(
-            "AFTER UPDATE OF content, source_name, ocr_text, pinyin_flat, pinyin_initials"
+            "AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initials"
         ));
     }
 
@@ -2003,9 +2060,56 @@ mod migration_tests {
             let conn = Connection::open(&db_path).unwrap();
             conn.execute_batch("PRAGMA user_version = 9;").unwrap();
         }
-        // 列还在、版本回到 9 → migrate_to_v10 必须跳过 ALTER 直接补 user_version
+        // 列还在、版本回到 9 → migrate_to_v10 必须跳过 ALTER；随后继续跑 v11 到 head。
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 10);
+        assert_eq!(storage.schema_version(), 11);
+    }
+
+    #[test]
+    fn test_v11_adds_alias_column_and_rebuilds_fts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+        let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+        std::fs::create_dir_all(&img_dir).unwrap();
+
+        let storage = Storage::new(&db_path, &img_dir).unwrap();
+        assert_eq!(storage.schema_version(), 11);
+
+        let conn = storage.conn.lock().unwrap();
+
+        // clip_items 应有 alias 列
+        let has_alias: bool = conn
+            .prepare("PRAGMA table_info(clip_items)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .any(|name| name.as_deref() == Ok("alias"));
+        assert!(has_alias, "clip_items 应有 alias 列");
+
+        // clip_fts 应索引 alias 列
+        let fts_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='clip_fts'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(fts_sql.contains("alias"), "clip_fts 应含 alias 列");
+
+        // clip_items_au 触发器的 UPDATE OF 列集应包含 alias
+        let trigger_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='clip_items_au'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(
+            trigger_sql.contains(
+                "AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initials"
+            ),
+            "clip_items_au 应在 UPDATE OF 列集里包含 alias"
+        );
     }
 
     #[test]
