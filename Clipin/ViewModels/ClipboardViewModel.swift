@@ -60,6 +60,9 @@ final class ClipboardViewModel: ObservableObject {
     @Published var renamingItemID: String?
     /// inline 改名 TextField 的草稿文本。
     @Published var renameDraft: String = ""
+    /// beginRenaming 时记录的预填值。commitRenaming 用它判断用户是否真的改了名，
+    /// 避免「打开 rename 又直接点走（失焦自动提交）」把派生标题误写成 alias。
+    private var renameBaseline: String = ""
     /// 非 nil 表示该 id 的条目正处于 preview 区内容编辑态。
     @Published var editingContentItemID: String?
     /// Edit Content TextEditor 的草稿文本。
@@ -454,15 +457,21 @@ final class ClipboardViewModel: ObservableObject {
         // 预填用 displayTitle 而非 preview：preview 对 image/file 是 OCR/路径原文，
         // 拿来当改名预填毫无意义；displayTitle 才是用户当前在列表里看到的那行字。
         renameDraft = listItem.displayTitle
+        renameBaseline = listItem.displayTitle
         renamingItemID = id
     }
 
     /// 提交别名。空字符串清空别名；非空写入。提交后刷新列表。
+    /// 用户没动过预填文字（如打开 rename 又直接点走触发失焦提交）则不写库——
+    /// 否则会把无别名条目的派生标题持久化成 alias，凭空「命名」了它。
     func commitRenaming() {
         guard let id = renamingItemID else { return }
         let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let unchanged = renameDraft == renameBaseline
         renamingItemID = nil
         renameDraft = ""
+        renameBaseline = ""
+        guard !unchanged else { return }
         do {
             try core.setAlias(id: id, alias: trimmed.isEmpty ? nil : trimmed)
             loadItems()
@@ -477,6 +486,7 @@ final class ClipboardViewModel: ObservableObject {
     func cancelRenaming() {
         renamingItemID = nil
         renameDraft = ""
+        renameBaseline = ""
     }
 
     // MARK: - Edit Content
@@ -497,11 +507,23 @@ final class ClipboardViewModel: ObservableObject {
         guard let id = editingContentItemID else { return }
         let newContent = editingContentDraft
         let probe = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        let newType: ClipType = ClipboardMonitor.httpURLString(in: probe) != nil ? .url : .text
-        editingContentItemID = nil
-        editingContentDraft = ""
+        // URL 类型落库存 trim 后内容：类型判定与保存口径必须一致，否则带首尾空白的
+        // URL 会被存成 .url，但后续「打开 URL / 预览」的 URL(string:) 会因空白解析失败。
+        // 文本类型保留用户原样输入。
+        let newType: ClipType
+        let contentToSave: String
+        if let url = ClipboardMonitor.httpURLString(in: probe) {
+            newType = .url
+            contentToSave = url
+        } else {
+            newType = .text
+            contentToSave = newContent
+        }
         do {
-            try core.updateContent(id: id, newContent: newContent, newType: newType)
+            try core.updateContent(id: id, newContent: contentToSave, newType: newType)
+            // 写库成功后才退出编辑态——失败时保留 draft 与编辑器，用户输入不丢、可重试。
+            editingContentItemID = nil
+            editingContentDraft = ""
             loadItems()
             showNotice(NSLocalizedString("Content saved.", comment: ""), style: .success)
         } catch {
