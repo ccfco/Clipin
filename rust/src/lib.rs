@@ -1080,6 +1080,61 @@ mod tests {
     }
 
     #[test]
+    fn test_save_item_preserves_alias_on_recopy() {
+        let core = setup_core();
+        let item = core
+            .save_item("foo".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.set_alias(item.id.clone(), Some("会议纪要".into())).unwrap();
+
+        // 同 content 再次复制走去重重写路径（返回新 id），别名必须随快照保留
+        core.save_item("foo".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        let items = core.get_list_items(10, 0, None).unwrap();
+        assert_eq!(items.len(), 1, "去重后仍只有一条");
+        assert_eq!(
+            items[0].alias.as_deref(),
+            Some("会议纪要"),
+            "重新复制已改名条目不应丢失别名"
+        );
+
+        // 重新复制后拼音仍带别名 → 可被拼音搜到
+        assert_eq!(core.search("huiyijiyao".into(), None).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_import_item_new_with_chinese_alias_is_pinyin_searchable() {
+        let core = setup_core();
+        let imported = core
+            .import_item_if_missing(
+                "payload".into(), ClipType::Text, None, None, None,
+                false, 1_000, Some("密钥".into()), vec![],
+            )
+            .unwrap();
+        assert!(imported, "全新条目应计为 imported");
+
+        // 新建导入路径必须把中文别名并入拼音
+        assert_eq!(core.search("miyao".into(), None).unwrap().len(), 1);
+
+        let items = core.get_items(10, 0, None).unwrap();
+        assert_eq!(items[0].alias.as_deref(), Some("密钥"));
+    }
+
+    #[test]
+    fn test_import_item_empty_alias_normalized_to_none() {
+        let core = setup_core();
+        core.import_item_if_missing(
+            "payload".into(), ClipType::Text, None, None, None,
+            false, 1_000, Some("".into()), vec![],
+        )
+        .unwrap();
+
+        let items = core.get_items(10, 0, None).unwrap();
+        assert_eq!(items[0].alias, None, "空字符串别名应归一化为 None");
+    }
+
+    #[test]
     fn test_save_item_with_representations() {
         let core = setup_core();
         let reps = vec![ClipRepresentation {

@@ -36,12 +36,13 @@ pub struct Storage {
     image_dir: String,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct PreservedItemState {
     first_copied_at: i64,
     copy_count: i32,
     paste_count: i32,
     is_pinned: bool,
+    alias: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -607,7 +608,7 @@ impl Storage {
         hash: &str,
     ) -> Result<Option<PreservedItemState>, ClipinError> {
         conn.query_row(
-            "SELECT first_copied_at, copy_count, paste_count, is_pinned
+            "SELECT first_copied_at, copy_count, paste_count, is_pinned, alias
              FROM clip_items
              WHERE hash = ?1",
             params![hash],
@@ -617,6 +618,7 @@ impl Storage {
                     copy_count: row.get(1)?,
                     paste_count: row.get(2).unwrap_or(0),
                     is_pinned: row.get(3)?,
+                    alias: row.get(4)?,
                 })
             },
         )
@@ -744,13 +746,21 @@ impl Storage {
                 copy_count: existing.copy_count + 1,
                 paste_count: existing.paste_count,
                 is_pinned: existing.is_pinned,
+                alias: existing.alias,
             },
             None => PreservedItemState {
                 first_copied_at: now,
                 copy_count: 1,
                 paste_count: 0,
                 is_pinned: false,
+                alias: None,
             },
+        };
+
+        // 重新复制带别名的条目时，别名要并入拼音（与 set_alias 口径一致）
+        let (pinyin_flat, pinyin_initials) = match preserved.alias.as_deref() {
+            Some(a) if !a.is_empty() => compute_pinyin(&format!("{content} {a}")),
+            _ => (pinyin_flat, pinyin_initials),
         };
 
         let old_image_paths = Self::load_image_paths_for_hash(&conn, &hash)?;
@@ -760,8 +770,8 @@ impl Storage {
         let id = Uuid::new_v4().to_string();
         tx.execute(
             "INSERT INTO clip_items
-             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,paste_count,pinyin_flat,pinyin_initials)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,paste_count,pinyin_flat,pinyin_initials,alias)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
             params![
                 id,
                 content,
@@ -778,6 +788,7 @@ impl Storage {
                 preserved.paste_count,
                 pinyin_flat,
                 pinyin_initials,
+                preserved.alias,
             ],
         )?;
         Self::insert_representations_in_tx(&tx, &id, representations)?;
@@ -798,7 +809,7 @@ impl Storage {
             first_copied_at: preserved.first_copied_at,
             ocr_text: None,
             paste_count: preserved.paste_count,
-            alias: None,
+            alias: preserved.alias,
         })
     }
 
@@ -1668,11 +1679,18 @@ impl Storage {
         created_at: i64,
         alias: Option<&str>,
     ) -> Result<ClipItem, ClipinError> {
+        // 空字符串别名归一化为 None（与 set_alias 口径一致）
+        let alias = alias.filter(|a| !a.is_empty());
         // 锁外提前计算（同 save_item 的理由）
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
         let id = Uuid::new_v4().to_string();
         let char_count = content.chars().count() as i32;
-        let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
+        // 拼音并入别名，否则导入恢复出来的中文别名搜不到
+        let pinyin_source = match alias {
+            Some(a) => format!("{content} {a}"),
+            None => content.to_string(),
+        };
+        let (pinyin_flat, pinyin_initials) = compute_pinyin(&pinyin_source);
         let mut conn = self.conn();
         let old_image_paths = Self::load_image_paths_for_hash(&conn, &hash)?;
         let tx = conn.transaction()?;
@@ -1722,10 +1740,17 @@ impl Storage {
         alias: Option<&str>,
         representations: &[ClipRepresentation],
     ) -> Result<bool, ClipinError> {
+        // 空字符串别名归一化为 None（与 set_alias 口径一致）
+        let alias = alias.filter(|a| !a.is_empty());
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
         let id = Uuid::new_v4().to_string();
         let char_count = content.chars().count() as i32;
-        let (pinyin_flat, pinyin_initials) = compute_pinyin(content);
+        // 拼音并入别名，否则导入恢复出来的中文别名搜不到
+        let pinyin_source = match alias {
+            Some(a) => format!("{content} {a}"),
+            None => content.to_string(),
+        };
+        let (pinyin_flat, pinyin_initials) = compute_pinyin(&pinyin_source);
         let mut conn = self.conn();
 
         if let Some(existing_id) = Self::load_item_id_for_hash(&conn, &hash)? {
