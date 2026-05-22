@@ -1310,6 +1310,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             vm.copySelected()
             return nil
+        case KeyCode.letterE where flags == [.command, .shift]:
+            // ⇧⌘E / ⌘E 在主面板直达：选中项可见时无需先开 ⌘K。
+            // 必须 return nil 消费事件——否则事件回落到响应链无人处理，系统会「咚」一声。
+            vm.beginRenamingSelected()
+            return nil
+        case KeyCode.letterE where flags == .command:
+            vm.beginEditContentSelected()
+            return nil
         case KeyCode.letterK where flags == .command:
             vm.toggleActionsPalette()
             return nil

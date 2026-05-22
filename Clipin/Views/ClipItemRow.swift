@@ -322,7 +322,6 @@ struct ClipItemRow: View {
     @FocusState private var aliasFieldFocused: Bool
 
     private var isRenaming: Bool { vm.renamingItemID == item.id }
-    private var hasAlias: Bool { item.alias?.isEmpty == false }
 
     var body: some View {
         HStack(spacing: ClipinChrome.gap) {
@@ -330,15 +329,8 @@ struct ClipItemRow: View {
                 .scaleEffect(typeIndicatorScale)
                 .animation(ClipinMotion.feedback, value: isHovered)
 
-            ZStack {
-                if hasAlias && !isRenaming {
-                    Circle()
-                        .fill(Color.accentColor)
-                        .frame(width: 5, height: 5)
-                }
-            }
-            .frame(width: 6)
-
+            // 重命名后不画额外标记：访达式——别名直接当标题（displayTitle 已别名优先），
+            // 名字本身就是信号。真实内容随时在右侧预览可见，无需行首徽标。
             if isRenaming {
                 TextField("", text: $vm.renameDraft)
                     .textFieldStyle(.plain)

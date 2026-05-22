@@ -461,6 +461,12 @@ final class ClipboardViewModel: ObservableObject {
         renamingItemID = id
     }
 
+    /// 对当前选中项进入 inline 改名编辑态（主面板 ⇧⌘E 直达，无需先开 ⌘K）。无选中项则忽略。
+    func beginRenamingSelected() {
+        guard let id = selectedListItem?.id else { return }
+        beginRenaming(id: id)
+    }
+
     /// 提交别名。空字符串清空别名；非空写入。提交后刷新列表。
     /// 用户没动过预填文字（如打开 rename 又直接点走触发失焦提交）则不写库——
     /// 否则会把无别名条目的派生标题持久化成 alias，凭空「命名」了它。
@@ -500,6 +506,13 @@ final class ClipboardViewModel: ObservableObject {
         guard let full = loadItem(id: id) else { return }
         editingContentDraft = full.content
         editingContentItemID = id
+    }
+
+    /// 对当前选中项进入内容编辑态（主面板 ⌘E 直达，无需先开 ⌘K）。
+    /// 无选中项、或选中项非 text/url 时静默忽略（beginEditContent 内部已校验类型）。
+    func beginEditContentSelected() {
+        guard let id = selectedListItem?.id else { return }
+        beginEditContent(id: id)
     }
 
     /// 提交编辑后的内容。依据新内容重新判定类型，提交后刷新。
