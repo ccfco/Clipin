@@ -2,7 +2,7 @@
 
 - 日期:2026-05-21
 - 状态:方向已由用户多轮澄清锁定,本 spec 待用户复核后转 writing-plans
-- 基线:`main`,当前 schema 版本 v9
+- 基线:`main`,当前 schema 版本 v10(`migrate_to_v10` 已加图片像素尺寸列)
 
 ## 背景与问题
 
@@ -22,7 +22,7 @@ Clipin 的剪贴板历史里,一条记录在主列表左栏只显示一行"预�
 
 ## 目标
 
-- 用户能给任意类型(text/url/image/file)的条目起一个别名;别名为空时列表回退到内容兜底预览。
+- 用户能给任意类型(text/url/image/file)的条目起一个别名;别名为空时列表回退到该类型的默认标题。
 - 用户能编辑 text/url 条目的真实内容;改完保存后,该条目后续粘贴、搜索、预览全部基于新内容。
 - 别名与内容都纳入搜索(FTS5 + 拼音),与现有 `content`/`ocr_text` 同构。
 - 别名纳入导出/导入备份。
@@ -44,11 +44,11 @@ Clipin 的剪贴板历史里,一条记录在主列表左栏只显示一行"预�
 | 语义 | 给条目挂一个用户可读别名(`alias`);原始 `content` 永不改变 |
 | 入口 | ⌘K 动作面板 → `Rename` 命令(面板内快捷键 `⇧⌘E`) |
 | 编辑 UI | 访达式 inline:选中行的名字文字**原地**切换为 `TextField` |
-| 预填 | 进入编辑时预填该行**当前显示的名字**(已有别名则是别名,否则是兜底预览名),文字默认全选 |
+| 预填 | 进入编辑时预填该行**当前显示的名字**(`displayTitle`:有别名是别名,否则是按类型推导的标题),文字默认全选 |
 | 提交 | `Return` 提交 |
 | 取消 | `Esc` 取消,恢复原显示 |
 | 清空语义 | 提交空字符串 = 删除别名(写 `NULL`),列表回退到内容兜底预览 |
-| 列表显示 | 有别名只显示别名;无别名显示内容兜底预览 |
+| 列表显示 | 有别名只显示别名;无别名显示按类型推导的标题(text/url 取内容首行、image 取来源+尺寸、file 取文件标题) |
 | 视觉信号 | 有别名的行加一个轻量信号(行首小圆点),与"无别名兜底"行可区分 |
 | 适用类型 | text / url / image / file 全部 |
 | 视图范围 | pinned 视图与普通浏览视图都生效(别名是条目自身属性,不随 browseMode 变化) |
@@ -71,11 +71,11 @@ Clipin 的剪贴板历史里,一条记录在主列表左栏只显示一行"预�
 
 ## 设计
 
-### 单元 1 — DB migration v10(`rust/src/storage.rs`)
+### 单元 1 — DB migration v11(`rust/src/storage.rs`)
 
-新增 `migrate_to_v10`,追加在 `migrate_to_v9` 之后,老 migration 全部冻结。
+新增 `migrate_to_v11`,追加在 `migrate_to_v10`(当前 schema 已是 v10,`migrate_to_v10` 给 `clip_items` 加了图片像素尺寸列)之后,老 migration 全部冻结。`alias` 列绝不能复用 v10。
 
-v10 做两件事:
+v11 做两件事:
 
 1. `ALTER TABLE clip_items ADD COLUMN alias TEXT`(可空,默认 `NULL`)。
 2. 重建 FTS5:把 `alias` 加为可搜索列。FTS 重建沿用既有套路——`DROP` 旧 `clip_fts` 与三个触发器 → 以新列集 `CREATE` → `INSERT ... SELECT` 重灌 → 重建三个触发器。
@@ -88,7 +88,7 @@ AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initi
 
 `clip_items_ai`(INSERT)/`clip_items_ad`(DELETE)触发器同步把 `alias` 写入/删除出 FTS。
 
-**回填**:v10 不需要回填拼音。老数据 `alias` 全为 `NULL`,`content` 未变,既有 `pinyin_flat`/`pinyin_initials` 仍然有效。因此 v10 是"ALTER + FTS 重建"两步,不需要 v5 那种独立的 Rust 回填阶段;但 FTS 重建本身仍需独立于 ALTER 之后执行(单条 `execute_batch` 内顺序即可,无需跨锁)。
+**回填**:v11 不需要回填拼音。老数据 `alias` 全为 `NULL`,`content` 未变,既有 `pinyin_flat`/`pinyin_initials` 仍然有效。因此 v11 是"ALTER + FTS 重建"两步,不需要 v5 那种独立的 Rust 回填阶段;但 FTS 重建本身仍需独立于 ALTER 之后执行(单条 `execute_batch` 内顺序即可,无需跨锁)。
 
 ### 单元 2 — Rust 写入接口:`set_alias` / `update_content`(`lib.rs` + `storage.rs`)
 
@@ -98,18 +98,18 @@ AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initi
 - `alias` 为 `Some(非空)` → 写入别名;`None` 或 `Some("")` → 写 `NULL`(空字符串归一化为 `NULL`)。
 - 写别名后**同步重算该条拼音**:`compute_pinyin` 的入参从 `content` 改为 `content + " " + alias`(别名为空则等于只算 content),`UPDATE` 写回 `pinyin_flat`/`pinyin_initials`。
   - 原因:`backfill_pinyin` 只处理 `pinyin_flat=''` 的条目,而已入库条目的 `pinyin_flat` 通常非空,backfill 不会重算它。别名的拼音必须由 `set_alias` 自己负责写入,否则中文别名搜不到。
-- `alias`、`pinyin_flat`、`pinyin_initials` 都在 v10 触发器的 `UPDATE OF` 列集内,FTS 自动同步。
+- `alias`、`pinyin_flat`、`pinyin_initials` 都在 v11 触发器的 `UPDATE OF` 列集内,FTS 自动同步。
 
 **`update_content(id: String, new_content: String, new_type: ClipType)`**
 - 调用方(Swift)负责依据新内容判定 `new_type` 并传入。
-- Rust 端在一个事务内:重算 `content_hash`(`Sha256(type:content)`,type 变化时 hash 自然变化)、重算 `char_count`/`word_count`、重算 `pinyin`(`content + alias`)、`UPDATE` 写回 `content`/`clip_type`/`content_hash`/`char_count`/`word_count`/`pinyin_flat`/`pinyin_initials`。
+- Rust 端在一个事务内:重算 `content_hash`(`Sha256(type:content)`,type 变化时 hash 自然变化)、重算 `char_count`、重算 `pinyin`(`content + alias`)、`UPDATE` 写回 `content`/`clip_type`/`content_hash`/`char_count`/`pinyin_flat`/`pinyin_initials`。Rust `ClipItem` 只有 `char_count` 列,没有 `word_count`;字数由 Swift 预览渲染时实时算,无需落库。
 - 不触碰 `created_at`/`copy_count`/`paste_count`/`is_pinned`/`source_app`/`source_name`——这些是该条目的身份与使用信号,编辑内容不重置它们。
 - **不套用去重**:即使新 `content_hash` 与库中另一条目相同,也不合并、不报错。去重只属于"剪贴板监控自动入库"路径;用户主动编辑产生的重复是用户意图,保留为两条。
 - 清空该条目的 `clip_representations` 副表记录(理由见"数据完整性规则")。
 
 ### 单元 3 — Rust 读取/搜索/备份接入 alias(`storage.rs`)
 
-- **列表查询**:`get_list_items` / `get_pinned_list_items` / `get_unpinned_list_items` / `search_list_items` 的 SQL 投影增加 `alias` 列;`ClipListItem` 的显示名优先级改为 `COALESCE(NULLIF(alias,''), NULLIF(ocr_text,''), content)` 的截断。`ClipListItem` 额外携带 `alias: Option<String>`,供 Swift 端判定"是否画视觉信号"。
+- **列表查询**:`get_list_items` / `get_pinned_list_items` / `get_unpinned_list_items` / `search_list_items` 的 SQL 投影末尾追加 `alias` 列,`ClipListItem` 增加 `alias: Option<String>` 字段。**`preview` 列的 SQL 兜底表达式保持不变**(仍是 `COALESCE(NULLIF(ocr_text,''),content)` 的截断)——`preview` 还被列表行的 favicon / hex 颜色检测复用(`URL(string: preview)`),改成 alias 会让 URL 条目改名后 favicon 失效;且 image/file 的列表标题本就由 Swift `displayTitle` 从元信息推导、根本不读 `preview`。"别名优先于一切类型标题"的显示逻辑统一在 Swift `displayTitle`(`ClipListItem+Display.swift`)实现,见单元 4。`ClipListItem` 携带的 `alias` 既用于 `displayTitle` 推导,也供列表行判定"是否画视觉信号"。
 - **完整记录**:`get_item` 返回的 `ClipItem` 增加 `alias` 字段。
 - **搜索**:FTS 路径中 `alias` 已是 FTS 列,BM25 自动覆盖——别名是短字段,匹配权重天然高于埋在长 `content` 里的同词,符合直觉。LIKE 回退路径(≤2 字查询)的 `WHERE` 增加 `OR alias LIKE ?`,并复用既有的 LIKE 元字符转义。排序语义不变(见 CLAUDE.md "搜索候选必须在 SQL 层先排序再 LIMIT")。
 - **导出**:`export_archive_snapshot` 返回的 `ArchiveSnapshotItem` 增加 `alias`。
@@ -119,14 +119,15 @@ AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initi
 
 `ClipItem`、`ClipListItem`、`ArchiveSnapshotItem` 的 `alias` 字段由 UniFFI 重新生成绑定后自动出现。需要手动跟进的消费方:
 
-- `ClipListItem` 的使用处:列表行渲染读 `alias` 决定显示名与视觉信号。
+- `ClipListItem+Display.swift` 的 `displayTitle`:在按类型推导标题之前先判断 `alias`——非空则直接返回别名。这一处改动让列表行与 ⌘K 动作面板头部(都用 `displayTitle`)同时获得"别名优先"显示,text/url/image/file 四类统一。
+- `ClipItemRow`:额外读 `alias` 决定是否画"有别名"视觉信号。
 - 归档导入/导出代码路径(`ArchiveService`):序列化/反序列化 JSON 时带上 `alias` 字段。
 
 ### 单元 5 — Rename inline 编辑(`ClipboardViewModel` + `ClipListRow`)
 
 **ViewModel 状态**
 - 新增 `renamingItemID: String?`(非 nil 表示该 id 的行正处于 inline 编辑态)与草稿 `renameDraft: String`。
-- `beginRenaming(id:)`:预填 `renameDraft` 为该行当前显示名(别名或内容兜底预览),设置 `renamingItemID`;若动作面板开着则先关闭;与 Edit Content 互斥。
+- `beginRenaming(id:)`:预填 `renameDraft` 为该行 `displayTitle`(别名优先,否则按类型推导的标题),设置 `renamingItemID`;若动作面板开着则先关闭;与 Edit Content 互斥。
 - `commitRenaming()`:`renameDraft` 空白归一化后调用 `core.set_alias`(空字符串清空别名),刷新列表,经 `launcherNotice` 给一句轻量回声。
 - `cancelRenaming()`:清空 `renamingItemID` 与草稿,不写库。
 
@@ -189,9 +190,9 @@ Clipin 的本地键盘监视器按"当前窗口上下文"分发导航键。本�
 | 派生数据 | 处理 |
 |---|---|
 | `content_hash` | 重算(`Sha256(type:content)`);type 变化也会反映进 hash |
-| `char_count` / `word_count` | 重算 |
+| `char_count` | 重算(Rust `ClipItem` 只有 `char_count`,无 `word_count` 列;字数由 Swift 预览渲染时实时算,不落库) |
 | `pinyin_flat` / `pinyin_initials` | 重算(入参 `content + alias`) |
-| FTS5 索引 | v10 触发器自动同步,无需手动 |
+| FTS5 索引 | v11 触发器自动同步,无需手动 |
 | `clip_representations`(HTML/RTF/RTFD 副表) | 清空该条目的副表记录——plain text 已改,旧的富文本表示与新内容不一致,保留会导致粘贴出"看不见的旧富文本" |
 | URL 元数据缓存(favicon / og:title) | 无需手动失效——`FaviconCache` 与 og:title 抓取都按 URL/origin 作 key;content 编辑成新 URL 后渲染层用新 key 自然走新缓存条目,旧缓存不会被错误命中 |
 | 去重 | 不套用——见单元 2 |
@@ -200,7 +201,7 @@ Clipin 的本地键盘监视器按"当前窗口上下文"分发导航键。本�
 
 ## 风险与坑
 
-1. **migration v10 的 FTS 重建**:必须先 `ALTER` 再重建 FTS,且 `DROP`/`CREATE`/`INSERT SELECT`/重建触发器顺序不能错。沿用 v3→v4(ocr_text 加列重建 FTS)的成熟套路,这次不涉及跨锁回填,风险低于 v5。
+1. **migration v11 的 FTS 重建**:必须先 `ALTER` 再重建 FTS,且 `DROP`/`CREATE`/`INSERT SELECT`/重建触发器顺序不能错。沿用 v3→v4(ocr_text 加列重建 FTS)的成熟套路,这次不涉及跨锁回填,风险低于 v5。
 2. **LazyVStack 重建吞掉 inline TextField**:必须靠 `renamingItemID` 存活在 ViewModel + 行 `.id(item.id)` 稳定。若仅用 row 内部 `@State` 标记编辑态,滚动重建会丢失编辑中的输入。
 3. **IME 组词回车被吞**:Rename 的 `TextField` 提交走 `onSubmit`,不在 key monitor 层拦 `Return`;否则中文别名的拼音选字回车会失效。
 4. **type 重判定的连锁渲染**:text 编辑成 url 后,列表行图标、preview 渲染分支、favicon 抓取都要跟着新 type 走。Edit Content 提交后必须完整刷新该条目,不能只刷新 content 字段。
@@ -216,7 +217,7 @@ Clipin 的本地键盘监视器按"当前窗口上下文"分发导航键。本�
 - `update_content`:content/type/hash/char_count/pinyin 全部更新;`created_at`/`copy_count`/`paste_count`/`is_pinned` 不变;副表 representations 被清空。
 - `update_content` 产生与他条目相同 hash 时不去重、不报错,库中仍是两条。
 - export/import 往返保留 alias;同 hash 重复条目"现有 alias 空、备份非空"时补全并计为 imported。
-- migration:v9 库升到 v10 后 schema 正确、老数据可读、FTS 含 alias 列;migration 幂等。
+- migration:v10 库升到 v11 后 schema 正确、老数据可读、FTS 含 alias 列;migration 幂等。
 
 **手动验收(UI)**
 - ⌘K → Rename:inline 编辑、全选预填、Return 提交、Esc 取消、空字符串删除别名;改名后列表立即反映、视觉信号出现。

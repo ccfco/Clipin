@@ -20,25 +20,27 @@
 
 ---
 
-### Task 1: Migration v10 — 新增 alias 列 + 重建 FTS5
+### Task 1: Migration v11 — 新增 alias 列 + 重建 FTS5
 
 **Files:**
-- Modify: `rust/src/storage.rs`(`run_migrations` 约 114-149;新增 `migrate_to_v10`;`migration_tests` 模块约 1770-1830)
+- Modify: `rust/src/storage.rs`(`run_migrations` 约 114-152;新增 `migrate_to_v11`;`migration_tests` 模块约 1842 起)
+
+> **基线说明**:当前 schema 已是 **v10**——`migrate_to_v10`(storage.rs 约 430)给 `clip_items` 加了 `image_width`/`image_height` 两列。本 feature 的 `alias` 列是 **v11**,绝不能复用 v10。
 
 - [ ] **Step 1: 写失败测试**
 
-在 `rust/src/storage.rs` 的 `mod migration_tests` 内(`test_v9_creates_representations_table` 之后)新增:
+在 `rust/src/storage.rs` 的 `mod migration_tests` 内(`test_v10_migration_is_reentrant` 之后)新增:
 
 ```rust
     #[test]
-    fn test_v10_adds_alias_column_and_rebuilds_fts() {
+    fn test_v11_adds_alias_column_and_rebuilds_fts() {
         let tmp = tempfile::tempdir().unwrap();
         let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
         let img_dir = tmp.path().join("images").to_string_lossy().to_string();
         std::fs::create_dir_all(&img_dir).unwrap();
 
         let storage = Storage::new(&db_path, &img_dir).unwrap();
-        assert_eq!(storage.schema_version(), 10);
+        assert_eq!(storage.schema_version(), 11);
 
         let conn = storage.conn.lock().unwrap();
 
@@ -80,17 +82,17 @@
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `cd rust && cargo test --lib test_v10_adds_alias_column_and_rebuilds_fts`
-Expected: FAIL — `assert_eq!(storage.schema_version(), 10)` 失败(当前为 9)。
+Run: `cd rust && cargo test --lib test_v11_adds_alias_column_and_rebuilds_fts`
+Expected: FAIL — `assert_eq!(storage.schema_version(), 11)` 失败(当前为 10)。
 
-- [ ] **Step 3: 新增 `migrate_to_v10` 函数**
+- [ ] **Step 3: 新增 `migrate_to_v11` 函数**
 
-在 `rust/src/storage.rs` 的 `migrate_to_v9` 函数之后新增:
+在 `rust/src/storage.rs` 的 `migrate_to_v10` 函数之后新增:
 
 ```rust
-    fn migrate_to_v10(conn: &Connection) -> Result<(), ClipinError> {
-        // 用户别名列。可空：NULL 表示未命名，列表回退到内容兜底预览。
-        // 幂等检查：崩溃重启重跑时不能重复 ALTER。
+    fn migrate_to_v11(conn: &Connection) -> Result<(), ClipinError> {
+        // 用户别名列。可空：NULL 表示未命名，列表显示名回退到按类型推导的标题。
+        // 幂等检查：崩溃重启重跑时不能重复 ALTER（同 migrate_to_v6/v10 套路）。
         let has_alias: bool = conn
             .prepare("PRAGMA table_info(clip_items)")?
             .query_map([], |row| row.get::<_, String>(1))?
@@ -135,44 +137,45 @@ Expected: FAIL — `assert_eq!(storage.schema_version(), 10)` 失败(当前为 9
              INSERT INTO clip_fts(rowid,content,source_name,ocr_text,alias,pinyin_flat,pinyin_initials)
              SELECT rowid,content,source_name,ocr_text,alias,pinyin_flat,pinyin_initials FROM clip_items;
 
-             PRAGMA user_version = 10;",
+             PRAGMA user_version = 11;",
         )?;
         Ok(())
     }
 ```
 
-- [ ] **Step 4: 在 `run_migrations` 接入 v10 分支**
+- [ ] **Step 4: 在 `run_migrations` 接入 v11 分支**
 
-在 `run_migrations` 函数里,`if from_version < 9 { ... }` 块之后、`Ok(())` 之前插入:
+在 `run_migrations` 函数里,`if from_version < 10 { ... }` 块之后、`Ok(())` 之前插入:
 
 ```rust
-        if from_version < 10 {
-            Self::migrate_to_v10(&self.conn())?;
+        if from_version < 11 {
+            Self::migrate_to_v11(&self.conn())?;
         }
 ```
 
 - [ ] **Step 5: 更新现有 migration 测试的版本号断言**
 
-`migration_tests` 模块内有三处硬编码 `9`,全部改为 `10`:
+`migration_tests` 模块内有三处硬编码当前版本号 `10`,全部改为 `11`(`test_v10_image_dimensions_roundtrip` / `test_v10_migration_is_reentrant` 是 v10 自己的测试,**不要动**):
 
-- `test_fresh_db_is_version_1`: `assert_eq!(storage.schema_version(), 9, "新建数据库应为 v9");` → `assert_eq!(storage.schema_version(), 10, "新建数据库应为 v10");`
-- `test_existing_v0_migrates_to_v1`: `assert_eq!(storage.schema_version(), 9, "旧数据库应 migrate 到 v9");` → `assert_eq!(storage.schema_version(), 10, "旧数据库应 migrate 到 v10");`
-- `test_migration_is_idempotent`: `assert_eq!(s2.schema_version(), 9);` → `assert_eq!(s2.schema_version(), 10);`
+- `test_fresh_db_is_version_1`: `assert_eq!(storage.schema_version(), 10, "新建数据库应为 v10");` → `assert_eq!(storage.schema_version(), 11, "新建数据库应为 v11");`
+- `test_existing_v0_migrates_to_v1`: `assert_eq!(storage.schema_version(), 10, "旧数据库应 migrate 到 v10");` → `assert_eq!(storage.schema_version(), 11, "旧数据库应 migrate 到 v11");`
+- `test_migration_is_idempotent`: `assert_eq!(s2.schema_version(), 10);` → `assert_eq!(s2.schema_version(), 11);`
 
 - [ ] **Step 6: 运行 migration 测试确认通过**
 
 Run: `cd rust && cargo test --lib migration_tests`
-Expected: PASS — 全部 migration 测试通过,含新增的 `test_v10_adds_alias_column_and_rebuilds_fts`。
+Expected: PASS — 全部 migration 测试通过,含新增的 `test_v11_adds_alias_column_and_rebuilds_fts`。
 
 - [ ] **Step 7: 提交**
 
 ```bash
 git add rust/src/storage.rs
 git commit -m "$(cat <<'EOF'
-feat: DB migration v10 — clip_items 新增 alias 列并重建 FTS5
+feat: DB migration v11 — clip_items 新增 alias 列并重建 FTS5
 
 【根因/背景】支持给粘贴项起用户别名，别名需与 content 等权进入搜索
-【改动范围】storage.rs 新增 migrate_to_v10、run_migrations 加 v10 分支、migration 测试版本号断言 9→10
+【踩坑记录】当前 schema 已是 v10（图片尺寸列），alias 必须用 v11，不能复用 v10
+【改动范围】storage.rs 新增 migrate_to_v11、run_migrations 加 v11 分支、migration 测试版本号断言 10→11
 EOF
 )"
 ```
@@ -260,11 +263,12 @@ Expected: FAIL — 编译错误,`ClipItem` 无 `alias` 字段。
 
 下列 SELECT 的列清单都以 `paste_count` 结尾。对**非 JOIN** 的查询,把 `paste_count` 改为 `paste_count, alias`;对 **FTS JOIN** 的查询,在 `ci.paste_count,` 之后、`clip_fts.rank` 之前插入 `ci.alias,`,即 `... ci.paste_count, ci.alias, clip_fts.rank`。
 
-非 JOIN(列尾 `paste_count` → `paste_count, alias`),共 9 处:
+非 JOIN(列尾 `paste_count` → `paste_count, alias`),共 10 处:
 - `get_items` 两处 SQL(type filter 分支与 no filter 分支)
 - `export_archive_snapshot` 的 items SELECT
 - `get_item` 的 SELECT
 - `get_unprocessed_images` 的 SELECT
+- `get_unsized_images` 的 SELECT(v10 新增的图片尺寸 backfill 查询,同样经 `row_to_item` 产出完整 `ClipItem`——最易漏)
 - `query_raw_item_hits` 的 `else` 分支(LIKE 路径)两处 SQL
 - `query_pinyin_item_hits` 的 `else` 分支(LIKE 路径)两处 SQL
 
@@ -384,7 +388,7 @@ Expected: FAIL — 编译错误,`set_alias` 未定义。
 
 - [ ] **Step 3: `storage.rs` 实现 `set_alias`**
 
-在 `update_ocr_text` 方法之后新增。空字符串归一化为 `None`;写别名后重算拼音(入参 `content + " " + alias`),`alias`/`pinyin_flat`/`pinyin_initials` 都在 v10 触发器列集内,FTS 自动同步。
+在 `update_ocr_text` 方法之后新增。空字符串归一化为 `None`;写别名后重算拼音(入参 `content + " " + alias`),`alias`/`pinyin_flat`/`pinyin_initials` 都在 v11 触发器列集内,FTS 自动同步。
 
 ```rust
     /// 写入或清空条目别名。空字符串与 None 都归一化为 SQL NULL。
@@ -519,13 +523,17 @@ EOF
 
 ---
 
-### Task 5: `ClipListItem` 增加 alias 字段 + 列表显示名优先别名
+### Task 5: `ClipListItem` 增加 alias 字段
 
 **Files:**
-- Modify: `rust/src/models.rs`(`ClipListItem` 结构体 51-64)
-- Modify: `rust/src/storage.rs`(所有 list SELECT、`row_to_list_item`)
+- Modify: `rust/src/models.rs`(`ClipListItem` 结构体 52-67)
+- Modify: `rust/src/storage.rs`(所有 list SELECT、`row_to_list_item`、`row_to_list_search_hit`)
 
-列表显示名(`preview`)的兜底优先级从 `COALESCE(NULLIF(ocr_text,''),content)` 改为 `COALESCE(NULLIF(alias,''),NULLIF(ocr_text,''),content)`。`ClipListItem` 额外携带 `alias`,供 Swift 端判定是否画"有别名"视觉信号。
+`ClipListItem` 携带 `alias`,供 Swift 端:① 列表行画"有别名"视觉信号;② `displayTitle`(`ClipListItem+Display.swift`)按"别名优先"推导显示名。
+
+> **为什么显示名优先级不在 SQL 里做**:`ClipListItem.preview` 不只是列表标题——`ClipItemRow.typeIndicator` 还用它做 hex 颜色检测和 favicon URL 解析(`URL(string: item.preview)`)。把 `preview` 改成 alias 会让 URL 条目改名后 favicon 失效;而且 image/file 的列表标题由 Swift `displayTitle` 从元信息推导(image=来源+尺寸,file=文件标题),根本不读 `preview`。因此 `preview` 的 SQL 兜底表达式 **保持不变**(`COALESCE(NULLIF(ocr_text,''),content)`),`alias` 作为独立字段携带;"别名优先于一切类型标题"的显示逻辑统一在 Swift `displayTitle` 实现(见配套 Swift 计划 Task 5)。本 task 只给 list SELECT **追加 alias 列**,不动兜底表达式。
+
+> **行索引**:`ClipListItem` 在 v10 已有 `image_width`/`image_height` 两列(list SELECT index 11、12)。`alias` 追加在 `image_height` 之后 = **index 13**;FTS JOIN 路径的 `clip_fts.rank` 相应从 13 后移到 **index 14**。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -533,7 +541,7 @@ EOF
 
 ```rust
     #[test]
-    fn test_list_item_carries_alias_and_prefers_it_as_preview() {
+    fn test_list_item_carries_alias() {
         let core = setup_core();
         let item = core
             .save_item("ghp_secret_token_value".into(), ClipType::Text, None, None, None)
@@ -544,31 +552,33 @@ EOF
         assert_eq!(before[0].alias, None);
         assert_eq!(before[0].preview, "ghp_secret_token_value");
 
-        // 命名后：list item alias 有值，preview 优先别名
+        // 命名后：list item alias 有值；preview 仍是内容兜底
+        // （"别名优先"的显示名逻辑在 Swift displayTitle，不在 SQL）
         core.set_alias(item.id.clone(), Some("GitHub PAT".into())).unwrap();
         let after = core.get_list_items(10, 0, None).unwrap();
         assert_eq!(after[0].alias.as_deref(), Some("GitHub PAT"));
-        assert_eq!(after[0].preview, "GitHub PAT");
+        assert_eq!(after[0].preview, "ghp_secret_token_value");
     }
 ```
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `cd rust && cargo test --lib test_list_item_carries_alias_and_prefers_it_as_preview`
+Run: `cd rust && cargo test --lib test_list_item_carries_alias`
 Expected: FAIL — 编译错误,`ClipListItem` 无 `alias` 字段。
 
 - [ ] **Step 3: `models.rs` 给 `ClipListItem` 加字段**
 
-在 `ClipListItem` 结构体 `copy_count` 字段之后追加:
+在 `ClipListItem` 结构体 `image_height` 字段之后追加:
 
 ```rust
-    /// 用户自定义别名。None 表示未命名；非 None 时列表行画"有别名"视觉信号。
+    /// 用户自定义别名。None 表示未命名；非 None 时列表行画"有别名"视觉信号，
+    /// 且 Swift displayTitle 按"别名优先"推导显示名。
     pub alias: Option<String>,
 ```
 
-- [ ] **Step 4: `storage.rs` — `row_to_list_item` 读取 alias**
+- [ ] **Step 4: `storage.rs` — `row_to_list_item` / `row_to_list_search_hit` 读取 alias**
 
-`row_to_list_item` 当前读 index 0-10。在 `copy_count: row.get(10).unwrap_or(1),` 之后追加 `alias: row.get(11)?,`:
+`row_to_list_item` 当前读 index 0-12(末两列 `image_width`/`image_height`)。在 `image_height: row.get(12)?,` 之后追加 `alias: row.get(13)?,`:
 
 ```rust
     fn row_to_list_item(row: &rusqlite::Row) -> rusqlite::Result<ClipListItem> {
@@ -585,30 +595,30 @@ Expected: FAIL — 编译错误,`ClipListItem` 无 `alias` 字段。
             char_count: row.get(8)?,
             paste_count: row.get(9).unwrap_or(0),
             copy_count: row.get(10).unwrap_or(1),
-            alias: row.get(11)?,
+            image_width: row.get(11)?,
+            image_height: row.get(12)?,
+            alias: row.get(13)?,
         })
     }
 ```
 
-`row_to_list_search_hit` 的 `raw_rank` 从 index 11 改为 12:
+`row_to_list_search_hit` 的 `raw_rank` 从 index 13 改为 14(alias 占了 13,FTS rank 后移):
 
 ```rust
     fn row_to_list_search_hit(row: &rusqlite::Row) -> rusqlite::Result<SearchHit<ClipListItem>> {
         Ok(SearchHit {
             item: Self::row_to_list_item(row)?,
-            raw_rank: row.get(12)?,
+            // image_width/image_height 占 11、12，alias 占 13，FTS rank 后移到 14
+            raw_rank: row.get(14)?,
         })
     }
 ```
 
-- [ ] **Step 5: `storage.rs` — 所有 list SELECT 改兜底表达式并加 alias 列**
+- [ ] **Step 5: `storage.rs` — 所有 list SELECT 列清单末尾加 alias 列**
 
-所有 list SELECT 的第二列当前是 `substr(COALESCE(NULLIF(ocr_text,''),content),1,{p})`(JOIN 路径带 `ci.` 前缀)。两处统一改动:
+list SELECT 第二列的兜底表达式 `substr(COALESCE(NULLIF(ocr_text,''),content),1,{p})`(JOIN 路径带 `ci.` 前缀)**保持不变**(理由见 task 开头)。只在列清单末尾追加 alias 列:非 JOIN 把末列 `image_height` 改为 `image_height, alias`;FTS JOIN 在 `ci.image_height,` 之后、`clip_fts.rank` 之前插入 `ci.alias,`。
 
-1. 兜底表达式加 alias 优先:`COALESCE(NULLIF(ocr_text,''),content)` → `COALESCE(NULLIF(alias,''),NULLIF(ocr_text,''),content)`(JOIN 路径为 `COALESCE(NULLIF(ci.alias,''),NULLIF(ci.ocr_text,''),ci.content)`)。
-2. 列清单末尾加 alias 列:非 JOIN 把末列 `copy_count` 改为 `copy_count, alias`;FTS JOIN 在 `ci.copy_count,` 之后、`clip_fts.rank` 之前插入 `ci.alias,`。
-
-涉及的函数(每个内有 type/pinned 组合的多条 SQL,全部按上面两点改),共 12 处:
+涉及的函数(每个内有 type/pinned 组合的多条 SQL,全部按上面规则改),共 12 处:
 - `get_list_items_with_pinned_filter` — 4 个 match 分支各 1 条 SQL(非 JOIN)
 - `query_raw_list_hits` — `if`(FTS)分支 2 条、`else`(LIKE)分支 2 条
 - `query_pinyin_list_hits` — `if`(FTS)分支 2 条、`else`(LIKE)分支 2 条
@@ -617,9 +627,10 @@ Expected: FAIL — 编译错误,`ClipListItem` 无 `alias` 字段。
 
 ```rust
                 let sql = format!(
-                    "SELECT id, substr(COALESCE(NULLIF(alias,''),NULLIF(ocr_text,''),content),1,{p}),
+                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
                             clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count, alias
+                            created_at, image_path, char_count, paste_count, copy_count,
+                            image_width, image_height, alias
                      FROM clip_items
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT ?1 OFFSET ?2",
@@ -631,10 +642,10 @@ FTS JOIN 改后样例(`query_raw_list_hits` 的 FTS no-filter 分支):
 
 ```rust
                 format!(
-                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.alias,''),NULLIF(ci.ocr_text,''),ci.content),1,{p}),
+                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
                             ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count, ci.alias,
-                            clip_fts.rank
+                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
+                            ci.image_width, ci.image_height, ci.alias, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
@@ -647,18 +658,18 @@ FTS JOIN 改后样例(`query_raw_list_hits` 的 FTS no-filter 分支):
 - [ ] **Step 6: 运行全部 Rust 测试**
 
 Run: `cd rust && cargo test --lib`
-Expected: PASS — 全部测试通过,含 `test_list_item_carries_alias_and_prefers_it_as_preview`。
+Expected: PASS — 全部测试通过,含 `test_list_item_carries_alias`。
 
 - [ ] **Step 7: 提交**
 
 ```bash
 git add rust/src/models.rs rust/src/storage.rs
 git commit -m "$(cat <<'EOF'
-feat: ClipListItem 增加 alias 字段，列表显示名优先别名
+feat: ClipListItem 增加 alias 字段
 
-【根因/背景】列表行有别名时只显示别名，无别名回退内容兜底
-【踩坑记录】preview 兜底优先级 alias→ocr_text→content；alias 列加在 SELECT 末尾，list search hit 的 rank index 11→12
-【改动范围】models.rs ClipListItem 加字段；storage.rs 全部 list SELECT、row_to_list_item
+【根因/背景】列表行需要知道条目有无别名，以渲染显示名与"有别名"视觉信号
+【踩坑记录】preview 的 SQL 兜底表达式保持不变（favicon/颜色检测仍依赖原始内容）；"别名优先"显示名逻辑在 Swift displayTitle，不在 SQL；alias 列追加在 image_height 之后 = index 13，list search hit 的 rank index 13→14
+【改动范围】models.rs ClipListItem 加字段；storage.rs 全部 list SELECT 加 alias 列、row_to_list_item、row_to_list_search_hit
 EOF
 )"
 ```
@@ -888,24 +899,28 @@ EOF
     }
 
     #[test]
-    fn test_import_if_missing_fills_empty_alias() {
+    fn test_import_if_missing_fills_empty_alias_and_recomputes_pinyin() {
         let core = setup_core();
         // 现有条目无别名
         core.save_item("doc".into(), ClipType::Text, None, None, None)
             .unwrap();
 
-        // 同 hash 导入，备份带别名 → 补上并计为 imported
+        // 同 hash 导入，备份带中文别名 → 补上、计为 imported、并重算拼音
         let imported = core
             .import_item_if_missing(
                 "doc".into(), ClipType::Text, None, None, None,
-                false, 2_000, Some("Backup Name".into()), vec![],
+                false, 2_000, Some("备份名".into()), vec![],
             )
             .unwrap();
         assert!(imported, "现有别名为空、备份有别名应计为 imported");
 
         let items = core.get_items(10, 0, None).unwrap();
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].alias.as_deref(), Some("Backup Name"));
+        assert_eq!(items[0].alias.as_deref(), Some("备份名"));
+
+        // 补别名时同步重算了拼音 → 中文别名可被拼音搜到
+        // （若漏掉拼音重算，这一行会失败：导入恢复的中文别名搜不到）
+        assert_eq!(core.search("beifenming".into(), None).unwrap().len(), 1);
     }
 
     #[test]
@@ -977,6 +992,10 @@ Expected: FAIL — 编译错误,`import_item_if_missing` 参数数量不匹配(�
 
 ```rust
             // 现有条目 alias 为空、备份带别名时补上，计为 imported。
+            // 补别名必须同步重算拼音（入参 content + alias），与 set_alias 口径一致——
+            // 否则导入恢复出来的中文别名搜不到。content 取本次入参即可：同 hash ⟹ 同 content。
+            // 注意：不能改调 self.set_alias()，它内部会再次 self.conn() 取锁，与此处
+            // 已持有的 conn 形成 std::Mutex 重入死锁。必须就地 UPDATE。
             if let Some(new_alias) = alias.filter(|a| !a.is_empty()) {
                 let existing_alias: Option<String> = conn.query_row(
                     "SELECT alias FROM clip_items WHERE id = ?1",
@@ -984,9 +1003,13 @@ Expected: FAIL — 编译错误,`import_item_if_missing` 参数数量不匹配(�
                     |r| r.get(0),
                 )?;
                 if existing_alias.as_deref().unwrap_or("").is_empty() {
+                    let (alias_pinyin_flat, alias_pinyin_initials) =
+                        compute_pinyin(&format!("{content} {new_alias}"));
                     conn.execute(
-                        "UPDATE clip_items SET alias = ?1 WHERE id = ?2",
-                        params![new_alias, existing_id],
+                        "UPDATE clip_items
+                         SET alias = ?1, pinyin_flat = ?2, pinyin_initials = ?3
+                         WHERE id = ?4",
+                        params![new_alias, alias_pinyin_flat, alias_pinyin_initials, existing_id],
                     )?;
                     return Ok(true);
                 }
@@ -1048,7 +1071,7 @@ git commit -m "$(cat <<'EOF'
 feat: 别名进入导入/导出备份
 
 【根因/背景】备份应保留用户别名；导入同 hash 条目时不丢、不误覆盖别名
-【踩坑记录】import_if_missing 命中已存在条目时，仅当现有 alias 为空才用备份别名补全（计为 imported），现有别名非空则保留不覆盖
+【踩坑记录】import_if_missing 命中已存在条目时，仅当现有 alias 为空才用备份别名补全（计为 imported），现有别名非空则保留不覆盖；补别名同步重算拼音（不能改调 set_alias，会与已持有的 conn 重入死锁），否则导入恢复的中文别名搜不到
 【改动范围】storage.rs 与 lib.rs 的 import_item / import_item_if_missing 增加 alias 参数；既有测试调用点补 None
 EOF
 )"

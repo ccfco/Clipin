@@ -242,12 +242,15 @@ Rename 与 Edit Content 的两个编辑态互斥(`beginRenaming` 调 `cancelEdit
 ```swift
     // MARK: - Rename
 
-    /// 进入 inline 改名编辑态。预填该行当前显示名（别名或内容兜底预览）。
+    /// 进入 inline 改名编辑态。预填该行当前显示名 displayTitle
+    /// （别名优先；无别名时是按类型推导的标题：text/url 取内容首行、image 取来源+尺寸、file 取文件标题）。
     func beginRenaming(id: String) {
         guard let listItem = items.first(where: { $0.id == id }) else { return }
         if isShowingActions { hideActionsPalette() }
         cancelEditContent()        // 两个编辑态互斥
-        renameDraft = listItem.preview
+        // 预填用 displayTitle 而非 preview：preview 对 image/file 是 OCR/路径原文，
+        // 拿来当改名预填毫无意义；displayTitle 才是用户当前在列表里看到的那行字。
+        renameDraft = listItem.displayTitle
         renamingItemID = id
     }
 
@@ -412,11 +415,12 @@ EOF
 
 ---
 
-### Task 5: ClipItemRow inline 改名 UI + 列表锁定
+### Task 5: displayTitle 别名优先 + ClipItemRow inline 改名 UI + 列表锁定
 
 **Files:**
-- Modify: `Clipin/Views/ClipItemRow.swift`(`ClipItemRow` 结构体 307-350)
-- Modify: `Clipin/Views/MainPanel.swift`(`ItemListView` 结构体 425-443、`row(for:)` 手势约 542-543、`ItemListView` 实例化处约第 192 行)
+- Modify: `Clipin/Views/ClipListItem+Display.swift`(`displayTitle` 计算属性 7-29)
+- Modify: `Clipin/Views/ClipItemRow.swift`(`ClipItemRow` 结构体 311-489)
+- Modify: `Clipin/Views/MainPanel.swift`(`ItemListView` 结构体约 421 起、`row(for:)` 手势约 541-542、`ItemListView` 实例化处约第 195 行)
 
 `ClipItemRow` 当前是纯参数视图。改名需要它与 `ClipboardViewModel` 双向通信(读 `renamingItemID`、绑定 `renameDraft`、调 `commitRenaming`),给它注入 `@EnvironmentObject`。`MainPanel` 已对 `PreviewPane` 注入 `environmentObject(viewModel)`,本 task 给 `ItemListView` 也注入,使其自身与子树内的 `ClipItemRow` 都能取到。
 
@@ -424,7 +428,23 @@ EOF
 - Rename:`TextField` 失焦即自动提交(访达式)——覆盖"改名进行中点击其他行"。
 - Edit Content:编辑进行中**锁定**列表选中切换——鼠标点击其他行不切换。
 
-- [ ] **Step 1: `MainPanel` 给 `ItemListView` 注入 environmentObject**
+- [ ] **Step 1: `ClipListItem+Display.swift` — `displayTitle` 别名优先**
+
+`displayTitle` 是列表行标题与 ⌘K 动作面板头部共用的显示名推导(`ClipItemRow.displayText`、`ActionPalette` 头部都读它)。"别名优先于一切类型标题"必须在这里做,**不能**在 Rust 的 SQL `preview` 列做——理由见 Rust 计划 Task 5:`preview` 还被 favicon / hex 颜色检测复用,且 image/file 的标题由 `displayTitle` 从元信息推导、根本不读 `preview`。在这里加一处判断,四类条目(text/url/image/file)统一获得别名优先。
+
+`displayTitle` 的 `switch clipType` **之前**插入别名短路:
+
+```swift
+    var displayTitle: String {
+        // 别名优先于一切类型标题：用户显式命名的意图最高，覆盖 text/url/image/file 四类。
+        if let alias, !alias.isEmpty { return alias }
+        switch clipType {
+        // ...现有 text/url/image/file 分支保持不变...
+        }
+    }
+```
+
+- [ ] **Step 2: `MainPanel` 给 `ItemListView` 注入 environmentObject**
 
 `MainPanel.swift` 约第 192 行的 `ItemListView(...)` 调用,在其闭合括号之后链式追加 `.environmentObject(viewModel)`。即把:
 
@@ -445,7 +465,7 @@ EOF
 
 (若 `ItemListView(...)` 之后已有其他链式 modifier,把 `.environmentObject(viewModel)` 加在它们之前即可。)
 
-- [ ] **Step 2: `ItemListView` 增加 vm 引用,Edit Content 期间锁定列表交互**
+- [ ] **Step 3: `ItemListView` 增加 vm 引用,Edit Content 期间锁定列表交互**
 
 `ItemListView` 结构体属性区(`@State private var hoveredID: String?` 之后)追加:
 
@@ -471,9 +491,9 @@ EOF
         })
 ```
 
-> 注:Rename 进行中**不**锁定列表点击 —— 点击其他行靠 Step 4 的"失焦自动提交"处理(访达式),与 Edit Content 的锁定是有意的不对称。
+> 注:Rename 进行中**不**锁定列表点击 —— 点击其他行靠 Step 5 的"失焦自动提交"处理(访达式),与 Edit Content 的锁定是有意的不对称。
 
-- [ ] **Step 3: `ClipItemRow` 增加 environmentObject 与编辑态计算属性**
+- [ ] **Step 4: `ClipItemRow` 增加 environmentObject 与编辑态计算属性**
 
 `ClipItemRow` 结构体属性区(`let sceneState: ClipinSceneState` 之后)追加:
 
@@ -485,9 +505,9 @@ EOF
     private var hasAlias: Bool { item.alias?.isEmpty == false }
 ```
 
-- [ ] **Step 4: body 标题区改为条件渲染 + 失焦自动提交**
+- [ ] **Step 5: body 标题区改为条件渲染 + 失焦自动提交**
 
-`body` 的 `HStack` 内,当前的 `Text(highlightedDisplayText)` 整块(第 323-331 行,含其全部 modifier)替换为:
+`body` 的 `HStack` 内,当前的 `Text(highlightedDisplayText)` 整块(约第 327-335 行,含其全部 modifier 与注释)替换为:
 
 ```swift
             if isRenaming {
@@ -512,15 +532,18 @@ EOF
                         }
                     }
             } else {
+                // 非编辑态：保持 ClipItemRow 现有只读标题样式 —— 字重恒为 .regular，
+                // 选中走 accent 色、未选纯 Color.primary。务必照搬当前代码，
+                // 不要写成 v9 的 weight: isSelected ? .semibold 或 .opacity(0.82)。
                 Text(highlightedDisplayText)
-                    .font(.system(size: 13.5, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary.opacity(0.82)))
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 ```
 
-- [ ] **Step 5: 增加"有别名"视觉信号**
+- [ ] **Step 6: 增加"有别名"视觉信号**
 
 `body` 的 `HStack` 内,`typeIndicator` 那一整块(`typeIndicator.scaleEffect(...).animation(...)`)之后、标题区之前,插入一个固定宽度的别名标记位(有别名画 accent 小圆点,无别名占等宽空位,保证两种行左对齐一致):
 
@@ -535,12 +558,12 @@ EOF
             .frame(width: 6)
 ```
 
-- [ ] **Step 6: 构建确认通过**
+- [ ] **Step 7: 构建确认通过**
 
 Run: `xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release -destination 'generic/platform=macOS' build`
 Expected: BUILD SUCCEEDED。
 
-- [ ] **Step 7: 手动验收**
+- [ ] **Step 8: 手动验收**
 
 构建并运行 app:
 - ⌘⇧V 唤起面板,选中一条文本条目,⌘K → 选 `Rename`:该行标题原地变为 `TextField`,文字预填且全选,光标在该行。
@@ -548,16 +571,16 @@ Expected: BUILD SUCCEEDED。
 - 再次 Rename,清空文字 → Return:该行回退为内容兜底预览,小圆点消失。
 - 进入 Rename,**鼠标点击列表另一行**:当前别名自动提交(失焦),选中切到新行——无孤儿编辑态残留。
 
-- [ ] **Step 8: 提交**
+- [ ] **Step 9: 提交**
 
 ```bash
-git add Clipin/Views/ClipItemRow.swift Clipin/Views/MainPanel.swift
+git add Clipin/Views/ClipListItem+Display.swift Clipin/Views/ClipItemRow.swift Clipin/Views/MainPanel.swift
 git commit -m "$(cat <<'EOF'
-feat: 列表行 inline 改名 UI + 编辑态列表锁定
+feat: displayTitle 别名优先 + 列表行 inline 改名 UI + 编辑态列表锁定
 
-【根因/背景】访达式改名——列表行标题原地切换为 TextField
-【踩坑记录】ClipItemRow 原为纯参数视图，改名需与 vm 双向通信，故经 ItemListView 注入 environmentObject；TextField 无全选 API，获焦后异步 selectAll field editor；改名失焦即提交（访达式），Edit Content 期间锁定列表点击（重动作需显式确认）
-【改动范围】ClipItemRow 加 environmentObject/FocusState/编辑态条件渲染/失焦提交/别名视觉信号；ItemListView 加 vm 并锁定 row 手势；MainPanel 给 ItemListView 注入 environmentObject
+【根因/背景】访达式改名——列表行标题原地切换为 TextField；别名优先显示统一在 displayTitle
+【踩坑记录】别名优先必须在 displayTitle 做、不在 SQL preview——image/file 列表标题由 displayTitle 从元信息推导、不读 preview，且 preview 还被 favicon 复用；ClipItemRow 原为纯参数视图，改名需与 vm 双向通信，故经 ItemListView 注入 environmentObject；TextField 无全选 API，获焦后异步 selectAll field editor；改名失焦即提交（访达式），Edit Content 期间锁定列表点击（重动作需显式确认）
+【改动范围】ClipListItem+Display.swift displayTitle 加别名优先；ClipItemRow 加 environmentObject/FocusState/编辑态条件渲染/失焦提交/别名视觉信号；ItemListView 加 vm 并锁定 row 手势；MainPanel 给 ItemListView 注入 environmentObject
 EOF
 )"
 ```
@@ -860,7 +883,7 @@ Expected: BUILD SUCCEEDED。运行编译出的 app。
 
 - [ ] text / url / image / file 四种类型条目都能 ⌘K → Rename;改名后列表行只显示别名,行首有 accent 小圆点。
 - [ ] 改名 inline 编辑:预填当前显示名且全选;Return 提交;Esc 取消恢复原状。
-- [ ] 提交空字符串 = 删除别名,列表回退内容兜底预览,小圆点消失。
+- [ ] 提交空字符串 = 删除别名,列表回退为 displayTitle 按类型推导的标题,小圆点消失。
 - [ ] 改名后用别名搜索能命中(英文别名直接搜、中文别名拼音搜)。
 - [ ] pinned 视图与普通视图都能改名,别名一致。
 - [ ] 改名进行中按 ↑↓ 列表不移动;中文输入法组词正常。
