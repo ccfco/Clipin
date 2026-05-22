@@ -429,6 +429,16 @@ struct ActionPaletteBuilder {
                 viewModel.togglePinSelected()
             })
 
+            list.append(PaletteAction("Rename", systemImage: "pencil", shortcut: .rename, restoresSearchFocus: false) {
+                viewModel.beginRenaming(id: selected.id)
+            })
+
+            if selected.clipType == .text || selected.clipType == .url {
+                list.append(PaletteAction("Edit Content", systemImage: "square.and.pencil", shortcut: .editContent, restoresSearchFocus: false) {
+                    viewModel.beginEditContent(id: selected.id)
+                })
+            }
+
             if viewModel.canOpenSelectedItem {
                 list.append(PaletteAction(viewModel.selectedOpenLabel, systemImage: viewModel.selectedOpenSystemImage, shortcut: .open, restoresSearchFocus: false) {
                     viewModel.openSelected()
