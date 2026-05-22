@@ -392,3 +392,5 @@
 "Could not rename this item." = "无法重命名该条目。";
 "Content saved." = "内容已保存。";
 "Could not save content." = "无法保存内容。";
+"Only text and links support content editing." = "只有文本和链接可以编辑内容。";
+"Content can't be empty." = "内容不能为空。";

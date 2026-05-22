@@ -392,3 +392,5 @@
 "Could not rename this item." = "Could not rename this item.";
 "Content saved." = "Content saved.";
 "Could not save content." = "Could not save content.";
+"Only text and links support content editing." = "Only text and links support content editing.";
+"Content can't be empty." = "Content can't be empty.";

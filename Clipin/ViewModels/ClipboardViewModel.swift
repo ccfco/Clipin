@@ -507,8 +507,15 @@ final class ClipboardViewModel: ObservableObject {
 
     /// 进入 preview 区内容编辑态。仅 text/url 类型可编辑。
     func beginEditContent(id: String) {
-        guard let listItem = items.first(where: { $0.id == id }),
-              listItem.clipType == .text || listItem.clipType == .url else { return }
+        guard let listItem = items.first(where: { $0.id == id }) else { return }
+        guard listItem.clipType == .text || listItem.clipType == .url else {
+            // 主面板 ⌘E 可落在图片/文件条目上；静默 return 会让用户不知为何无反应。
+            showNotice(
+                NSLocalizedString("Only text and links support content editing.", comment: ""),
+                style: .info
+            )
+            return
+        }
         if isShowingActions { hideActionsPalette() }
         cancelRenaming()           // 两个编辑态互斥
         guard let full = loadItem(id: id) else { return }
@@ -528,6 +535,11 @@ final class ClipboardViewModel: ObservableObject {
         guard let id = editingContentItemID else { return }
         let newContent = editingContentDraft.text
         let probe = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 内容清空再保存会落库一条无意义的空条目；拦截并保留编辑器，让用户改回或 Esc 取消。
+        guard !probe.isEmpty else {
+            showNotice(NSLocalizedString("Content can't be empty.", comment: ""), style: .warning)
+            return
+        }
         // URL 类型落库存 trim 后内容：类型判定与保存口径必须一致，否则带首尾空白的
         // URL 会被存成 .url，但后续「打开 URL / 预览」的 URL(string:) 会因空白解析失败。
         // 文本类型保留用户原样输入。
