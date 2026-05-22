@@ -214,6 +214,7 @@ struct MainPanel: View {
             onClearFilters: { _ = viewModel.clearActiveQueryAndFilters() },
             onLoadMore: { viewModel.loadMoreItems() }
         )
+        .environmentObject(viewModel)
     }
 
     private var bottomBar: some View {
@@ -437,6 +438,7 @@ private struct ItemListView: View {
     let onLoadMore: () -> Void
 
     @State private var hoveredID: String?
+    @EnvironmentObject private var vm: ClipboardViewModel
 
     /// 预计算 id -> ⌘N 序号，直接从 ViewModel 的 shortcutOrder 构建
     /// ⌘1-9 始终映射当前可见列表中的前 9 项
@@ -538,8 +540,12 @@ private struct ItemListView: View {
         // 才触发，造成点击条目后选中明显卡顿。声明为 simultaneous 即退出仲裁、
         // 立即选中；双击时第一下照常选中（幂等），第二下再 onActivate 粘贴，
         // 与原生 macOS 列表"每次点击即选中、第二击额外激活"的行为一致。
-        .onTapGesture(count: 2) { onActivate(item) }
-        .simultaneousGesture(TapGesture(count: 1).onEnded { selection.wrappedValue = item.id })
+        .onTapGesture(count: 2) {
+            if vm.editingContentItemID == nil { onActivate(item) }
+        }
+        .simultaneousGesture(TapGesture(count: 1).onEnded {
+            if vm.editingContentItemID == nil { selection.wrappedValue = item.id }
+        })
         .onHover { hovered in hoveredID = hovered ? item.id : nil }
         .contextMenu {
             Button("Paste") { onActivate(item) }

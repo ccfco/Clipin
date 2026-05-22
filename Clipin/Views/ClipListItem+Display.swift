@@ -5,6 +5,8 @@ import Foundation
 extension ClipListItem {
     /// 单行展示标题：文本/URL 取首行截断；图片有 OCR 取 OCR 文字、否则 "Image"；文件取文件标题。
     var displayTitle: String {
+        // 别名优先于一切类型标题：用户显式命名的意图最高，覆盖 text/url/image/file 四类。
+        if let alias, !alias.isEmpty { return alias }
         switch clipType {
         case .text, .url:
             return Self.firstLineTruncated(preview) ?? "(empty)"

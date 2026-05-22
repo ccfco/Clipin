@@ -318,21 +318,58 @@ struct ClipItemRow: View {
     var showsShortcutHint: Bool = false
     let sceneState: ClipinSceneState
 
+    @EnvironmentObject private var vm: ClipboardViewModel
+    @FocusState private var aliasFieldFocused: Bool
+
+    private var isRenaming: Bool { vm.renamingItemID == item.id }
+    private var hasAlias: Bool { item.alias?.isEmpty == false }
+
     var body: some View {
         HStack(spacing: ClipinChrome.gap) {
             typeIndicator
                 .scaleEffect(typeIndicatorScale)
                 .animation(ClipinMotion.feedback, value: isHovered)
 
-            Text(highlightedDisplayText)
-                // 字重恒为 .regular:对齐 Raycast,选中行不再加粗——选中感全交给
-                // accent 色 + 高亮底板,字重保持一致,整列文字粗细统一。
-                .font(.system(size: 13.5, weight: .regular))
-                // 未选 → 纯 primary(该黑的黑,对齐 Raycast 列表纯黑标题);
-                // 选中 → accent(蓝),对齐 Spotlight 选中高亮心智(用户明确要求)。
-                .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            ZStack {
+                if hasAlias && !isRenaming {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 5, height: 5)
+                }
+            }
+            .frame(width: 6)
+
+            if isRenaming {
+                TextField("", text: $vm.renameDraft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13.5, weight: .regular))
+                    .focused($aliasFieldFocused)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onSubmit { vm.commitRenaming() }
+                    .onChange(of: aliasFieldFocused) { _, focused in
+                        // 访达式：TextField 失焦（点击其他行 / 面板外部 / 面板关闭）即自动提交。
+                        // commitRenaming 幂等——renamingItemID 为 nil 时直接 return，
+                        // 故 Return(onSubmit) 与 Esc(cancelRenaming) 先行清空后，此处不会重复写库。
+                        if !focused { vm.commitRenaming() }
+                    }
+                    .onAppear {
+                        aliasFieldFocused = true
+                        // SwiftUI TextField 无直接全选 API：获焦后异步选中 field editor 文本，
+                        // 让用户可一键整体替换（访达改名肌肉记忆）。
+                        DispatchQueue.main.async {
+                            (NSApp.keyWindow?.firstResponder as? NSTextView)?.selectAll(nil)
+                        }
+                    }
+            } else {
+                // 非编辑态：保持 ClipItemRow 现有只读标题样式 —— 字重恒为 .regular，
+                // 选中走 accent 色、未选纯 Color.primary。务必照搬当前代码，
+                // 不要写成 v9 的 weight: isSelected ? .semibold 或 .opacity(0.82)。
+                Text(highlightedDisplayText)
+                    .font(.system(size: 13.5, weight: .regular))
+                    .foregroundStyle(isSelected ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(Color.primary))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             // pin 信号已交给左侧中性细 rail（ClipinSelectableRowBackground.isPinned），
             // 这里不再放 pin.fill icon，避免列表 row 视觉重量过高。
