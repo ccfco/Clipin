@@ -184,6 +184,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case onboarding(OnboardingFlow)
         case mainPanel(ClipboardViewModel)
         case actionsPalette(ClipboardViewModel)
+        case renamingItem(ClipboardViewModel)
+        case editingContent(ClipboardViewModel)
         case settingsWindow(SettingsNavigationModel)
         case none
     }
@@ -667,6 +669,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func hidePanel(restorePreviousApp: Bool = true) {
         guard let panel else { return }
         viewModel?.isContinuousPasteEnabled = false
+        viewModel?.commitRenaming()      // 改名进行中关面板 = 提交（与失焦自动提交一致）
+        viewModel?.cancelEditContent()   // 内容编辑进行中关面板 = 放弃，不静默写入
         // 面板关闭时复位「长按 ⌘」状态,避免下次打开残留旧的数字提示
         resetShortcutHint()
         viewModel?.hideActionsPalette()
@@ -880,6 +884,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return self.handleOnboardingKeyEvent(event, flags: flags, flow: flow)
             case .actionsPalette(let vm):
                 return self.handlePaletteKeyEvent(event, flags: flags, viewModel: vm)
+            case .renamingItem(let vm):
+                return self.handleRenamingKeyEvent(event, viewModel: vm)
+            case .editingContent(let vm):
+                return self.handleEditingContentKeyEvent(event, flags: flags, viewModel: vm)
             case .mainPanel(let vm):
                 return self.handlePanelKeyEvent(event, flags: flags, viewModel: vm)
             case .settingsWindow(let nav):
@@ -1095,6 +1103,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return .onboarding(onboardingFlow)
         }
         if let panel, panel.isVisible, panel.isKeyWindow, let viewModel {
+            if viewModel.renamingItemID != nil { return .renamingItem(viewModel) }
+            if viewModel.editingContentItemID != nil { return .editingContent(viewModel) }
             return viewModel.isShowingActions ? .actionsPalette(viewModel) : .mainPanel(viewModel)
         }
         if let settingsWindow, settingsWindow.isVisible, settingsWindow.isKeyWindow {
@@ -1199,6 +1209,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return nil
         default:
             return nil
+        }
+    }
+
+    private func handleRenamingKeyEvent(_ event: NSEvent, viewModel vm: ClipboardViewModel) -> NSEvent? {
+        if event.keyCode == KeyCode.escape {
+            vm.cancelRenaming()
+            return nil
+        }
+        // 其余按键（含 Return / ↑↓ / Tab / Space / ⌘1-9 / IME 组词）全部交还给 inline TextField。
+        return event
+    }
+
+    private func handleEditingContentKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {
+        switch event.keyCode {
+        case KeyCode.returnKey where flags == .command:
+            vm.commitEditContent()
+            return nil
+        case KeyCode.escape:
+            vm.cancelEditContent()
+            return nil
+        default:
+            // 其余按键（含普通 Return 换行、IME 组词、方向键）交还给 TextEditor。
+            return event
         }
     }
 
