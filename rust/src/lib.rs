@@ -178,6 +178,16 @@ impl ClipinCore {
         self.storage.set_alias(&id, alias.as_deref())
     }
 
+    /// 编辑条目真实内容（仅 text/url；类型由调用方依据新内容判定后传入）
+    pub fn update_content(
+        &self,
+        id: String,
+        new_content: String,
+        new_type: ClipType,
+    ) -> Result<(), ClipinError> {
+        self.storage.update_content(&id, &new_content, &new_type)
+    }
+
     /// 获取 OCR 尚未处理的图片条目（ocr_text IS NULL），用于 backfill
     pub fn get_unprocessed_images(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
         self.storage.get_unprocessed_images(limit)
@@ -1004,6 +1014,73 @@ mod tests {
         let loaded = core.get_representations(item.id).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].uti, "public.html");
+    }
+
+    #[test]
+    fn test_update_content_rewrites_derived_fields() {
+        let core = setup_core();
+        let item = core
+            .save_item("old text".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.increment_paste_count(item.id.clone()).unwrap();
+
+        core.update_content(item.id.clone(), "https://anthropic.com".into(), ClipType::Url)
+            .unwrap();
+
+        let updated = core.get_item(item.id.clone()).unwrap();
+        assert_eq!(updated.content, "https://anthropic.com");
+        assert_eq!(updated.clip_type, ClipType::Url);
+        assert_eq!(updated.char_count, 21);
+        // 使用信号与身份不变
+        assert_eq!(updated.paste_count, 1);
+        assert_eq!(updated.created_at, item.created_at);
+        assert_eq!(updated.copy_count, item.copy_count);
+    }
+
+    #[test]
+    fn test_update_content_clears_representations() {
+        let core = setup_core();
+        let reps = vec![ClipRepresentation {
+            uti: "public.html".into(),
+            data: b"<p>old</p>".to_vec(),
+        }];
+        let item = core
+            .save_item_with_representations(
+                "old".into(), ClipType::Text, None, None, None, reps,
+            )
+            .unwrap();
+        assert_eq!(core.get_representations(item.id.clone()).unwrap().len(), 1);
+
+        core.update_content(item.id.clone(), "new".into(), ClipType::Text)
+            .unwrap();
+        assert_eq!(
+            core.get_representations(item.id.clone()).unwrap().len(),
+            0,
+            "编辑内容后旧富文本表示应被清空"
+        );
+    }
+
+    #[test]
+    fn test_update_content_allows_duplicate_hash() {
+        let core = setup_core();
+        core.save_item("twin".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        let other = core
+            .save_item("unique".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        // 把 other 编辑成与第一条相同的内容：不报错、不合并，库中仍是两条
+        core.update_content(other.id.clone(), "twin".into(), ClipType::Text)
+            .unwrap();
+        let items = core.get_items(10, 0, None).unwrap();
+        assert_eq!(items.len(), 2, "用户主动编辑产生的重复内容不去重");
+    }
+
+    #[test]
+    fn test_update_content_not_found() {
+        let core = setup_core();
+        let err = core.update_content("no-such-id".into(), "x".into(), ClipType::Text);
+        assert!(matches!(err, Err(ClipinError::NotFound { .. })));
     }
 
     #[test]

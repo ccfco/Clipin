@@ -1540,6 +1540,60 @@ impl Storage {
         Ok(())
     }
 
+    /// 编辑条目的真实内容。重算 hash/char_count/pinyin、更新 clip_type、清空副表 representations。
+    /// 不触碰 created_at/copy_count/paste_count/is_pinned/source_*。
+    /// 不去重：用户主动编辑产生的重复内容是用户意图，保留为多条。
+    pub fn update_content(
+        &self,
+        id: &str,
+        new_content: &str,
+        new_type: &ClipType,
+    ) -> Result<(), ClipinError> {
+        let hash = Self::content_hash(new_content, new_type);
+        let char_count = new_content.chars().count() as i32;
+        let mut conn = self.conn();
+
+        // 别名参与拼音计算：content 变了，pinyin = content + alias。
+        let alias: Option<String> = conn
+            .query_row(
+                "SELECT alias FROM clip_items WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|_| ClipinError::NotFound { id: id.to_string() })?;
+        let pinyin_source = match alias.as_deref() {
+            Some(a) if !a.is_empty() => format!("{new_content} {a}"),
+            _ => new_content.to_string(),
+        };
+        let (pinyin_flat, pinyin_initials) = compute_pinyin(&pinyin_source);
+
+        let tx = conn.transaction()?;
+        let affected = tx.execute(
+            "UPDATE clip_items
+             SET content = ?1, clip_type = ?2, hash = ?3, char_count = ?4,
+                 pinyin_flat = ?5, pinyin_initials = ?6
+             WHERE id = ?7",
+            params![
+                new_content,
+                new_type.as_str(),
+                hash,
+                char_count,
+                pinyin_flat,
+                pinyin_initials,
+                id,
+            ],
+        )?;
+        if affected == 0 {
+            return Err(ClipinError::NotFound { id: id.to_string() });
+        }
+        tx.execute(
+            "DELETE FROM clip_representations WHERE item_id = ?1",
+            params![id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// 写入图片像素尺寸（图片保存后 / backfill 时异步调用）。
     /// image_width / image_height 不在 FTS 触发器字段内，更新不会重写索引。
     pub fn update_image_dimensions(
