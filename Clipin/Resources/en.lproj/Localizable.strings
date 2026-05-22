@@ -382,3 +382,13 @@
 "Open in default browser" = "Open in default browser";
 "Full URL" = "Full URL";
 "Query parameters" = "Query parameters";
+
+/* Rename / Edit Content */
+"Rename" = "Rename";
+"Edit Content" = "Edit Content";
+"Save" = "Save";
+"Cancel" = "Cancel";
+"Renamed." = "Renamed.";
+"Could not rename this item." = "Could not rename this item.";
+"Content saved." = "Content saved.";
+"Could not save content." = "Could not save content.";

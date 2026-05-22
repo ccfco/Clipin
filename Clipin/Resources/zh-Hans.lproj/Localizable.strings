@@ -382,3 +382,13 @@
 "Open in default browser" = "在默认浏览器中打开";
 "Full URL" = "完整 URL";
 "Query parameters" = "查询参数";
+
+/* Rename / Edit Content */
+"Rename" = "重命名";
+"Edit Content" = "编辑内容";
+"Save" = "保存";
+"Cancel" = "取消";
+"Renamed." = "已重命名。";
+"Could not rename this item." = "无法重命名该条目。";
+"Content saved." = "内容已保存。";
+"Could not save content." = "无法保存内容。";
