@@ -173,6 +173,11 @@ impl ClipinCore {
         self.storage.update_ocr_text(&id, &ocr_text)
     }
 
+    /// 写入或清空条目别名（空字符串视为清空）
+    pub fn set_alias(&self, id: String, alias: Option<String>) -> Result<(), ClipinError> {
+        self.storage.set_alias(&id, alias.as_deref())
+    }
+
     /// 获取 OCR 尚未处理的图片条目（ocr_text IS NULL），用于 backfill
     pub fn get_unprocessed_images(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
         self.storage.get_unprocessed_images(limit)
@@ -289,6 +294,47 @@ mod tests {
 
         let fetched = core.get_item(item.id.clone()).unwrap();
         assert_eq!(fetched.alias, None, "get_item 读出的别名应为 None");
+    }
+
+    #[test]
+    fn test_set_alias_writes_and_clears() {
+        let core = setup_core();
+        let item = core
+            .save_item("body".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        core.set_alias(item.id.clone(), Some("My Label".into())).unwrap();
+        assert_eq!(core.get_item(item.id.clone()).unwrap().alias.as_deref(), Some("My Label"));
+
+        // 空字符串归一化为 NULL
+        core.set_alias(item.id.clone(), Some("".into())).unwrap();
+        assert_eq!(core.get_item(item.id.clone()).unwrap().alias, None);
+
+        // None 同样清空
+        core.set_alias(item.id.clone(), Some("X".into())).unwrap();
+        core.set_alias(item.id.clone(), None).unwrap();
+        assert_eq!(core.get_item(item.id.clone()).unwrap().alias, None);
+    }
+
+    #[test]
+    fn test_set_alias_chinese_is_searchable_by_pinyin() {
+        let core = setup_core();
+        let item = core
+            .save_item("ghp_xxx".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.set_alias(item.id.clone(), Some("密钥".into())).unwrap();
+
+        // 别名拼音全拼命中
+        assert_eq!(core.search("miyao".into(), None).unwrap().len(), 1);
+        // 别名拼音首字母命中
+        assert_eq!(core.search("my".into(), None).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_set_alias_not_found() {
+        let core = setup_core();
+        let err = core.set_alias("no-such-id".into(), Some("X".into()));
+        assert!(matches!(err, Err(ClipinError::NotFound { .. })));
     }
 
     #[test]

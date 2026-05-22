@@ -1513,6 +1513,33 @@ impl Storage {
         Ok(())
     }
 
+    /// 写入或清空条目别名。空字符串与 None 都归一化为 SQL NULL。
+    /// 别名变更后重算拼音（入参 content + alias），使中文别名可被拼音搜索命中。
+    pub fn set_alias(&self, id: &str, alias: Option<&str>) -> Result<(), ClipinError> {
+        let normalized: Option<&str> = match alias {
+            Some(s) if !s.is_empty() => Some(s),
+            _ => None,
+        };
+        let conn = self.conn();
+        let content: String = conn
+            .query_row(
+                "SELECT content FROM clip_items WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .map_err(|_| ClipinError::NotFound { id: id.to_string() })?;
+        let pinyin_source = match normalized {
+            Some(a) => format!("{content} {a}"),
+            None => content,
+        };
+        let (pinyin_flat, pinyin_initials) = compute_pinyin(&pinyin_source);
+        conn.execute(
+            "UPDATE clip_items SET alias = ?1, pinyin_flat = ?2, pinyin_initials = ?3 WHERE id = ?4",
+            params![normalized, pinyin_flat, pinyin_initials, id],
+        )?;
+        Ok(())
+    }
+
     /// 写入图片像素尺寸（图片保存后 / backfill 时异步调用）。
     /// image_width / image_height 不在 FTS 触发器字段内，更新不会重写索引。
     pub fn update_image_dimensions(
