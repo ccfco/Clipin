@@ -17,10 +17,16 @@ struct PreviewPane: View {
     /// 比同步阻塞主线程更顺。
     @State private var metadataRevision: Int = 0
 
+    @FocusState private var contentEditorFocused: Bool
+
     var body: some View {
         Group {
             if let item {
-                contentStage(for: item)
+                if vm.editingContentItemID == item.id {
+                    contentEditor(for: item)
+                } else {
+                    contentStage(for: item)
+                }
             } else if vm.selectedListItem != nil {
                 // 已有选中行，但完整 ClipItem 还在后台 SQLite 读取中（或 ID-match guard
                 // 拒绝了上一次选中的陈旧数据）。显式给一个安静的加载态，避免出现
@@ -95,6 +101,44 @@ struct PreviewPane: View {
                             .padding(.top, ClipinChrome.gap)
                     }
             }
+        }
+    }
+
+    private func contentEditor(for item: ClipItem) -> some View {
+        contentStage {
+            // 间距/圆角走 ClipinChrome token（CLAUDE.md「统一间距系统」决策、构建期 spacing 守卫强制）。
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                TextEditor(text: $vm.editingContentDraft)
+                    .font(.system(size: 13))
+                    .scrollContentBackground(.hidden)
+                    .focused($contentEditorFocused)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                    )
+
+                HStack(spacing: ClipinChrome.gap) {
+                    Spacer()
+                    Button(LocalizedStringKey("Cancel")) {
+                        vm.cancelEditContent()
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(ClipinInk.secondary)
+
+                    Button {
+                        vm.commitEditContent()
+                    } label: {
+                        HStack(spacing: ClipinChrome.gap) {
+                            Text(LocalizedStringKey("Save"))
+                            ClipinKeycap(key: "⌘↵", foreground: ClipinInk.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.accentColor)
+                }
+            }
+            .onAppear { contentEditorFocused = true }
         }
     }
 
