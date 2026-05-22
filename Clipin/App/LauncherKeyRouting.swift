@@ -14,6 +14,7 @@ enum KeyCode {
 
     static let letterH: UInt16 = 0x04
     static let letterC: UInt16 = 0x08
+    static let letterE: UInt16 = 0x0E
     static let letterV: UInt16 = 0x09
     static let letterR: UInt16 = 0x0F
     static let letterO: UInt16 = 0x1F
@@ -46,6 +47,8 @@ struct PaletteActionShortcut: Equatable {
     static let delete = Self(badge: "⌘⌫", keyCode: KeyCode.delete, modifiers: .command)
     static let pasteAsHTML = Self(badge: "⌥H", keyCode: KeyCode.letterH, modifiers: .option)
     static let pasteAsRTF = Self(badge: "⌥R", keyCode: KeyCode.letterR, modifiers: .option)
+    static let rename = Self(badge: "⇧⌘E", keyCode: KeyCode.letterE, modifiers: [.command, .shift])
+    static let editContent = Self(badge: "⌘E", keyCode: KeyCode.letterE, modifiers: .command)
 
     static let all: [Self] = [
         .pastePlain,
@@ -58,6 +61,8 @@ struct PaletteActionShortcut: Equatable {
         .delete,
         .pasteAsHTML,
         .pasteAsRTF,
+        .rename,
+        .editContent,
     ]
 
     static func matching(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Self? {
