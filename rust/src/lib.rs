@@ -280,6 +280,18 @@ mod tests {
     }
 
     #[test]
+    fn test_new_item_has_no_alias() {
+        let core = setup_core();
+        let item = core
+            .save_item("plain".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        assert_eq!(item.alias, None, "新建条目别名应为 None");
+
+        let fetched = core.get_item(item.id.clone()).unwrap();
+        assert_eq!(fetched.alias, None, "get_item 读出的别名应为 None");
+    }
+
+    #[test]
     fn test_save_and_get() {
         let core = setup_core();
 

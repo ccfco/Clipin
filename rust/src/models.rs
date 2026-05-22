@@ -45,6 +45,8 @@ pub struct ClipItem {
     pub ocr_text: Option<String>,
     /// 用户通过 Clipin 粘贴的次数（首要排序信号）
     pub paste_count: i32,
+    /// 用户自定义别名（显示名）。None 表示未命名，列表回退到内容兜底预览。
+    pub alias: Option<String>,
 }
 
 /// 列表使用的轻量摘要记录，避免长文本拖慢整个面板
