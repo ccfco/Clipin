@@ -144,6 +144,7 @@ impl ClipinCore {
         image_path: Option<String>,
         is_pinned: bool,
         created_at: i64,
+        alias: Option<String>,
         representations: Vec<ClipRepresentation>,
     ) -> Result<bool, ClipinError> {
         self.storage.import_item_if_missing(
@@ -154,6 +155,7 @@ impl ClipinCore {
             image_path.as_deref(),
             is_pinned,
             created_at,
+            alias.as_deref(),
             &representations,
         )
     }
@@ -252,6 +254,7 @@ impl ClipinCore {
         image_path: Option<String>,
         is_pinned: bool,
         created_at: i64,
+        alias: Option<String>,
     ) -> Result<ClipItem, ClipinError> {
         self.storage.import_item(
             &content,
@@ -261,6 +264,7 @@ impl ClipinCore {
             image_path.as_deref(),
             is_pinned,
             created_at,
+            alias.as_deref(),
         )
     }
 }
@@ -595,6 +599,7 @@ mod tests {
                 None,
                 false,
                 base,
+                None,
             )
             .unwrap();
         let newest = core
@@ -606,6 +611,7 @@ mod tests {
                 None,
                 false,
                 base + 1,
+                None,
             )
             .unwrap();
         let tied = core
@@ -617,6 +623,7 @@ mod tests {
                 None,
                 false,
                 base + 1,
+                None,
             )
             .unwrap();
         let pinned = core
@@ -628,6 +635,7 @@ mod tests {
                 None,
                 true,
                 base - 1,
+                None,
             )
             .unwrap();
 
@@ -777,6 +785,7 @@ mod tests {
             Some(first_path),
             false,
             1_000,
+            None,
         )
         .unwrap();
         core.import_item(
@@ -787,6 +796,7 @@ mod tests {
             Some(second_path),
             false,
             2_000,
+            None,
         )
         .unwrap();
 
@@ -811,6 +821,7 @@ mod tests {
                 None,
                 true,
                 1_000,
+                None,
                 vec![],
             )
             .unwrap();
@@ -836,6 +847,7 @@ mod tests {
                 Some(old_path.clone()),
                 false,
                 1_000,
+                None,
             )
             .unwrap();
         core.increment_paste_count(existing.id.clone()).unwrap();
@@ -851,6 +863,7 @@ mod tests {
                 Some(restored_path.clone()),
                 true,
                 2_000,
+                None,
                 vec![],
             )
             .unwrap();
@@ -881,6 +894,7 @@ mod tests {
                 None,
                 false,
                 1_715_000_000,
+                None,
                 reps,
             )
             .unwrap();
@@ -907,6 +921,7 @@ mod tests {
                 None,
                 false,
                 1_715_000_000,
+                None,
                 vec![],
             )
             .unwrap();
@@ -926,6 +941,7 @@ mod tests {
                 None,
                 false,
                 1_715_000_000,
+                None,
                 reps,
             )
             .unwrap();
@@ -956,6 +972,7 @@ mod tests {
                 None,
                 false,
                 1_715_000_000,
+                None,
                 orig_reps,
             )
             .unwrap();
@@ -975,6 +992,7 @@ mod tests {
                 None,
                 false,
                 1_715_000_000,
+                None,
                 new_reps,
             )
             .unwrap();
@@ -991,6 +1009,74 @@ mod tests {
             b"<p>old</p>".to_vec(),
             "existing representations must NOT be overwritten"
         );
+    }
+
+    #[test]
+    fn test_export_import_roundtrip_preserves_alias() {
+        let core = setup_core();
+        let item = core
+            .save_item("payload".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.set_alias(item.id.clone(), Some("Saved Label".into())).unwrap();
+
+        let snapshot = core.export_archive_snapshot().unwrap();
+        assert_eq!(snapshot[0].item.alias.as_deref(), Some("Saved Label"));
+
+        // 导入到一个新库
+        let fresh = setup_core();
+        let imported = fresh
+            .import_item_if_missing(
+                "payload".into(), ClipType::Text, None, None, None,
+                false, 1_000, Some("Saved Label".into()), vec![],
+            )
+            .unwrap();
+        assert!(imported);
+        let items = fresh.get_items(10, 0, None).unwrap();
+        assert_eq!(items[0].alias.as_deref(), Some("Saved Label"));
+    }
+
+    #[test]
+    fn test_import_if_missing_fills_empty_alias_and_recomputes_pinyin() {
+        let core = setup_core();
+        // 现有条目无别名
+        core.save_item("doc".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        // 同 hash 导入，备份带中文别名 → 补上、计为 imported、并重算拼音
+        let imported = core
+            .import_item_if_missing(
+                "doc".into(), ClipType::Text, None, None, None,
+                false, 2_000, Some("备份名".into()), vec![],
+            )
+            .unwrap();
+        assert!(imported, "现有别名为空、备份有别名应计为 imported");
+
+        let items = core.get_items(10, 0, None).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].alias.as_deref(), Some("备份名"));
+
+        // 补别名时同步重算了拼音 → 中文别名可被拼音搜到
+        // （若漏掉拼音重算，这一行会失败：导入恢复的中文别名搜不到）
+        assert_eq!(core.search("beifenming".into(), None).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_import_if_missing_keeps_existing_alias() {
+        let core = setup_core();
+        let item = core
+            .save_item("doc".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.set_alias(item.id.clone(), Some("User Edited".into())).unwrap();
+
+        // 同 hash 导入，备份别名不同 → 不覆盖用户已改的别名
+        core.import_item_if_missing(
+            "doc".into(), ClipType::Text, None, None, None,
+            false, 3_000, Some("Backup Name".into()), vec![],
+        )
+        .unwrap();
+
+        let items = core.get_items(10, 0, None).unwrap();
+        assert_eq!(items[0].alias.as_deref(), Some("User Edited"), "不覆盖用户已有别名");
     }
 
     #[test]

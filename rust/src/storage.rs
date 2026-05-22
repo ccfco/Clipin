@@ -1666,6 +1666,7 @@ impl Storage {
         image_path: Option<&str>,
         is_pinned: bool,
         created_at: i64,
+        alias: Option<&str>,
     ) -> Result<ClipItem, ClipinError> {
         // 锁外提前计算（同 save_item 的理由）
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
@@ -1679,12 +1680,12 @@ impl Storage {
 
         tx.execute(
             "INSERT INTO clip_items
-             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?7,?11,?12)",
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials,alias)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?7,?11,?12,?13)",
             params![
                 id, content, clip_type.as_str(), source_app, source_name,
                 is_pinned as i32, created_at, image_path, char_count, hash,
-                pinyin_flat, pinyin_initials,
+                pinyin_flat, pinyin_initials, alias,
             ],
         )?;
         tx.commit()?;
@@ -1704,7 +1705,7 @@ impl Storage {
             first_copied_at: created_at,
             ocr_text: None,
             paste_count: 0,
-            alias: None,
+            alias: alias.map(String::from),
         })
     }
 
@@ -1718,6 +1719,7 @@ impl Storage {
         image_path: Option<&str>,
         is_pinned: bool,
         created_at: i64,
+        alias: Option<&str>,
         representations: &[ClipRepresentation],
     ) -> Result<bool, ClipinError> {
         let hash = Self::hash_for_item(content, clip_type, image_path)?;
@@ -1741,6 +1743,30 @@ impl Storage {
                         Self::remove_image_files(old_image_paths, Some(restored_path));
                         return Ok(true);
                     }
+                }
+            }
+
+            // 现有条目 alias 为空、备份带别名时补上，计为 imported。
+            // 补别名必须同步重算拼音（入参 content + alias），与 set_alias 口径一致——
+            // 否则导入恢复出来的中文别名搜不到。content 取本次入参即可：同 hash ⟹ 同 content。
+            // 注意：不能改调 self.set_alias()，它内部会再次 self.conn() 取锁，与此处
+            // 已持有的 conn 形成 std::Mutex 重入死锁。必须就地 UPDATE。
+            if let Some(new_alias) = alias.filter(|a| !a.is_empty()) {
+                let existing_alias: Option<String> = conn.query_row(
+                    "SELECT alias FROM clip_items WHERE id = ?1",
+                    params![existing_id],
+                    |r| r.get(0),
+                )?;
+                if existing_alias.as_deref().unwrap_or("").is_empty() {
+                    let (alias_pinyin_flat, alias_pinyin_initials) =
+                        compute_pinyin(&format!("{content} {new_alias}"));
+                    conn.execute(
+                        "UPDATE clip_items
+                         SET alias = ?1, pinyin_flat = ?2, pinyin_initials = ?3
+                         WHERE id = ?4",
+                        params![new_alias, alias_pinyin_flat, alias_pinyin_initials, existing_id],
+                    )?;
+                    return Ok(true);
                 }
             }
 
@@ -1768,8 +1794,8 @@ impl Storage {
         let tx = conn.transaction()?;
         tx.execute(
             "INSERT INTO clip_items
-             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?7,?11,?12)",
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,pinyin_flat,pinyin_initials,alias)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,1,?7,?11,?12,?13)",
             params![
                 id,
                 content,
@@ -1783,6 +1809,7 @@ impl Storage {
                 hash,
                 pinyin_flat,
                 pinyin_initials,
+                alias,
             ],
         )?;
         Self::insert_representations_in_tx(&tx, &id, representations)?;
@@ -2242,6 +2269,7 @@ mod migration_tests {
                 None,
                 false,
                 base - 2_000,
+                None,
             )
             .unwrap();
         storage
@@ -2253,10 +2281,11 @@ mod migration_tests {
                 None,
                 false,
                 base - 1_000,
+                None,
             )
             .unwrap();
         storage
-            .import_item("new", &ClipType::Text, None, None, None, false, base)
+            .import_item("new", &ClipType::Text, None, None, None, false, base, None)
             .unwrap();
 
         let removed = storage.trim_unpinned(2).unwrap();
@@ -2290,6 +2319,7 @@ mod migration_tests {
                 None,
                 true,
                 base - 3_000,
+                None,
             )
             .unwrap();
         storage
@@ -2301,6 +2331,7 @@ mod migration_tests {
                 None,
                 false,
                 base - 2_000,
+                None,
             )
             .unwrap();
         storage
@@ -2312,6 +2343,7 @@ mod migration_tests {
                 None,
                 false,
                 base - 1_000,
+                None,
             )
             .unwrap();
 
