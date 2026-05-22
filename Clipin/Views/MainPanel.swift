@@ -167,9 +167,11 @@ struct MainPanel: View {
                 viewModel.cycleBrowseMode(reverse: reverse)
             }
         )
-        .padding(.horizontal, ClipinChrome.gap)
-        .padding(.top, ClipinChrome.gap)
-        .padding(.bottom, ClipinChrome.gap)
+        // headerBar 是搜索区边距的唯一 owner（SearchBar 自身不再带 padding）。
+        // 横向 groupGap=16 让搜索图标与列表 section header / 行图标都落在 16pt。
+        // 不设 .bottom：搜索区↔列表的间距由首个 section header 的 groupGap 单独表达。
+        .padding(.horizontal, ClipinChrome.groupGap)
+        .padding(.top, ClipinChrome.groupGap)
         .offset(y: sceneState.headerLift)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
@@ -468,7 +470,9 @@ private struct ItemListView: View {
                             .onAppear { onLoadMore() }
                     }
                 }
-                .padding(.vertical, ClipinChrome.gap)
+                // 仅留底部 inset(末行不贴滚动边)。顶部留白交给首个 section header 的
+                // groupGap 单独表达,避免「列表内距 + header 顶距」再次双层叠加。
+                .padding(.bottom, ClipinChrome.gap)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Color.clear.frame(height: ClipinChrome.floatingFooterBand)

@@ -65,6 +65,10 @@ enum ClipinChrome {
     /// 纯渲染细节，远小于最小网格单位，不挂 edge。
     static let footerHoverRimInset: CGFloat = 2
 
+    /// 搜索框输入字号。刻意远大于列表行标题（13.5），让输入框读作 launcher 的视觉主角
+    /// （Raycast / Spotlight 心智），而非又一行列表项。
+    static let searchFieldFontSize: CGFloat = 20
+
     /// 预览正文（text / OCR / URL full / file path list）字号
     static let previewBodyFontSize: CGFloat = 13.5
     /// 预览 footer 徽章字号；与 ClipinKeycap (10.5) 区分，信息密度更高需更易读。

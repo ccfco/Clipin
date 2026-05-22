@@ -25,7 +25,7 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
         let field = InterceptingTextField()
         field.isBordered = false
         field.backgroundColor = .clear
-        field.font = .systemFont(ofSize: 14)
+        field.font = .systemFont(ofSize: ClipinChrome.searchFieldFontSize)
         field.placeholderString = placeholder
         field.focusRingType = .none
         field.delegate = context.coordinator
@@ -201,7 +201,7 @@ struct SearchBar: View {
                 onEscape: onEscape,
                 onTab: onCycleBrowseMode
             )
-            .frame(height: 16)
+            .frame(height: 26)
             .layoutPriority(-1)
 
             filterChip
@@ -216,21 +216,20 @@ struct SearchBar: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, ClipinChrome.gap)
-        .padding(.vertical, ClipinChrome.gap)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
     /// 搜索栏最左 = app 身份图标(Raycast/Spotlight 同位),取代原放大镜符号。
     /// 用 `NSApplication.applicationIconImage` 复用现有 AppIcon 资源,不新增图片;
     /// 搜索可发现性由占位符 "Search clipboard history…" 承担。
+    /// 图标尺寸跟随搜索字号(20pt)放大,与大字保持视觉平衡。
     private var searchGlyph: some View {
         Image(nsImage: NSApplication.shared.applicationIconImage)
             .resizable()
             .interpolation(.high)
             .aspectRatio(contentMode: .fit)
-            .frame(width: 18, height: 18)
-            .frame(width: 20, height: 24)
+            .frame(width: 22, height: 22)
+            .frame(width: 24, height: 26)
     }
 
     /// 单一 filter chip：当前 mode == all 时极简（只显示一个筛选图标 + Tab 提示），
