@@ -56,6 +56,14 @@ final class ClipboardViewModel: ObservableObject {
     @Published private(set) var launcherNotice: LauncherNotice?
     @Published private(set) var isPreparingPreview = false
     @Published private(set) var selectedRepresentationUTIs: [String] = []
+    /// 非 nil 表示该 id 的列表行正处于 inline 改名编辑态。
+    @Published var renamingItemID: String?
+    /// inline 改名 TextField 的草稿文本。
+    @Published var renameDraft: String = ""
+    /// 非 nil 表示该 id 的条目正处于 preview 区内容编辑态。
+    @Published var editingContentItemID: String?
+    /// Edit Content TextEditor 的草稿文本。
+    @Published var editingContentDraft: String = ""
     /// 「粘贴为…」子面板:非空即子面板显示中。
     @Published private(set) var subPaletteActions: [PaletteAction] = []
     @Published var selectedSubActionIndex: Int = 0
@@ -433,6 +441,79 @@ final class ClipboardViewModel: ObservableObject {
     func copySelected() {
         guard let id = selectedItemID, let item = loadItem(id: id) else { return }
         onCopyRequested?(item)
+    }
+
+    // MARK: - Rename
+
+    /// 进入 inline 改名编辑态。预填该行当前显示名 displayTitle
+    /// （别名优先；无别名时是按类型推导的标题：text/url 取内容首行、image 取来源+尺寸、file 取文件标题）。
+    func beginRenaming(id: String) {
+        guard let listItem = items.first(where: { $0.id == id }) else { return }
+        if isShowingActions { hideActionsPalette() }
+        cancelEditContent()        // 两个编辑态互斥
+        // 预填用 displayTitle 而非 preview：preview 对 image/file 是 OCR/路径原文，
+        // 拿来当改名预填毫无意义；displayTitle 才是用户当前在列表里看到的那行字。
+        renameDraft = listItem.displayTitle
+        renamingItemID = id
+    }
+
+    /// 提交别名。空字符串清空别名；非空写入。提交后刷新列表。
+    func commitRenaming() {
+        guard let id = renamingItemID else { return }
+        let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        renamingItemID = nil
+        renameDraft = ""
+        do {
+            try core.setAlias(id: id, alias: trimmed.isEmpty ? nil : trimmed)
+            loadItems()
+            showNotice(NSLocalizedString("Renamed.", comment: ""), style: .success)
+        } catch {
+            print("⚠️ setAlias failed (id=\(id)): \(error)")
+            showNotice(NSLocalizedString("Could not rename this item.", comment: ""), style: .error)
+        }
+    }
+
+    /// 放弃改名，不写库。
+    func cancelRenaming() {
+        renamingItemID = nil
+        renameDraft = ""
+    }
+
+    // MARK: - Edit Content
+
+    /// 进入 preview 区内容编辑态。仅 text/url 类型可编辑。
+    func beginEditContent(id: String) {
+        guard let listItem = items.first(where: { $0.id == id }),
+              listItem.clipType == .text || listItem.clipType == .url else { return }
+        if isShowingActions { hideActionsPalette() }
+        cancelRenaming()           // 两个编辑态互斥
+        guard let full = loadItem(id: id) else { return }
+        editingContentDraft = full.content
+        editingContentItemID = id
+    }
+
+    /// 提交编辑后的内容。依据新内容重新判定类型，提交后刷新。
+    func commitEditContent() {
+        guard let id = editingContentItemID else { return }
+        let newContent = editingContentDraft
+        let probe = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newType: ClipType = ClipboardMonitor.httpURLString(in: probe) != nil ? .url : .text
+        editingContentItemID = nil
+        editingContentDraft = ""
+        do {
+            try core.updateContent(id: id, newContent: newContent, newType: newType)
+            loadItems()
+            showNotice(NSLocalizedString("Content saved.", comment: ""), style: .success)
+        } catch {
+            print("⚠️ updateContent failed (id=\(id)): \(error)")
+            showNotice(NSLocalizedString("Could not save content.", comment: ""), style: .error)
+        }
+    }
+
+    /// 放弃内容编辑，不写库。
+    func cancelEditContent() {
+        editingContentItemID = nil
+        editingContentDraft = ""
     }
 
     func openSelected() {

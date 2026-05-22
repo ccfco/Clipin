@@ -66,7 +66,8 @@ final class ClipboardViewModelTests: XCTestCase {
             sourceName: nil,
             imagePath: nil,
             isPinned: false,
-            createdAt: 1_000
+            createdAt: 1_000,
+            alias: nil
         )
         let newer = try core.importItem(
             content: "newer",
@@ -75,7 +76,8 @@ final class ClipboardViewModelTests: XCTestCase {
             sourceName: nil,
             imagePath: nil,
             isPinned: false,
-            createdAt: 2_000
+            createdAt: 2_000,
+            alias: nil
         )
         let viewModel = ClipboardViewModel(core: core)
         viewModel.loadItems(selectLatest: true)
@@ -124,7 +126,8 @@ final class ClipboardViewModelTests: XCTestCase {
                 sourceName: nil,
                 imagePath: nil,
                 isPinned: true,
-                createdAt: Int64(2_000 + index)
+                createdAt: Int64(2_000 + index),
+                alias: nil
             )
         }
         for index in 0..<60 {
@@ -135,7 +138,8 @@ final class ClipboardViewModelTests: XCTestCase {
                 sourceName: nil,
                 imagePath: nil,
                 isPinned: false,
-                createdAt: Int64(1_000 + index)
+                createdAt: Int64(1_000 + index),
+                alias: nil
             )
         }
 
@@ -164,7 +168,8 @@ final class ClipboardViewModelTests: XCTestCase {
                 sourceName: nil,
                 imagePath: nil,
                 isPinned: true,
-                createdAt: Int64(1_000 + index)
+                createdAt: Int64(1_000 + index),
+                alias: nil
             )
         }
 

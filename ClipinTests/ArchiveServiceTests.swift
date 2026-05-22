@@ -93,7 +93,8 @@ final class ArchiveServiceTests: XCTestCase {
             sourceName: nil,
             imagePath: oldImageURL.path,
             isPinned: false,
-            createdAt: 1_000
+            createdAt: 1_000,
+            alias: nil
         )
         try core.incrementPasteCount(id: existing.id)
         try FileManager.default.removeItem(at: oldImageURL)

@@ -17,7 +17,8 @@ final class ClipPreviewResolverTests: XCTestCase {
                 pasteCount: 0,
                 copyCount: 1,
                 imageWidth: nil,
-                imageHeight: nil
+                imageHeight: nil,
+                alias: nil
             )
         }
         var loadedIDs: [String] = []
@@ -41,7 +42,8 @@ final class ClipPreviewResolverTests: XCTestCase {
                 copyCount: 1,
                 firstCopiedAt: 0,
                 ocrText: nil,
-                pasteCount: 0
+                pasteCount: 0,
+                alias: nil
             )
         }
 

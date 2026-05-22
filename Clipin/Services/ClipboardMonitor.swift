@@ -273,12 +273,20 @@ final class ClipboardMonitor: ObservableObject {
         return (tracker.bundleIdentifier, tracker.appName)
     }
 
-    private func extractURL(from pasteboard: NSPasteboard) -> String? {
-        guard let text = pasteboard.string(forType: .string),
-              let url = URL(string: text),
+    /// 判断一段文本是否为 http/https URL。是则原样返回（保留大小写与参数），否则 nil。
+    /// Edit Content 保存时复用此判据，确保与剪贴板监控的 URL 识别口径一致。
+    /// `nonisolated`：纯函数无 actor 状态，需同时被 @MainActor 的 ViewModel 与
+    /// nonisolated 的单元测试调用——与下方 `makePNGData` 同一惯例。
+    nonisolated static func httpURLString(in text: String) -> String? {
+        guard let url = URL(string: text),
               let scheme = url.scheme,
               ["http", "https"].contains(scheme) else { return nil }
         return text
+    }
+
+    private func extractURL(from pasteboard: NSPasteboard) -> String? {
+        guard let text = pasteboard.string(forType: .string) else { return nil }
+        return Self.httpURLString(in: text)
     }
 
     nonisolated private static func makePNGData(from data: Data) throws -> Data {
