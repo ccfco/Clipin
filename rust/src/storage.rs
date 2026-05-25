@@ -3,7 +3,7 @@ use pinyin::ToPinyin;
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     io::ErrorKind,
     path::Path,
@@ -93,7 +93,14 @@ impl Storage {
 
     pub fn new(db_path: &str, image_dir: &str) -> Result<Self, ClipinError> {
         let conn = Connection::open(db_path)?;
-        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+        // WAL：写不阻塞读、fsync 只对 -wal 文件，剪贴板的「高频小写」场景代价显著降低
+        // synchronous=NORMAL：依靠 WAL checkpoint 保证持久性，单进程语义足够，崩溃最坏丢最近几条
+        // foreign_keys=ON：保留既有约束
+        conn.execute_batch(
+            "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = NORMAL;
+             PRAGMA foreign_keys = ON;",
+        )?;
         let storage = Storage {
             conn: Mutex::new(conn),
             image_dir: image_dir.to_string(),
@@ -863,24 +870,40 @@ impl Storage {
             rows.collect::<rusqlite::Result<Vec<_>>>()?
         };
 
-        let mut rep_stmt = conn.prepare(
-            "SELECT uti, data FROM clip_representations WHERE item_id = ?1 ORDER BY uti",
-        )?;
-        let mut result = Vec::with_capacity(items.len());
-        for item in items {
-            let reps = rep_stmt
-                .query_map(params![item.id], |row| {
-                    Ok(ClipRepresentation {
-                        uti: row.get(0)?,
-                        data: row.get(1)?,
-                    })
-                })?
-                .collect::<Result<Vec<_>, _>>()?;
-            result.push(ArchiveSnapshotItem {
-                item,
-                representations: reps,
-            });
+        // 一次拉全部 representations，按 item_id 在内存里分组，避免「持 mutex 的 N+1」
+        // 旧实现是循环里每条 item 跑一次 prepared query，万条历史 = 万次 prepare/exec，
+        // 全程持锁会把主线程的 getListItems 卡住几秒到几十秒（备份大库时直接感知卡顿）。
+        let mut reps_by_item: HashMap<String, Vec<ClipRepresentation>> = HashMap::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT item_id, uti, data FROM clip_representations ORDER BY item_id, uti",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                let item_id: String = row.get(0)?;
+                Ok((
+                    item_id,
+                    ClipRepresentation {
+                        uti: row.get(1)?,
+                        data: row.get(2)?,
+                    },
+                ))
+            })?;
+            for row in rows {
+                let (item_id, rep) = row?;
+                reps_by_item.entry(item_id).or_default().push(rep);
+            }
         }
+
+        let result = items
+            .into_iter()
+            .map(|item| {
+                let representations = reps_by_item.remove(&item.id).unwrap_or_default();
+                ArchiveSnapshotItem {
+                    item,
+                    representations,
+                }
+            })
+            .collect();
         Ok(result)
     }
 
@@ -1648,12 +1671,17 @@ impl Storage {
     }
 
     pub fn delete_item(&self, id: &str) -> Result<(), ClipinError> {
-        let conn = self.conn();
-        let image_paths = Self::load_image_paths_for_item(&conn, id)?;
-        let affected = conn.execute("DELETE FROM clip_items WHERE id = ?1", params![id])?;
+        let mut conn = self.conn();
+        // SELECT image_path + DELETE 必须在同一事务里：当前是单连接 + Mutex 串行化，
+        // 但「靠 Mutex 兜事务」是隐式契约，一旦未来加只读连接就会有「读到但已删」的窗口。
+        // 用显式事务把契约写在代码里。文件删除仍放在 commit 之后。
+        let tx = conn.transaction()?;
+        let image_paths = Self::load_image_paths_for_item(&tx, id)?;
+        let affected = tx.execute("DELETE FROM clip_items WHERE id = ?1", params![id])?;
         if affected == 0 {
             return Err(ClipinError::NotFound { id: id.to_string() });
         }
+        tx.commit()?;
         Self::remove_image_files(image_paths, None);
         Ok(())
     }
@@ -1851,12 +1879,15 @@ impl Storage {
     }
 
     pub fn clear_unpinned_before(&self, timestamp: i64) -> Result<i32, ClipinError> {
-        let conn = self.conn();
-        let image_paths = Self::load_image_paths_before(&conn, timestamp)?;
-        let affected = conn.execute(
+        let mut conn = self.conn();
+        // 同 delete_item：SELECT image_path + DELETE 用事务包裹，commit 后再删文件
+        let tx = conn.transaction()?;
+        let image_paths = Self::load_image_paths_before(&tx, timestamp)?;
+        let affected = tx.execute(
             "DELETE FROM clip_items WHERE is_pinned = 0 AND created_at < ?1",
             params![timestamp],
         )?;
+        tx.commit()?;
         if affected > 0 {
             Self::remove_image_files(image_paths, None);
         }
@@ -1865,10 +1896,12 @@ impl Storage {
 
     /// 保留最新 N 条未 pin 记录，其余删除
     pub fn trim_unpinned(&self, keep_latest: i32) -> Result<i32, ClipinError> {
-        let conn = self.conn();
+        let mut conn = self.conn();
         let keep_latest = keep_latest.max(0);
-        let image_paths = Self::load_trimmed_image_paths(&conn, keep_latest)?;
-        let affected = conn.execute(
+        // 同 delete_item：SELECT image_path + DELETE 用事务包裹，commit 后再删文件
+        let tx = conn.transaction()?;
+        let image_paths = Self::load_trimmed_image_paths(&tx, keep_latest)?;
+        let affected = tx.execute(
             "
             DELETE FROM clip_items
             WHERE is_pinned = 0
@@ -1882,6 +1915,7 @@ impl Storage {
             ",
             params![keep_latest],
         )?;
+        tx.commit()?;
         if affected > 0 {
             Self::remove_image_files(image_paths, None);
         }
