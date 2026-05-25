@@ -193,8 +193,8 @@ struct MainPanel: View {
 
     private var itemList: some View {
         ItemListView(
+            shortcutIndex: viewModel.shortcutIndexByID,
             sections: viewModel.sections,
-            shortcutOrder: viewModel.shortcutOrder,
             isEmpty: viewModel.isEmpty,
             hasActiveFilter: viewModel.hasActiveFilter,
             hasMore: viewModel.hasMore,
@@ -420,9 +420,11 @@ struct MainPanel: View {
 }
 
 private struct ItemListView: View {
+    /// ViewModel 预派生的 id -> ⌘N 序号（1..9）。
+    /// 旧实现把 shortcutOrder 传进来在 view body 里 prefix(9).enumerated() 重建字典，
+    /// hover 抖动触发整个 ItemListView 重渲染时会重复 N 次。改为 VM 单次派生 + 透传。
+    let shortcutIndex: [String: Int]
     let sections: [ClipSection]
-    /// ViewModel 预计算的 ⌘1-9 序列（按当前可见列表；搜索结果可包含 pinned 项）
-    let shortcutOrder: [ClipListItem]
     let isEmpty: Bool
     let hasActiveFilter: Bool
     let hasMore: Bool
@@ -439,14 +441,6 @@ private struct ItemListView: View {
 
     @State private var hoveredID: String?
     @EnvironmentObject private var vm: ClipboardViewModel
-
-    /// 预计算 id -> ⌘N 序号，直接从 ViewModel 的 shortcutOrder 构建
-    /// ⌘1-9 始终映射当前可见列表中的前 9 项
-    private var shortcutIndex: [String: Int] {
-        Dictionary(
-            uniqueKeysWithValues: shortcutOrder.prefix(9).enumerated().map { ($1.id, $0 + 1) }
-        )
-    }
 
     var body: some View {
         if isEmpty {

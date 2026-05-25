@@ -194,6 +194,10 @@ final class ClipboardViewModel: ObservableObject {
     private var flatOrder: [ClipListItem] = []
     /// ⌘1-9 快捷粘贴序列：始终基于当前可见列表
     private(set) var shortcutOrder: [ClipListItem] = []
+    /// 预计算的 id -> ⌘N 序号（1..9），用于行渲染时 O(1) 查找
+    /// 之前 view 层每次 body 重渲染都用 prefix(9).enumerated() 重建字典，
+    /// 500 条列表上 hover 抖动会触发数百次重建。改成 shortcutOrder 更新时一次性派生。
+    private(set) var shortcutIndexByID: [String: Int] = [:]
     private var debounce: AnyCancellable?
     private var ocrSubscription: AnyCancellable?
     private var settingsSubscription: AnyCancellable?
@@ -295,6 +299,17 @@ final class ClipboardViewModel: ObservableObject {
             nextID = currentSelectionID
         } else {
             nextID = flatOrder.first?.id
+        }
+
+        // OCR backfill 这类静默刷新（hidesActions=false）频繁触发；如果选中条目仍在列表里
+        // 且 selectedItem payload 已就绪，重新 selectItem 会取消已在跑的 loadItemTask 并
+        // 重发一次 getItem，预览区会瞬间闪 ProgressView。这里加幂等守卫：选中未变 + 已就绪
+        // 时跳过 selectItem，仅刷新行渲染。
+        if !hidesActions,
+           let nextID,
+           nextID == selectedItemID,
+           selectedItem?.id == nextID {
+            return
         }
         selectItem(id: nextID)
     }
@@ -935,6 +950,9 @@ final class ClipboardViewModel: ObservableObject {
         }
         flatOrder = sections.flatMap(\.items)
         shortcutOrder = flatOrder
+        shortcutIndexByID = Dictionary(
+            uniqueKeysWithValues: shortcutOrder.prefix(9).enumerated().map { ($1.id, $0 + 1) }
+        )
     }
 
     /// 搜索永远返回全局结果；浏览态才由 pinned 展示策略决定。
