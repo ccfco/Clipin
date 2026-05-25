@@ -137,7 +137,10 @@ final class AutoBackupService: ObservableObject {
 
         timer = Timer.scheduledTimer(withTimeInterval: checkInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.isBackupOverdue() else { return }
+                // !isBackingUp 让正在跑的备份自然完成——hourly/daily 的 checkInterval
+                // 远大于备份时长，理论上不会撞上；但加 guard 让"checkInterval >
+                // 备份时长"从隐式假设变成显式不变量。
+                guard let self, !self.isBackingUp, self.isBackupOverdue() else { return }
                 self.performBackup(folderURL: folderURL)
             }
         }
@@ -231,6 +234,10 @@ final class AutoBackupService: ObservableObject {
     func backupNow() {
         guard settings.autoBackupEnabled,
               let folderPath = settings.autoBackupFolderPath else { return }
+        // 防御性 guard：UI 按钮 disable 是第一道防线，方法级再挡一次避免外部
+        // 调用者绕过 UI 状态触发 backupTask cancel-replace。reconfigure() 这类
+        // 配置切换走自己的 cancel 路径，不经过 backupNow。
+        guard !isBackingUp else { return }
         // 手动触发：清 paused 给一次重试机会；失败仍会重新累积 failures
         if pausedDueToFailures {
             pausedDueToFailures = false

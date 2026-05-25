@@ -60,6 +60,41 @@ final class BackupCleanupServiceTests: XCTestCase {
         XCTAssertTrue(BackupCleanupService.scan(folderURL: missing, currentHostSlug: "MyMac").isEmpty)
     }
 
+    /// 用户在 System Settings 改了电脑名大小写后，旧本机备份文件名仍是旧大小写——
+    /// classify 必须按 case-insensitive 比较，避免把旧本机备份误判为 foreign。
+    func testHostnameCaseDifferenceIsNotForeign() throws {
+        let folder = try makeBackupFolder()
+        try writeFile(folder, "clipin-backup-MyMac.clipin.zip", size: 100)
+        try writeFile(folder, "clipin-backup-MyMac.previous.clipin.zip", size: 200)
+
+        let candidates = BackupCleanupService.scan(folderURL: folder, currentHostSlug: "mymac")
+        XCTAssertEqual(candidates.count, 0, "case-only difference must not classify as foreign")
+    }
+
+    /// 空 hostname slug（机器名全是空格/标点被过滤光了）时，本机备份文件名是
+    /// `clipin-backup.clipin.zip`（无 hostname 后缀）。这条根本不进 hostname 匹配
+    /// 分支，不归类——保护逻辑由 stem.isEmpty 兜底。
+    func testEmptyCurrentHostSlugDoesNotMisclassifyBareBackup() throws {
+        let folder = try makeBackupFolder()
+        try writeFile(folder, "clipin-backup.clipin.zip", size: 100)
+        try writeFile(folder, "clipin-backup-someslug.clipin.zip", size: 200)
+
+        let candidates = BackupCleanupService.scan(folderURL: folder, currentHostSlug: "")
+        // 无 hostname 文件保留；someslug 在空 currentHost 下任何 slug 都是 foreign
+        XCTAssertEqual(Set(candidates.map(\.displayName)), Set(["clipin-backup-someslug.clipin.zip"]))
+    }
+
+    /// Unicode hostname（中文等）：sanitizedHostname 保留 Unicode alphanumerics，
+    /// 验证比较仍然 case-insensitive 工作。
+    func testUnicodeHostnameClassification() throws {
+        let folder = try makeBackupFolder()
+        try writeFile(folder, "clipin-backup-陈雷的MacBook.clipin.zip", size: 100)
+        try writeFile(folder, "clipin-backup-OtherMac.clipin.zip", size: 200)
+
+        let candidates = BackupCleanupService.scan(folderURL: folder, currentHostSlug: "陈雷的MacBook")
+        XCTAssertEqual(Set(candidates.map(\.displayName)), Set(["clipin-backup-OtherMac.clipin.zip"]))
+    }
+
     // MARK: - Helpers
 
     private func makeBackupFolder() throws -> URL {

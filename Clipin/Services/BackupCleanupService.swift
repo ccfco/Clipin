@@ -89,8 +89,10 @@ enum BackupCleanupService {
         }
 
         // 2. clipin-backup-<slug>.clipin.zip / clipin-backup-<slug>.previous.clipin.zip
+        // 顺序必须先长后短：`.previous.clipin.zip` 文件的 lower 也 hasSuffix(".clipin.zip")，
+        // 短后缀放前面会把 `MyMac.previous` 当成 slug 与 `MyMac` 比较失败 → 误判 foreign
         let prefix = "clipin-backup-"
-        let suffixes = [".clipin.zip", ".previous.clipin.zip"]
+        let suffixes = [".previous.clipin.zip", ".clipin.zip"]
         guard lower.hasPrefix(prefix) else { return nil }
         for suffix in suffixes {
             guard lower.hasSuffix(suffix) else { continue }
@@ -98,7 +100,10 @@ enum BackupCleanupService {
             let stem = String(name.dropFirst(prefix.count).dropLast(suffix.count))
             // 空 slug 不归类（理论上不会有 `clipin-backup-.clipin.zip` 这种文件）
             guard !stem.isEmpty else { return nil }
-            if stem == currentHostSlug { return nil }
+            // 大小写不敏感比较：用户在 System Settings 改了电脑名（甚至只改大小写），
+            // 旧本机备份文件名 vs 当前 hostname 会大小写不一致——精确比较会把旧本机
+            // 备份误判为 foreign。代价是同名不同大小写的两台机器无法区分（极少见）。
+            if stem.caseInsensitiveCompare(currentHostSlug) == .orderedSame { return nil }
             return .foreignHost
         }
         return nil
