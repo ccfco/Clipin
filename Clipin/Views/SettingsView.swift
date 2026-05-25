@@ -104,6 +104,9 @@ struct SettingsView: View {
     @State var hoveredTab: SettingsTab?
     @State var activeOperation: SettingsOperation?
     @State var now: Date = .now
+    /// 自动备份首次启用的隐私警示 sheet 显示标志。
+    /// 写在主 struct 而非 extension：SwiftUI @State 不允许在 extension 上声明。
+    @State var showAutoBackupFirstSetupNotice: Bool = false
 
     @State private var dismissTask: Task<Void, Never>?
     @State private var tickTimer: Timer?

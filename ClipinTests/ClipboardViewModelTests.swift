@@ -92,10 +92,13 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertEqual(try core.getItems(limit: 10, offset: 0, typeFilter: nil).first?.id, older.id)
     }
 
-    func testSilentReloadCanPreserveActionPalette() throws {
+    // 1707b0a 后语义：loadItems 总是关 palette；OCR 这类「不需要关」的静默刷新走
+    // .clipboardItemOcrUpdated → reloadSelectedItemPayload 专路。
+    // reloadSelectedItemPayload 是 private，只能经通知路径间接触发。
+    func testSilentReloadCanPreserveActionPalette() async throws {
         let core = try makeCore()
         _ = try core.saveItem(
-            content: "keep actions open",
+            content: "ocr-row",
             clipType: .text,
             sourceApp: nil,
             sourceName: nil,
@@ -103,13 +106,17 @@ final class ClipboardViewModelTests: XCTestCase {
         )
         let viewModel = ClipboardViewModel(core: core)
         viewModel.loadItems(selectLatest: true)
+
         viewModel.showActionsPalette()
+        XCTAssertTrue(viewModel.isShowingActions, "Precondition: palette must be open before posting OCR notification")
 
-        XCTAssertTrue(viewModel.isShowingActions)
+        NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
 
-        viewModel.loadItems(hidesActions: false)
+        // 订阅链 `.receive(on: RunLoop.main).sink` 会把回调推到下一个 runloop tick；
+        // 给一小段时间让 sink 跑完，避免断言早于订阅闭包执行。
+        try await Task.sleep(nanoseconds: 200_000_000)
 
-        XCTAssertTrue(viewModel.isShowingActions)
+        XCTAssertTrue(viewModel.isShowingActions, "OCR-completed notification must not close the action palette")
     }
 
     func testPinnedOnlyPresentationLoadsHiddenRegularItemsWithoutSkippingOverflow() throws {

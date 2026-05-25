@@ -194,6 +194,12 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(autoBackupInterval.rawValue, forKey: Keys.autoBackupInterval) }
     }
 
+    /// 用户已确认过"自动备份会把全部历史以原始内容写入磁盘/iCloud"的隐私说明。
+    /// 用 Bool 而非计数：这是一次性 sheet，用户点过"我了解"就不再打扰。
+    @Published var autoBackupFirstSetupNoticeShown: Bool {
+        didSet { defaults.set(autoBackupFirstSetupNoticeShown, forKey: Keys.autoBackupFirstSetupNoticeShown) }
+    }
+
     @Published var appearanceOverride: AppearanceOverride {
         didSet { defaults.set(appearanceOverride.rawValue, forKey: Keys.appearanceOverride) }
     }
@@ -265,6 +271,7 @@ final class SettingsStore: ObservableObject {
         static let autoBackupEnabled = "settings.autoBackupEnabled"
         static let autoBackupFolderPath = "settings.autoBackupFolderPath"
         static let autoBackupInterval = "settings.autoBackupInterval"
+        static let autoBackupFirstSetupNoticeShown = "settings.autoBackupFirstSetupNoticeShown"
         static let appearanceOverride = "settings.appearanceOverride"
         static let appLanguage = "settings.appLanguage"
         static let rememberPanelPosition = "settings.rememberPanelPosition"
@@ -306,8 +313,16 @@ final class SettingsStore: ObservableObject {
         let storedShortcut = defaults.data(forKey: Keys.shortcut)
             .flatMap { try? decoder.decode(HotKeyShortcut.self, from: $0) }
             ?? .default
-        let storedInterval = defaults.string(forKey: Keys.autoBackupInterval)
-            .flatMap { AutoBackupInterval(rawValue: $0) } ?? .weekly
+        // 老用户存过 "monthly" rawValue：v2 删除了 monthly case，迁移到 weekly 保持"低频"语义。
+        // 全新用户默认 .daily：备份语义是"保险"，daily 在流量/丢失风险之间是合适中间点。
+        let storedRawInterval = defaults.string(forKey: Keys.autoBackupInterval)
+        let storedInterval: AutoBackupInterval = {
+            if storedRawInterval == "monthly" { return .weekly }
+            if let raw = storedRawInterval, let parsed = AutoBackupInterval(rawValue: raw) {
+                return parsed
+            }
+            return .daily
+        }()
         let storedAppearance = defaults.string(forKey: Keys.appearanceOverride)
             .flatMap { AppearanceOverride(rawValue: $0) } ?? .system
         let storedAppLanguage = defaults.string(forKey: Keys.appLanguage)
@@ -329,6 +344,7 @@ final class SettingsStore: ObservableObject {
         self.autoBackupEnabled = defaults.bool(forKey: Keys.autoBackupEnabled)
         self.autoBackupFolderPath = defaults.string(forKey: Keys.autoBackupFolderPath)
         self.autoBackupInterval = storedInterval
+        self.autoBackupFirstSetupNoticeShown = defaults.bool(forKey: Keys.autoBackupFirstSetupNoticeShown)
         self.appearanceOverride = storedAppearance
         self.appLanguage = storedAppLanguage
         self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
@@ -505,14 +521,14 @@ enum AutoBackupInterval: String, CaseIterable {
     case onChange = "onChange"
     case daily    = "daily"
     case weekly   = "weekly"
-    case monthly  = "monthly"
+    // 注意：曾有 .monthly case，在 v2 备份方案中删除——剪贴板高频数据不适合月度间隔，
+    // 一个月跨度内丢失大量历史的风险不可接受。老用户存的 raw "monthly" 在加载时迁移到 .weekly。
 
     var displayName: String {
         switch self {
         case .onChange: return NSLocalizedString("On Clipboard Change", comment: "")
         case .daily:    return NSLocalizedString("Daily", comment: "")
         case .weekly:   return NSLocalizedString("Weekly", comment: "")
-        case .monthly:  return NSLocalizedString("Monthly", comment: "")
         }
     }
 
@@ -522,7 +538,6 @@ enum AutoBackupInterval: String, CaseIterable {
         case .onChange: return nil
         case .daily:    return 24 * 60 * 60
         case .weekly:   return 7 * 24 * 60 * 60
-        case .monthly:  return 30 * 24 * 60 * 60
         }
     }
 
@@ -532,7 +547,6 @@ enum AutoBackupInterval: String, CaseIterable {
         case .onChange: return nil
         case .daily:    return 60 * 60          // 每小时检查
         case .weekly:   return 6 * 60 * 60      // 每 6 小时检查
-        case .monthly:  return 24 * 60 * 60     // 每天检查
         }
     }
 }
