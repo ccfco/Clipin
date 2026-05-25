@@ -99,6 +99,14 @@ extension SettingsView {
                         description: "When the target app is a terminal and the clipboard item is an image, send Ctrl+V instead of Cmd+V. Useful for TUI apps like Claude Code that expect this shortcut for image paste.",
                         isOn: $settings.useCtrlVInTerminalForImages
                     )
+
+                    groupDivider
+
+                    toggleSettingRow(
+                        "Auto-fetch URL preview titles",
+                        description: "When you select a URL item, Clipin fetches the page title in the background. Private network IPs (10.x, 192.168.x, etc.) and webhook-style paths are always skipped regardless of this setting.",
+                        isOn: $settings.urlPreviewAutoFetch
+                    )
                 }
             }
 

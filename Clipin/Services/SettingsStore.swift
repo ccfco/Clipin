@@ -218,6 +218,14 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(useCtrlVInTerminalForImages, forKey: Keys.useCtrlVInTerminalForImages) }
     }
 
+    /// URL 条目自动抓取页面标题：默认开启，关闭后预览仅显示原始 URL 与解析后字段。
+    /// 用户复制内网管理后台/webhook 链接到 Clipin 后，只是"选中预览"就自动 GET 会触发管理动作、
+    /// 消费 token、或污染审计日志——给用户一个全局开关把自动抓取彻底关掉，
+    /// 同时内置硬性黑名单（私网 IP / webhook 路径）即便开启也跳过。
+    @Published var urlPreviewAutoFetch: Bool {
+        didSet { defaults.set(urlPreviewAutoFetch, forKey: Keys.urlPreviewAutoFetch) }
+    }
+
     @Published var pinnedItemsPresentation: PinnedItemsPresentation {
         didSet { defaults.set(pinnedItemsPresentation.rawValue, forKey: Keys.pinnedItemsPresentation) }
     }
@@ -261,6 +269,7 @@ final class SettingsStore: ObservableObject {
         static let appLanguage = "settings.appLanguage"
         static let rememberPanelPosition = "settings.rememberPanelPosition"
         static let useCtrlVInTerminalForImages = "settings.useCtrlVInTerminalForImages"
+        static let urlPreviewAutoFetch = "settings.urlPreviewAutoFetch"
         static let pinnedItemsPresentation = "settings.pinnedItemsPresentation"
         static let launcherDefaultView = "settings.launcherDefaultView"
         static let lastLauncherBrowseMode = "settings.lastLauncherBrowseMode"
@@ -324,6 +333,7 @@ final class SettingsStore: ObservableObject {
         self.appLanguage = storedAppLanguage
         self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
         self.useCtrlVInTerminalForImages = defaults.object(forKey: Keys.useCtrlVInTerminalForImages) as? Bool ?? false
+        self.urlPreviewAutoFetch = defaults.object(forKey: Keys.urlPreviewAutoFetch) as? Bool ?? true
         self.pinnedItemsPresentation = storedPinnedItemsPresentation
         self.launcherDefaultView = storedLauncherDefaultView
         self.lastLauncherBrowseMode = storedLastLauncherBrowseMode

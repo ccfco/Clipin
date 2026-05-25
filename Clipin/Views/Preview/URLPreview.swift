@@ -83,10 +83,51 @@ actor URLMetadataCache {
         return items.contains { sensitiveQueryKeys.contains($0.name.lowercased()) }
     }
 
+    /// host 是否是私网/回环地址。剪贴板里出现 10.x / 172.16-31.x / 192.168.x / 127.x / ::1 /
+    /// fe80::/10 这些 host 时，"选中即 GET" 大概率落到用户内网管理后台（路由器、NAS、
+    /// 容器面板等），可能直接触发管理动作。一律不自动抓 title。
+    private nonisolated static func hasPrivateHost(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased() else { return false }
+        if host == "localhost" || host == "::1" || host.hasPrefix("[::1]") { return true }
+        if host.hasPrefix("fe80:") || host.hasPrefix("[fe80:") { return true }
+        let parts = host.split(separator: ".")
+        guard parts.count == 4,
+              let a = Int(parts[0]),
+              let b = Int(parts[1]),
+              parts[2].allSatisfy({ $0.isNumber }),
+              parts[3].allSatisfy({ $0.isNumber })
+        else { return false }
+        // 10.0.0.0/8
+        if a == 10 { return true }
+        // 172.16.0.0/12
+        if a == 172, (16...31).contains(b) { return true }
+        // 192.168.0.0/16
+        if a == 192, b == 168 { return true }
+        // 127.0.0.0/8 loopback
+        if a == 127 { return true }
+        // 169.254.0.0/16 link-local
+        if a == 169, b == 254 { return true }
+        return false
+    }
+
+    /// URL path 是否带 webhook/callback 风格片段。这些路径几乎都是「GET 即触发动作」，
+    /// 命中一律不自动抓 title。
+    private nonisolated static func hasWebhookPath(_ url: URL) -> Bool {
+        let path = url.path.lowercased()
+        return path.contains("/webhook")
+            || path.contains("/hook/")
+            || path.hasSuffix("/hook")
+            || path.contains("/callback")
+            || path.contains("/oauth/callback")
+    }
+
     private nonisolated static func fetch(urlString: String) async -> Snapshot {
         guard let url = URL(string: urlString) else { return Snapshot(title: nil) }
-        // 含一次性 token 的链接：不自动 GET，避免在用户仅"选中预览"时消费掉 token
+        // 三道硬性黑名单：token query / 私网 host / webhook 路径。这三类无论用户开关如何
+        // 都不自动 GET——预览侧不能默默触发用户路由器/Webhook/审计敏感的远端动作。
         if hasSensitiveToken(url) { return Snapshot(title: nil) }
+        if hasPrivateHost(url) { return Snapshot(title: nil) }
+        if hasWebhookPath(url) { return Snapshot(title: nil) }
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
         // 限制下载量：HTML head 在前 64KB 内的概率 >95%，部分 CDN 忽略 Range 也有 4s 兜底
@@ -315,6 +356,9 @@ struct URLPreviewView: View {
         .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
         .task(id: urlString) {
             pageTitle = nil
+            // 用户关闭自动抓取后预览只显示 URL 本身——硬性黑名单（私网/webhook/token query）
+            // 仍在 actor 内执行，这里只跳过用户偏好层
+            guard SettingsStore.shared.urlPreviewAutoFetch else { return }
             let requested = urlString
             let snapshot = await URLMetadataCache.shared.metadata(for: requested)
             // 快速切条目时旧 URL 的响应可能晚到 → guard 当前仍在显示同一 URL
