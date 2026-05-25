@@ -218,12 +218,23 @@ extension SettingsView {
         }
     }
 
+    /// partial backup（skippedCount > 0）= 数据不完整的"准成功"——必须橙色 warning
+    /// 提示用户某些条目（一般是图片文件丢失）没进归档，依赖此备份恢复时会缺数据。
+    private var isPartialBackup: Bool {
+        autoBackup.lastBackupAt != nil
+            && autoBackup.lastBackupSkipped > 0
+            && autoBackup.lastBackupError == nil
+            && !autoBackup.pausedDueToFailures
+    }
+
     @ViewBuilder
     private var statusIndicatorDot: some View {
         if autoBackup.pausedDueToFailures {
             Circle().fill(Color.orange).frame(width: 7, height: 7)
         } else if autoBackup.lastBackupError != nil {
             Circle().fill(Color.red).frame(width: 7, height: 7)
+        } else if isPartialBackup {
+            Circle().fill(Color.orange).frame(width: 7, height: 7)
         } else if autoBackup.lastBackupAt != nil {
             Circle().fill(Color.green).frame(width: 7, height: 7)
         } else {
@@ -240,6 +251,17 @@ extension SettingsView {
         }
         if let date = autoBackup.lastBackupAt {
             let timeText = relativeString(from: date, to: now)
+            // partial：时间 + skipped count，明确告知用户"备份完成但不完整"
+            if isPartialBackup {
+                return String(
+                    format: NSLocalizedString(
+                        "Last backup: %@ · %d items skipped (missing image files)",
+                        comment: ""
+                    ),
+                    timeText,
+                    autoBackup.lastBackupSkipped
+                )
+            }
             if autoBackup.lastBackupSize > 0 {
                 let sizeText = ByteCountFormatter.string(fromByteCount: autoBackup.lastBackupSize, countStyle: .file)
                 return String(format: NSLocalizedString("Last backup: %@ · %@", comment: ""), timeText, sizeText)
@@ -252,6 +274,7 @@ extension SettingsView {
     private var statusPrimaryColor: Color {
         if autoBackup.pausedDueToFailures { return .orange }
         if autoBackup.lastBackupError != nil { return .red }
+        if isPartialBackup { return .orange }
         if autoBackup.lastBackupAt != nil { return ClipinInk.secondary }
         return ClipinInk.tertiary
     }
@@ -415,10 +438,20 @@ extension SettingsView {
             return
         }
         let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
-        cleanupCandidates = BackupCleanupService.scan(
-            folderURL: folderURL,
-            currentHostSlug: AutoBackupService.currentHostnameSlug
-        )
+        // 扫描失败 ≠ 无遗留：必须正面暴露错误避免误导用户。folderMissing 这种
+        // "目录正常缺失"（用户改了路径还没同步、或 iCloud 离线）silently 清空候选
+        // 即可，不打扰；真正的 enumerationFailed（权限/IO）才 showNotice。
+        do {
+            cleanupCandidates = try BackupCleanupService.scan(
+                folderURL: folderURL,
+                currentHostSlug: AutoBackupService.currentHostnameSlug
+            )
+        } catch BackupCleanupService.ScanError.folderMissing {
+            cleanupCandidates = []
+        } catch {
+            cleanupCandidates = []
+            showNotice(error.localizedDescription, isError: true)
+        }
     }
 
     private func confirmCleanup() {

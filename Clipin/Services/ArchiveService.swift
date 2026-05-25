@@ -66,7 +66,7 @@ enum ArchiveService {
         try Task.checkCancellation()
         return try await withThrowingTaskGroup(of: ArchiveExportResult.self) { group in
             group.addTask(priority: .utility) {
-                try Self.writeArchiveSnapshot(to: url, core: core)
+                try await Self.writeArchiveSnapshot(to: url, core: core)
             }
             guard let result = try await group.next() else {
                 throw ArchiveError.cancelled
@@ -75,7 +75,7 @@ enum ArchiveService {
         }
     }
 
-    private static func writeArchiveSnapshot(to destinationURL: URL, core: ClipinCore) throws -> ArchiveExportResult {
+    private static func writeArchiveSnapshot(to destinationURL: URL, core: ClipinCore) async throws -> ArchiveExportResult {
         try Task.checkCancellation()
         // 单快照：item 与其 representations 在同一把 DB 锁内一次性读出。原子性见 Rust 端
         // `Storage::export_archive_snapshot`——任何 SQL 失败/行解码失败直接抛错让整个
@@ -182,7 +182,7 @@ enum ArchiveService {
                 try? FileManager.default.removeItem(at: tmpZipURL)
             }
         }
-        try ZipArchiver.zipDirectoryContents(at: stagingRoot, to: tmpZipURL)
+        try await ZipArchiver.zipDirectoryContents(at: stagingRoot, to: tmpZipURL)
         try Task.checkCancellation()
 
         // 协调写入：删旧 previous → 旧 destination 升级为 previous → 新 .tmp 替换 destination
@@ -233,14 +233,14 @@ enum ArchiveService {
         try Task.checkCancellation()
         return try await withThrowingTaskGroup(of: ArchiveImportResult.self) { group in
             group.addTask(priority: .utility) {
-                try Self.runImport(from: url, core: core)
+                try await Self.runImport(from: url, core: core)
             }
             guard let result = try await group.next() else { throw ArchiveError.cancelled }
             return result
         }
     }
 
-    private static func runImport(from url: URL, core: ClipinCore) throws -> ArchiveImportResult {
+    private static func runImport(from url: URL, core: ClipinCore) async throws -> ArchiveImportResult {
         try Task.checkCancellation()
         let imageDirURL = URL(fileURLWithPath: core.imageDir(), isDirectory: true)
         try FileManager.default.createDirectory(at: imageDirURL, withIntermediateDirectories: true)
@@ -248,7 +248,7 @@ enum ArchiveService {
         // 后缀分流：.zip / .clipin.zip → v3 ；.json → v1/v2
         let name = url.lastPathComponent.lowercased()
         if name.hasSuffix(".zip") {
-            return try runImportFromZip(at: url, core: core, imageDirURL: imageDirURL)
+            return try await runImportFromZip(at: url, core: core, imageDirURL: imageDirURL)
         }
         return try runImportFromJSON(at: url, core: core, imageDirURL: imageDirURL)
     }
@@ -258,13 +258,22 @@ enum ArchiveService {
         at zipURL: URL,
         core: ClipinCore,
         imageDirURL: URL
-    ) throws -> ArchiveImportResult {
+    ) async throws -> ArchiveImportResult {
         let stagingRoot = try makeStagingDirectory()
         defer { try? FileManager.default.removeItem(at: stagingRoot) }
 
+        // FileCoordination 的 block 是 sync——无法在里面 await async 的 ZipArchiver。
+        // 解法：block 内显式读 1 字节强制触发 iCloud 物化（防 stub），block 退出后
+        // 文件已是本地物化态可以放手；block 外 await 真正的 unzip（受 cancellation
+        // 保护，import 大文件被 cancel 时不会有遗留 process）。
+        // 风险窗口：unzip 期间另一台 Mac 同时改 zip——用户主动 import 场景极罕见，
+        // 真发生时表现为 import 失败/不完整，由 ArchiveError 正面暴露不沉默吞掉。
         try FileCoordination.coordinatedRead(at: zipURL) { coordURL in
-            try ZipArchiver.unzipArchive(at: coordURL, to: stagingRoot)
+            let handle = try FileHandle(forReadingFrom: coordURL)
+            defer { try? handle.close() }
+            _ = try handle.read(upToCount: 1)
         }
+        try await ZipArchiver.unzipArchive(at: zipURL, to: stagingRoot)
 
         // 拒绝携带 symlink 的归档：恶意 zip 可以放 `images/<hash>.png` symlink 指向
         // 用户敏感文件（/etc/hosts、~/.ssh/id_rsa），import 时读到的就是被链接的内容，

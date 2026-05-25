@@ -59,6 +59,10 @@ final class AutoBackupService: ObservableObject {
     @Published private(set) var lastBackupSize: Int64 = 0
     @Published private(set) var lastBackupURL: URL?
     @Published private(set) var consecutiveFailures: Int = 0
+    /// 上一次备份跳过的条目数（图片文件丢失等）。> 0 = partial backup，UI 必须显示
+    /// warning 不能再显示纯绿色"成功"——用户依赖这个备份恢复时会少图。
+    /// CLAUDE.md「不兜底」红线：partial 必须正面暴露不能被沉默吃掉。
+    @Published private(set) var lastBackupSkipped: Int = 0
     /// 连续 maxConsecutiveFailures 次失败或目标文件夹失效 → 自动暂停。
     /// 用户在设置里点 Resume 或手动 Backup Now、改设置都会清掉。
     @Published private(set) var pausedDueToFailures: Bool = false
@@ -80,6 +84,7 @@ final class AutoBackupService: ObservableObject {
         static let lastBackupURL = "autoBackup.lastBackupURL"
         static let consecutiveFailures = "autoBackup.consecutiveFailures"
         static let paused = "autoBackup.paused"
+        static let lastBackupSkipped = "autoBackup.lastBackupSkipped"
     }
 
     init(core: ClipinCore, settings: SettingsStore) {
@@ -94,6 +99,7 @@ final class AutoBackupService: ObservableObject {
         }
         self.consecutiveFailures = d.integer(forKey: Keys.consecutiveFailures)
         self.pausedDueToFailures = d.bool(forKey: Keys.paused)
+        self.lastBackupSkipped = d.integer(forKey: Keys.lastBackupSkipped)
 
         settings.$autoBackupEnabled
             .combineLatest(settings.$autoBackupFolderPath, settings.$autoBackupInterval)
@@ -176,7 +182,12 @@ final class AutoBackupService: ObservableObject {
                 guard !Task.isCancelled else { return }
                 let completedAt = Date()
                 guard self?.backupGeneration == generation else { return }
-                self?.applySuccess(at: completedAt, url: result.url, size: result.archiveSize)
+                self?.applySuccess(
+                    at: completedAt,
+                    url: result.url,
+                    size: result.archiveSize,
+                    skipped: result.skippedCount
+                )
             } catch is CancellationError {
                 guard self?.backupGeneration == generation else { return }
                 self?.isBackingUp = false
@@ -188,18 +199,20 @@ final class AutoBackupService: ObservableObject {
         }
     }
 
-    private func applySuccess(at date: Date, url: URL, size: Int64) {
+    private func applySuccess(at date: Date, url: URL, size: Int64, skipped: Int) {
         isBackingUp = false
         lastBackupAt = date
         lastBackupURL = url
         lastBackupSize = size
         lastBackupError = nil
+        lastBackupSkipped = skipped
         consecutiveFailures = 0
 
         let d = UserDefaults.standard
         d.set(date, forKey: Keys.lastBackupAt)
         d.set(url.path, forKey: Keys.lastBackupURL)
         d.set(NSNumber(value: size), forKey: Keys.lastBackupSize)
+        d.set(skipped, forKey: Keys.lastBackupSkipped)
         d.set(0, forKey: Keys.consecutiveFailures)
         // 成功后清掉之前可能的 paused 状态（理论上 paused 时不会进 performBackup，
         // 但 backupNow() 手动触发的成功路径需要这一步）

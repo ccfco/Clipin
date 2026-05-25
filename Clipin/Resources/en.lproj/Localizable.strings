@@ -422,3 +422,8 @@
 "+%d more" = "+%d more";
 "Clean URL copied" = "Clean URL copied";
 "Target app didn’t come to front in time; paste may have missed." = "Target app didn’t come to front in time; paste may have missed.";
+
+// v4 fix: partial backup / cleanup scan errors
+"Last backup: %@ · %d items skipped (missing image files)" = "Last backup: %@ · %d items skipped (missing image files)";
+"Backup folder is missing: %@" = "Backup folder is missing: %@";
+"Cannot list backup folder: %@" = "Cannot list backup folder: %@";

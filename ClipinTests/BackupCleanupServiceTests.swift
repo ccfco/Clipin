@@ -29,7 +29,7 @@ final class BackupCleanupServiceTests: XCTestCase {
         try writeFile(folder, "Clipin-2026-05-25-1430.clipin.zip", size: 800)    // 手动导出
         try writeFile(folder, "random-user-file.zip", size: 900)                 // 用户自己的文件
 
-        let candidates = BackupCleanupService.scan(folderURL: folder, currentHostSlug: host)
+        let candidates = try BackupCleanupService.scan(folderURL: folder, currentHostSlug: host)
         let names = Set(candidates.map(\.displayName))
 
         XCTAssertEqual(names, Set([
@@ -45,7 +45,7 @@ final class BackupCleanupServiceTests: XCTestCase {
         try writeFile(folder, "clipin-backup.json", size: 50)
         try writeFile(folder, "clipin-backup-MyMac.clipin.zip", size: 100)
 
-        let candidates = BackupCleanupService.scan(folderURL: folder, currentHostSlug: "MyMac")
+        let candidates = try BackupCleanupService.scan(folderURL: folder, currentHostSlug: "MyMac")
         XCTAssertEqual(candidates.count, 1)
 
         let deleted = BackupCleanupService.delete(candidates)
@@ -54,10 +54,18 @@ final class BackupCleanupServiceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("clipin-backup-MyMac.clipin.zip").path))
     }
 
-    func testScanReturnsEmptyForMissingFolder() {
+    /// 修 C 后：缺失文件夹 → throws ScanError.folderMissing 而不是返回空数组——
+    /// 调用方（SettingsView）凭这个错误区分"真的没遗留"和"扫描失败"，不沉默吞掉。
+    func testScanThrowsForMissingFolder() {
         let missing = FileManager.default.temporaryDirectory
             .appendingPathComponent("does-not-exist-\(UUID().uuidString)", isDirectory: true)
-        XCTAssertTrue(BackupCleanupService.scan(folderURL: missing, currentHostSlug: "MyMac").isEmpty)
+        XCTAssertThrowsError(
+            try BackupCleanupService.scan(folderURL: missing, currentHostSlug: "MyMac")
+        ) { error in
+            guard case BackupCleanupService.ScanError.folderMissing = error else {
+                XCTFail("expected folderMissing, got \(error)"); return
+            }
+        }
     }
 
     /// 用户在 System Settings 改了电脑名大小写后，旧本机备份文件名仍是旧大小写——
@@ -67,7 +75,7 @@ final class BackupCleanupServiceTests: XCTestCase {
         try writeFile(folder, "clipin-backup-MyMac.clipin.zip", size: 100)
         try writeFile(folder, "clipin-backup-MyMac.previous.clipin.zip", size: 200)
 
-        let candidates = BackupCleanupService.scan(folderURL: folder, currentHostSlug: "mymac")
+        let candidates = try BackupCleanupService.scan(folderURL: folder, currentHostSlug: "mymac")
         XCTAssertEqual(candidates.count, 0, "case-only difference must not classify as foreign")
     }
 
@@ -79,7 +87,7 @@ final class BackupCleanupServiceTests: XCTestCase {
         try writeFile(folder, "clipin-backup.clipin.zip", size: 100)
         try writeFile(folder, "clipin-backup-someslug.clipin.zip", size: 200)
 
-        let candidates = BackupCleanupService.scan(folderURL: folder, currentHostSlug: "")
+        let candidates = try BackupCleanupService.scan(folderURL: folder, currentHostSlug: "")
         // 无 hostname 文件保留；someslug 在空 currentHost 下任何 slug 都是 foreign
         XCTAssertEqual(Set(candidates.map(\.displayName)), Set(["clipin-backup-someslug.clipin.zip"]))
     }
@@ -91,7 +99,7 @@ final class BackupCleanupServiceTests: XCTestCase {
         try writeFile(folder, "clipin-backup-陈雷的MacBook.clipin.zip", size: 100)
         try writeFile(folder, "clipin-backup-OtherMac.clipin.zip", size: 200)
 
-        let candidates = BackupCleanupService.scan(folderURL: folder, currentHostSlug: "陈雷的MacBook")
+        let candidates = try BackupCleanupService.scan(folderURL: folder, currentHostSlug: "陈雷的MacBook")
         XCTAssertEqual(Set(candidates.map(\.displayName)), Set(["clipin-backup-OtherMac.clipin.zip"]))
     }
 

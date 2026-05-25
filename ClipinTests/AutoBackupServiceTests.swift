@@ -75,6 +75,64 @@ final class AutoBackupServiceTests: XCTestCase {
         XCTAssertGreaterThan(AutoBackupInterval.weekly.backupInterval, AutoBackupInterval.daily.backupInterval)
     }
 
+    /// 修 A 防回归：image 文件丢失 → ArchiveService.skippedCount > 0 →
+    /// AutoBackupService.lastBackupSkipped 必须同步暴露给 UI（partial backup 不能
+    /// 沉默成功），否则用户依赖此备份恢复时会少数据。
+    func testPartialBackupExposesSkippedCountToService() async throws {
+        let previousEnabled = SettingsStore.shared.autoBackupEnabled
+        let previousFolder = SettingsStore.shared.autoBackupFolderPath
+        let previousInterval = SettingsStore.shared.autoBackupInterval
+        SettingsStore.shared.autoBackupEnabled = false
+        defer {
+            SettingsStore.shared.autoBackupEnabled = previousEnabled
+            SettingsStore.shared.autoBackupFolderPath = previousFolder
+            SettingsStore.shared.autoBackupInterval = previousInterval
+        }
+
+        let (core, rootURL) = try makeCore()
+        let backupFolder = rootURL.appendingPathComponent("backups", isDirectory: true)
+        try FileManager.default.createDirectory(at: backupFolder, withIntermediateDirectories: true)
+
+        // 写一张图，让 DB 知道有 image 条目；再把图文件物理删掉模拟"image 文件丢失"。
+        // archive 写盘时 imageData 读不到 → skippedCount += 1 continue。
+        let imagesDir = rootURL.appendingPathComponent("images", isDirectory: true)
+        let imageFile = imagesDir.appendingPathComponent("ghost.png")
+        try Data([0x89, 0x50, 0x4E, 0x47]).write(to: imageFile)
+        _ = try core.saveItem(
+            content: "ghost-image",
+            clipType: .image,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: imageFile.path
+        )
+        // 删掉图文件让 ArchiveService 读不到
+        try FileManager.default.removeItem(at: imageFile)
+        // 再加一条文本，保证 archive 至少有内容写出来（避免 0 item 的退化测试）
+        _ = try core.saveItem(
+            content: "text-keeper",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil
+        )
+
+        UserDefaults.standard.removeObject(forKey: "autoBackup.lastBackupAt")
+        UserDefaults.standard.removeObject(forKey: "autoBackup.lastBackupSkipped")
+        SettingsStore.shared.autoBackupFolderPath = backupFolder.path
+        SettingsStore.shared.autoBackupInterval = .hourly
+        SettingsStore.shared.autoBackupEnabled = true
+
+        let service = AutoBackupService(core: core, settings: SettingsStore.shared)
+
+        try await waitUntil {
+            service.lastBackupAt != nil && !service.isBackingUp
+        }
+        XCTAssertGreaterThan(
+            service.lastBackupSkipped, 0,
+            "partial backup must surface skippedCount to Published state, otherwise UI shows green success"
+        )
+    }
+
     private func makeCore() throws -> (ClipinCore, URL) {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinAutoBackupTests-\(UUID().uuidString)", isDirectory: true)

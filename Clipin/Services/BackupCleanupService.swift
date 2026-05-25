@@ -31,19 +31,34 @@ enum BackupCleanupService {
 
     /// 扫描指定文件夹，返回候选清理文件。
     /// `currentHostSlug` 通常传 `AutoBackupService.currentHostnameSlug`。
-    static func scan(folderURL: URL, currentHostSlug: String) -> [Candidate] {
-        guard FileManager.default.fileExists(atPath: folderURL.path) else { return [] }
+    ///
+    /// 错误处理（不兜底）：
+    /// - 文件夹不存在 → 抛 `ScanError.folderMissing`（用户改名/iCloud 离线/手动删了）
+    /// - 枚举失败（权限/IO）→ 抛 `ScanError.enumerationFailed` 带原始 NSError
+    /// 单条 file 的 resourceValues 失败仍 silently skip——这是 best-effort 元数据，
+    /// 整批扫描不应因单文件元数据失败而中止；但目录级失败必须正面暴露，否则
+    /// UI 显示"无遗留文件"和"扫描失败"无法区分。
+    static func scan(folderURL: URL, currentHostSlug: String) throws -> [Candidate] {
+        guard FileManager.default.fileExists(atPath: folderURL.path) else {
+            throw ScanError.folderMissing(folderURL)
+        }
         let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
-        guard let urls = try? FileManager.default.contentsOfDirectory(
-            at: folderURL,
-            includingPropertiesForKeys: keys,
-            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
-        ) else { return [] }
+        let urls: [URL]
+        do {
+            urls = try FileManager.default.contentsOfDirectory(
+                at: folderURL,
+                includingPropertiesForKeys: keys,
+                options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+            )
+        } catch {
+            throw ScanError.enumerationFailed(folderURL, underlying: error)
+        }
 
         return urls.compactMap { url -> Candidate? in
             guard let reason = classify(url: url, currentHostSlug: currentHostSlug) else { return nil }
+            // 单文件元数据失败 silently skip：典型原因是 race（扫描时文件刚被删/重命名），
+            // 整批 abort 不合理；但目录级失败已经在上面 throws 出去了
             let values = try? url.resourceValues(forKeys: Set(keys))
-            // 只看 regular file，跳过别人误丢进来的目录/symlink
             guard values?.isRegularFile == true else { return nil }
             let size = Int64(values?.fileSize ?? 0)
             return Candidate(
@@ -55,6 +70,26 @@ enum BackupCleanupService {
         }.sorted { lhs, rhs in
             // 老的排前面（用户大致按时间从老到新看）
             (lhs.modifiedAt ?? .distantPast) < (rhs.modifiedAt ?? .distantPast)
+        }
+    }
+
+    enum ScanError: LocalizedError {
+        case folderMissing(URL)
+        case enumerationFailed(URL, underlying: Error)
+
+        var errorDescription: String? {
+            switch self {
+            case .folderMissing(let url):
+                return String(
+                    format: NSLocalizedString("Backup folder is missing: %@", comment: ""),
+                    url.path
+                )
+            case .enumerationFailed(_, let underlying):
+                return String(
+                    format: NSLocalizedString("Cannot list backup folder: %@", comment: ""),
+                    underlying.localizedDescription
+                )
+            }
         }
     }
 

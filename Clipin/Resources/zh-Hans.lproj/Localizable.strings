@@ -422,3 +422,8 @@
 "+%d more" = "+%d 项";
 "Clean URL copied" = "已复制清理后的链接";
 "Target app didn’t come to front in time; paste may have missed." = "目标应用未能及时切到前台，粘贴可能未送达。";
+
+// v4 fix: partial backup / cleanup scan errors
+"Last backup: %@ · %d items skipped (missing image files)" = "上次备份：%1$@ · 跳过 %2$d 项（图片文件丢失）";
+"Backup folder is missing: %@" = "备份文件夹不存在：%@";
+"Cannot list backup folder: %@" = "无法列出备份文件夹：%@";
