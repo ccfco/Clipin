@@ -415,3 +415,10 @@
 "Could not save content." = "无法保存内容。";
 "Only text and links support content editing." = "只有文本和链接可以编辑内容。";
 "Content can't be empty." = "内容不能为空。";
+
+/* Preview / Paste —— 备份系统 v4 review 补齐的 5 个未本地化 key */
+"OCR text copied" = "已复制 OCR 识别文字";
+"%@ copied" = "已复制 %@";
+"+%d more" = "+%d 项";
+"Clean URL copied" = "已复制清理后的链接";
+"Target app didn’t come to front in time; paste may have missed." = "目标应用未能及时切到前台，粘贴可能未送达。";

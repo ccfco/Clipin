@@ -415,3 +415,10 @@
 "Could not save content." = "Could not save content.";
 "Only text and links support content editing." = "Only text and links support content editing.";
 "Content can't be empty." = "Content can't be empty.";
+
+/* Preview / Paste —— 备份系统 v4 review 补齐的 5 个未本地化 key */
+"OCR text copied" = "OCR text copied";
+"%@ copied" = "%@ copied";
+"+%d more" = "+%d more";
+"Clean URL copied" = "Clean URL copied";
+"Target app didn’t come to front in time; paste may have missed." = "Target app didn’t come to front in time; paste may have missed.";
