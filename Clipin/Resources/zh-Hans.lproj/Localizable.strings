@@ -427,3 +427,8 @@
 "Last backup: %@ · %d items skipped (missing image files)" = "上次备份：%1$@ · 跳过 %2$d 项（图片文件丢失）";
 "Backup folder is missing: %@" = "备份文件夹不存在：%@";
 "Cannot list backup folder: %@" = "无法列出备份文件夹：%@";
+
+// v4 fix: default folder hint + button rename
+"Use Default Folder" = "使用默认文件夹";
+"Default: %@" = "默认：%@";
+"Default: iCloud Drive · %@" = "默认：iCloud Drive · %@";

@@ -124,16 +124,22 @@ extension SettingsView {
                 }
                 .buttonStyle(.bordered)
 
+                // 默认 = iCloud Backups (if iCloud 可用) / ~/Documents/Clipin Backups。
+                // 永远显示提升发现性；已在默认路径时 disabled——避免"用户改过才知道
+                // 有这个按钮"的隐藏感。
+                Button("Use Default Folder") { resetBackupFolderToDefault() }
+                    .buttonStyle(.bordered)
+                    .disabled(isCurrentFolderDefault)
+
+                // iCloud 入口保留作为"明确表达 iCloud 意图"的独立按钮：当 iCloud 可用
+                // 且用户当前不在 iCloud 时给一次直达机会，不必经过"默认"语义绕一圈。
                 Button("Use iCloud Drive") { useICloudDrive() }
                     .buttonStyle(.bordered)
                     .disabled(!AutoBackupService.isICloudDriveAvailable() || isCurrentFolderICloudDefault)
-
-                // 当前路径 ≠ 默认路径时显示 "Reset to Default"——避免用户改过路径后回不去
-                if shouldShowResetDefault {
-                    Button("Reset to Default") { resetBackupFolderToDefault() }
-                        .buttonStyle(.bordered)
-                }
             }
+
+            // helper text：把"默认在哪"显式写出来，消除"默认"随 iCloud 可用性变化的歧义
+            defaultFolderHint
 
             if !AutoBackupService.isICloudDriveAvailable() {
                 HStack(spacing: ClipinChrome.gap) {
@@ -151,12 +157,35 @@ extension SettingsView {
         }
     }
 
-    /// Reset 按钮显隐：仅当用户已经设置了文件夹路径，且当前路径与"默认"不同
-    private var shouldShowResetDefault: Bool {
+    /// 默认文件夹位置提示：把动态的"默认 = iCloud 或 Documents"显式化，避免用户
+    /// 看到 "Use Default Folder" 时不知道点了会跳去哪里。
+    private var defaultFolderHint: some View {
+        let defaultURL = AutoBackupService.computeDefaultBackupFolder()
+        let isICloud = AutoBackupService.isICloudDriveAvailable()
+            && AutoBackupService.iCloudBackupFolder()?.standardizedFileURL.path
+                == defaultURL.standardizedFileURL.path
+        let icon = isICloud ? "icloud" : "folder"
+        let label = isICloud
+            ? String(format: NSLocalizedString("Default: iCloud Drive · %@", comment: ""), abbreviatedPath(defaultURL.path))
+            : String(format: NSLocalizedString("Default: %@", comment: ""), abbreviatedPath(defaultURL.path))
+        return HStack(spacing: ClipinChrome.gap) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundStyle(ClipinInk.tertiary)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(ClipinInk.tertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
+    /// 当前路径是否就是默认路径（用于 Use Default Folder 按钮的 disable 判定）
+    private var isCurrentFolderDefault: Bool {
         guard let current = settings.autoBackupFolderPath else { return false }
         let normalizedCurrent = URL(fileURLWithPath: current, isDirectory: true).standardizedFileURL.path
         let defaultPath = AutoBackupService.computeDefaultBackupFolder().standardizedFileURL.path
-        return normalizedCurrent != defaultPath
+        return normalizedCurrent == defaultPath
     }
 
     /// iCloud 按钮的禁用判定：已经在 iCloud 默认路径上时不重复触发

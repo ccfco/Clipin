@@ -427,3 +427,8 @@
 "Last backup: %@ · %d items skipped (missing image files)" = "Last backup: %@ · %d items skipped (missing image files)";
 "Backup folder is missing: %@" = "Backup folder is missing: %@";
 "Cannot list backup folder: %@" = "Cannot list backup folder: %@";
+
+// v4 fix: default folder hint + button rename
+"Use Default Folder" = "Use Default Folder";
+"Default: %@" = "Default: %@";
+"Default: iCloud Drive · %@" = "Default: iCloud Drive · %@";
