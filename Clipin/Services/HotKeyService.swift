@@ -156,7 +156,7 @@ final class HotKeyService: @unchecked Sendable {
             case let .listening(listener):
                 self.listener = listener
             case let .failure(status):
-                print("⚠️ Failed to install hotkey handler id=\(hotKeyID): \(status)")
+                ClipinLog.hotKey.error("Failed to install hotkey handler id=\(self.hotKeyID, privacy: .public): \(status, privacy: .public)")
                 return .failed(status)
             }
         }
@@ -171,7 +171,7 @@ final class HotKeyService: @unchecked Sendable {
             previousRegistration?.unregister()
             return .registered
         case let .failure(status):
-            print("⚠️ Failed to register hotkey id=\(hotKeyID): \(status)")
+            ClipinLog.hotKey.error("Failed to register hotkey id=\(self.hotKeyID, privacy: .public): \(status, privacy: .public)")
             return .failed(status)
         }
     }

@@ -179,7 +179,7 @@ final class UpdateReminderService: ObservableObject {
             defaults.set(fetchedAt, forKey: Keys.lastCheckedAt)
             didLastCheckFail = false
         } catch {
-            print("⚠️ Update check failed: \(error)")
+            ClipinLog.update.error("Update check failed: \(error.localizedDescription, privacy: .public)")
             didLastCheckFail = true
             if userInitiated {
                 lastCheckedAt = Date()

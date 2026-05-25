@@ -964,7 +964,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 do {
                     pending = try core.getUnprocessedImages(limit: pageSize)
                 } catch {
-                    print("⚠️ OCR backfill query failed, aborting this session: \(error)")
+                    ClipinLog.ocr.error("OCR backfill query failed, aborting this session: \(error.localizedDescription, privacy: .public)")
                     break
                 }
                 if pending.isEmpty { break }
@@ -976,12 +976,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         // updateOcrText 失败仅意味着这次没标记完成，下次启动会再扫到——
                         // 这里 log 后继续即可，不阻断 backfill。
                         do { try core.updateOcrText(id: item.id, ocrText: "") }
-                        catch { print("⚠️ OCR backfill mark-empty failed (id=\(item.id)): \(error)") }
+                        catch { ClipinLog.ocr.error("OCR backfill mark-empty failed id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
                         continue
                     }
                     guard FileManager.default.fileExists(atPath: path) else {
                         do { try core.updateOcrText(id: item.id, ocrText: "") }
-                        catch { print("⚠️ OCR backfill mark-empty failed (id=\(item.id)): \(error)") }
+                        catch { ClipinLog.ocr.error("OCR backfill mark-empty failed id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
                         continue
                     }
 
@@ -993,13 +993,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                         totalProcessed += 1
                     } catch {
-                        print("⚠️ OCR backfill write error for \(item.id): \(error)")
+                        ClipinLog.ocr.error("OCR backfill write error id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     }
                 }
             }
 
             if totalProcessed > 0 {
-                print("ℹ️ OCR backfill complete: \(totalProcessed) image(s) processed")
+                ClipinLog.ocr.notice("OCR backfill complete: \(totalProcessed, privacy: .public) image(s) processed")
             }
         }
     }
@@ -1019,7 +1019,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 do {
                     pending = try core.getUnsizedImages(limit: pageSize)
                 } catch {
-                    print("⚠️ 尺寸 backfill 查询失败，本次中止: \(error)")
+                    ClipinLog.imageDimensions.error("尺寸 backfill 查询失败，本次中止: \(error.localizedDescription, privacy: .public)")
                     break
                 }
                 if pending.isEmpty { break }
@@ -1038,14 +1038,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         // 写入失败若只 print+continue，该条仍是 image_width IS NULL，
                         // 下一页会再次扫到 → tight loop。按 "不兜底"：中止本次 backfill，
                         // log 后让下次启动重试（DB 写失败是系统性问题，硬扛无意义）。
-                        print("⚠️ 尺寸 backfill 写入失败，本次中止 (id=\(item.id)): \(error)")
+                        ClipinLog.imageDimensions.error("尺寸 backfill 写入失败，本次中止 id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                         break backfillLoop
                     }
                 }
             }
 
             if totalProcessed > 0 {
-                print("ℹ️ 图片尺寸 backfill 完成: \(totalProcessed) 张")
+                ClipinLog.imageDimensions.notice("图片尺寸 backfill 完成: \(totalProcessed, privacy: .public) 张")
             }
         }
     }
@@ -1086,7 +1086,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.viewModel?.loadItems()
                 }
             } catch {
-                print("⚠️ runCleanupAndReload failed: \(error)")
+                ClipinLog.cleanup.error("runCleanupAndReload failed: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -1685,7 +1685,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } catch {
                 // DB 读 representations 失败不能 ?? [] 静默退化成“只写纯文本”——
                 // 用户期待 HTML/RTF 跟着粘贴，悄悄丢格式属于“不兜底”里禁止的兜底行为。
-                print("⚠️ Failed to load representations for paste: \(error)")
+                ClipinLog.paste.error("Failed to load representations for paste: \(error.localizedDescription, privacy: .public)")
                 monitor?.resume()
                 viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
                 return
@@ -1699,7 +1699,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
         }
-        do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
+        do { try appState.core.incrementPasteCount(id: item.id) } catch { ClipinLog.paste.error("Failed to increment paste count id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
 
         // 富文本首次粘贴的教育提示：告诉用户额外格式被保留。
         // 仅在连续粘贴模式触发——普通模式 executePasteFlow 会立即 hidePanel，
@@ -1728,7 +1728,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
         }
-        do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
+        do { try appState.core.incrementPasteCount(id: item.id) } catch { ClipinLog.paste.error("Failed to increment paste count id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
         executePasteFlow(isImage: false)
     }
 
@@ -1741,7 +1741,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // 同 performPaste：⌥H / ⌥R 走的是“按 UTI 取格式回写”，
             // representations 读不到 ?? [] 会让 writeRepresentation 直接失败，
             // 但报错语义会变得模糊（看起来像“格式不支持”而非 DB 失败），所以显式上报。
-            print("⚠️ Failed to load representations for paste(\(uti)): \(error)")
+            ClipinLog.paste.error("Failed to load representations for paste(\(uti, privacy: .public)): \(error.localizedDescription, privacy: .public)")
             monitor?.resume()
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
@@ -1751,7 +1751,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
         }
-        do { try appState.core.incrementPasteCount(id: item.id) } catch { print("⚠️ Failed to increment paste count: \(error)") }
+        do { try appState.core.incrementPasteCount(id: item.id) } catch { ClipinLog.paste.error("Failed to increment paste count id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
         executePasteFlow(isImage: false)
     }
 

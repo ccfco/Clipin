@@ -110,7 +110,7 @@ final class ClipboardMonitor: ObservableObject {
         } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
             // 超大文本（终端 dump、整本电子书等）跳过：FTS 重建会卡，磁盘也会被吃光
             if text.utf8.count > Self.maxTextBytes {
-                print("ℹ️ Skipped clipboard text larger than \(Self.maxTextBytes) bytes")
+                ClipinLog.monitor.notice("Skipped clipboard text larger than \(Self.maxTextBytes, privacy: .public) bytes")
                 return
             }
             let reps = ClipboardRepresentationExtractor.extract(from: pasteboard, primaryContent: text)
@@ -190,7 +190,7 @@ final class ClipboardMonitor: ObservableObject {
                             try core.updateImageDimensions(
                                 id: saved.id, width: size.width, height: size.height)
                         } catch {
-                            print("⚠️ 图片尺寸写入失败 (id=\(saved.id)): \(error)")
+                            ClipinLog.imageDimensions.error("图片尺寸写入失败 id=\(saved.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                         }
                     }
                     // 图片入库后立即刷新列表，让条目即时出现，不等 OCR
@@ -214,9 +214,9 @@ final class ClipboardMonitor: ObservableObject {
                     } catch {
                         if case ClipinError.NotFound = error {
                             // 图片在 OCR 期间被去重替换（连续复制同一图片），OCR 结果丢弃是预期行为
-                            print("ℹ️ OCR result discarded: item \(itemId) was replaced by dedup")
+                            ClipinLog.ocr.info("OCR result discarded: item \(itemId, privacy: .public) was replaced by dedup")
                         } else {
-                            print("⚠️ Failed to write OCR result: \(error)")
+                            ClipinLog.ocr.error("Failed to write OCR result id=\(itemId, privacy: .public): \(error.localizedDescription, privacy: .public)")
                         }
                     }
                     return  // image case 已自行通知，跳过下方公共 notifyNewItem
@@ -225,7 +225,7 @@ final class ClipboardMonitor: ObservableObject {
                 guard let self else { return }
                 await self.notifyNewItem()
             } catch {
-                print("⚠️ Failed to persist clipboard item: \(error)")
+                ClipinLog.monitor.error("Failed to persist clipboard item: \(error.localizedDescription, privacy: .public)")
             }
         }
         box.task = task

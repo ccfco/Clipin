@@ -484,7 +484,7 @@ final class SettingsStore: ObservableObject {
                 return true
             }
         } catch {
-            print("⚠️ existing-history probe failed during onboarding decision: \(error)")
+            ClipinLog.settings.error("existing-history probe failed during onboarding decision: \(error.localizedDescription, privacy: .public)")
         }
 
         return Self.legacyInstallKeys.contains { defaults.object(forKey: $0) != nil }

@@ -34,7 +34,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
 
         do {
             self.core = try ClipinCore(dbPath: dbPath, imageDir: imageDir)
-            print("✅ ClipinCore initialized: \(dbPath)")
+            ClipinLog.core.notice("ClipinCore initialized at \(dbPath, privacy: .public)")
         } catch {
             fatalError("❌ Failed to initialize ClipinCore: \(error)")
         }

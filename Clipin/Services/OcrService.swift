@@ -16,7 +16,7 @@ enum OcrService {
         do {
             try handler.perform([request])
         } catch {
-            print("⚠️ OCR perform error: \(error)")
+            ClipinLog.ocr.error("OCR perform error: \(error.localizedDescription, privacy: .public)")
             return ""
         }
 

@@ -280,7 +280,7 @@ final class ClipboardViewModel: ObservableObject {
                 // Rust 端搜索 SQL/FTS 故障不能 ?? [] 静默退化成"无结果"——用户根本
                 // 无法分辨"真的没匹配"和"DB 坏了"。失败时显式 notice，方便察觉异常
                 // （修改自 storage::search 返回 Result 的改造）。
-                print("⚠️ searchListItems failed: \(error)")
+                ClipinLog.viewModel.error("searchListItems failed: \(error.localizedDescription, privacy: .public)")
                 items = []
                 showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
             }
@@ -341,7 +341,7 @@ final class ClipboardViewModel: ObservableObject {
             case .success(let item):
                 self.selectedItem = item
             case .failure(let error):
-                print("⚠️ selectItem.getItem failed (id=\(capturedId)): \(error)")
+                ClipinLog.viewModel.error("selectItem.getItem failed id=\(capturedId, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 self.selectedItem = nil
                 self.showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
             }
@@ -368,7 +368,7 @@ final class ClipboardViewModel: ObservableObject {
                 case .success(let reps):
                     self.selectedRepresentationUTIs = reps.map { $0.uti }
                 case .failure(let error):
-                    print("⚠️ reloadRepresentationsForSelected failed (id=\(id)): \(error)")
+                    ClipinLog.viewModel.error("reloadRepresentationsForSelected failed id=\(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     self.selectedRepresentationUTIs = []
                 }
             }
@@ -491,7 +491,7 @@ final class ClipboardViewModel: ObservableObject {
             loadItems()
             showNotice(NSLocalizedString("Renamed.", comment: ""), style: .success)
         } catch {
-            print("⚠️ setAlias failed (id=\(id)): \(error)")
+            ClipinLog.viewModel.error("setAlias failed id=\(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             showNotice(NSLocalizedString("Could not rename this item.", comment: ""), style: .error)
         }
     }
@@ -560,7 +560,7 @@ final class ClipboardViewModel: ObservableObject {
             loadItems()
             showNotice(NSLocalizedString("Content saved.", comment: ""), style: .success)
         } catch {
-            print("⚠️ updateContent failed (id=\(id)): \(error)")
+            ClipinLog.viewModel.error("updateContent failed id=\(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             showNotice(NSLocalizedString("Could not save content.", comment: ""), style: .error)
         }
     }
@@ -631,7 +631,7 @@ final class ClipboardViewModel: ObservableObject {
                         // 当前选中项失败由外层 session == nil 分支显式 notice。
                         do { return try core.getItem(id: id) }
                         catch {
-                            print("⚠️ preview neighbor getItem failed (id=\(id)): \(error)")
+                            ClipinLog.viewModel.error("preview neighbor getItem failed id=\(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                             return nil
                         }
                     }
@@ -878,7 +878,7 @@ final class ClipboardViewModel: ObservableObject {
                 // touchItem 失败只影响"最近使用"排序，不能阻断已经成功取到的粘贴主流程；
                 // 但也不能 try? 静默吞掉——至少打到 stderr，方便后续从日志反查排序异常。
                 do { try core.touchItem(id: id) } catch {
-                    print("⚠️ touchItem failed for id=\(id): \(error)")
+                    ClipinLog.viewModel.error("touchItem failed id=\(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 }
             }
             return item
@@ -995,7 +995,7 @@ final class ClipboardViewModel: ObservableObject {
                 )
             }
         } catch {
-            print("⚠️ fetchBrowsePage failed (offset=\(offset)): \(error)")
+            ClipinLog.viewModel.error("fetchBrowsePage failed offset=\(offset, privacy: .public): \(error.localizedDescription, privacy: .public)")
             showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
             return (items: [], rawCount: 0, hasMore: false)
         }
