@@ -55,18 +55,33 @@ enum ArchiveService {
         guard panel.runModal() == .OK, let url = panel.url else {
             throw ArchiveError.cancelled
         }
-        return try await writeArchive(to: url, core: core)
+        // 手动 export：不留 .previous 旁路。NSSavePanel 的 Replace 语义已经处理
+        // 同名冲突，用户期望"覆盖"而非"产生一个 Clipin.previous.zip 副本"——
+        // .previous 安全网是自动备份语义，用户主动选位置的快照不应污染用户目录。
+        return try await writeArchive(to: url, core: core, preservesPrevious: false)
     }
 
     /// 写盘，不弹面板；自动备份共用此入口。
     ///
     /// 用 `withThrowingTaskGroup` 把调用方的 cancellation 沿结构化并发链下传：
     /// `writeArchiveSnapshot` 内部多处 `Task.checkCancellation()` 才能真正生效。
-    static func writeArchive(to url: URL, core: ClipinCore) async throws -> ArchiveExportResult {
+    ///
+    /// `preservesPrevious`: true（自动备份用）= 旧 destination 改名为 .previous 保留
+    /// 作为安全网；false（手动 export 用）= 直接覆盖旧 destination 不留副本。
+    /// 默认 true 保持向后兼容——AutoBackupService 等内部调用不带参数即可。
+    static func writeArchive(
+        to url: URL,
+        core: ClipinCore,
+        preservesPrevious: Bool = true
+    ) async throws -> ArchiveExportResult {
         try Task.checkCancellation()
         return try await withThrowingTaskGroup(of: ArchiveExportResult.self) { group in
             group.addTask(priority: .utility) {
-                try await Self.writeArchiveSnapshot(to: url, core: core)
+                try await Self.writeArchiveSnapshot(
+                    to: url,
+                    core: core,
+                    preservesPrevious: preservesPrevious
+                )
             }
             guard let result = try await group.next() else {
                 throw ArchiveError.cancelled
@@ -75,7 +90,11 @@ enum ArchiveService {
         }
     }
 
-    private static func writeArchiveSnapshot(to destinationURL: URL, core: ClipinCore) async throws -> ArchiveExportResult {
+    private static func writeArchiveSnapshot(
+        to destinationURL: URL,
+        core: ClipinCore,
+        preservesPrevious: Bool
+    ) async throws -> ArchiveExportResult {
         try Task.checkCancellation()
         // 单快照：item 与其 representations 在同一把 DB 锁内一次性读出。原子性见 Rust 端
         // `Storage::export_archive_snapshot`——任何 SQL 失败/行解码失败直接抛错让整个
@@ -185,14 +204,22 @@ enum ArchiveService {
         try await ZipArchiver.zipDirectoryContents(at: stagingRoot, to: tmpZipURL)
         try Task.checkCancellation()
 
-        // 协调写入：删旧 previous → 旧 destination 升级为 previous → 新 .tmp 替换 destination
+        // 协调写入：preservesPrevious=true（自动备份）→ 旧 destination 升级为 .previous 安全网；
+        // preservesPrevious=false（手动 export）→ 直接覆盖旧 destination 不留副本，
+        // 不污染用户主动选择的导出位置（NSSavePanel Replace 语义已经处理同名冲突）。
         let previousURL = previousArchiveURL(for: destinationURL)
         try FileCoordination.coordinatedWrite(to: destinationURL) { coordURL in
-            if FileManager.default.fileExists(atPath: previousURL.path) {
-                try FileManager.default.removeItem(at: previousURL)
-            }
-            if FileManager.default.fileExists(atPath: coordURL.path) {
-                try FileManager.default.moveItem(at: coordURL, to: previousURL)
+            if preservesPrevious {
+                if FileManager.default.fileExists(atPath: previousURL.path) {
+                    try FileManager.default.removeItem(at: previousURL)
+                }
+                if FileManager.default.fileExists(atPath: coordURL.path) {
+                    try FileManager.default.moveItem(at: coordURL, to: previousURL)
+                }
+            } else {
+                if FileManager.default.fileExists(atPath: coordURL.path) {
+                    try FileManager.default.removeItem(at: coordURL)
+                }
             }
             try FileManager.default.moveItem(at: tmpZipURL, to: coordURL)
             tmpMoved = true

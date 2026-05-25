@@ -121,6 +121,34 @@ final class ArchiveV2Tests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: previousURL.path))
     }
 
+    /// 修 P 防回归：preservesPrevious=false（手动 export）必须直接覆盖，
+    /// 不在用户主动选的目录里产生 .previous 副本污染。
+    func testManualExportDoesNotLeavePreviousFile() async throws {
+        let tmpDir = try makeTmpDir()
+        let core = try ClipinCore(dbPath: tmpDir.appendingPathComponent("db").path,
+                                  imageDir: tmpDir.appendingPathComponent("images").path)
+        _ = try core.saveItem(content: "first", clipType: .text,
+                              sourceApp: nil, sourceName: nil, imagePath: nil)
+
+        let archiveURL = tmpDir.appendingPathComponent("export.clipin.zip")
+        let previousURL = ArchiveService.previousArchiveURL(for: archiveURL)
+
+        // 第一次 export
+        _ = try await ArchiveService.writeArchive(to: archiveURL, core: core, preservesPrevious: false)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archiveURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: previousURL.path))
+
+        // 第二次同名 export：直接覆盖，previous 不应被创建
+        _ = try core.saveItem(content: "second", clipType: .text,
+                              sourceApp: nil, sourceName: nil, imagePath: nil)
+        _ = try await ArchiveService.writeArchive(to: archiveURL, core: core, preservesPrevious: false)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archiveURL.path))
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: previousURL.path),
+            "manual export must not pollute user-chosen folder with .previous副本"
+        )
+    }
+
     // MARK: - 旧格式向后兼容
 
     func testV1ArchiveImportsAsBackwardCompatible() async throws {
