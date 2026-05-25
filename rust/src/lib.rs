@@ -135,6 +135,7 @@ impl ClipinCore {
     }
 
     /// 导入一条记录；若同内容已存在则跳过，不重置现有条目的使用信号
+    #[allow(clippy::too_many_arguments)]
     pub fn import_item_if_missing(
         &self,
         content: String,
@@ -245,6 +246,7 @@ impl ClipinCore {
     /// 不带 if_missing 的 import。生产 Swift 路径走 import_item_if_missing
     /// （归档导入需要去重语义），但测试 setup 阶段需要无条件插入"已存在的条目"
     /// 来验证去重/修复行为，所以保留。
+    #[allow(clippy::too_many_arguments)]
     pub fn import_item(
         &self,
         content: String,
