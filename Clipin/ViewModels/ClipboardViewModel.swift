@@ -249,11 +249,13 @@ final class ClipboardViewModel: ObservableObject {
                 }
                 self.loadItems()
             }
-        // OCR 完成后刷新列表，让图片条目显示识别文字
+        // OCR 完成后只刷新当前选中预览：ClipListItem 不含 ocr_text，列表渲染不依赖 OCR；
+        // 整个 loadItems 会重建 sections 并打断 selectedItem，反而让用户看到预览闪 ProgressView。
+        // 走 reloadSelectedItemPayload 专路：仅在选中图片时重 getItem 拉最新 ocr_text。
         ocrSubscription = NotificationCenter.default
             .publisher(for: .clipboardItemOcrUpdated)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.loadItems(hidesActions: false) }
+            .sink { [weak self] _ in self?.reloadSelectedItemPayload() }
         settingsSubscription = settings.$pinnedItemsPresentation
             .dropFirst()
             .receive(on: RunLoop.main)
@@ -262,9 +264,10 @@ final class ClipboardViewModel: ObservableObject {
 
     // MARK: - Load
 
-    /// 重新加载列表。后台 OCR 这类静默刷新会保留当前动作面板，避免用户正在选命令时被打断。
-    func loadItems(selectLatest: Bool = false, hidesActions: Bool = true) {
-        if hidesActions, isShowingActions {
+    /// 重新加载列表。所有调用方都希望同步关掉打开中的动作面板（避免用户正在选命令时
+    /// 列表脚下变化）。OCR 这类「不需要关 palette」的静默刷新已改走 reloadSelectedItemPayload。
+    func loadItems(selectLatest: Bool = false) {
+        if isShowingActions {
             hideActionsPalette()
         }
 
@@ -300,17 +303,6 @@ final class ClipboardViewModel: ObservableObject {
         } else {
             nextID = flatOrder.first?.id
         }
-
-        // OCR backfill 这类静默刷新（hidesActions=false）频繁触发；如果选中条目仍在列表里
-        // 且 selectedItem payload 已就绪，重新 selectItem 会取消已在跑的 loadItemTask 并
-        // 重发一次 getItem，预览区会瞬间闪 ProgressView。这里加幂等守卫：选中未变 + 已就绪
-        // 时跳过 selectItem，仅刷新行渲染。
-        if !hidesActions,
-           let nextID,
-           nextID == selectedItemID,
-           selectedItem?.id == nextID {
-            return
-        }
         selectItem(id: nextID)
     }
 
@@ -329,6 +321,24 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     // MARK: - Selection
+
+    /// 后台异步刷新当前 selectedItem 的完整 payload，不取消 ID 不变的现有 loadItemTask。
+    /// 专用于 OCR 完成这类「内容字段更新但选中不变」的通知：让 PreviewPane 拿到新的 ocrText，
+    /// 而不打断列表 / 重建 sections / 闪 ProgressView。
+    private func reloadSelectedItemPayload() {
+        guard let id = selectedItemID,
+              selectedItem?.id == id else { return }
+        let core = self.core
+        Task { [weak self] in
+            let refreshed: ClipItem? = await Task.detached(priority: .utility) {
+                try? core.getItem(id: id)
+            }.value
+            guard let self,
+                  let refreshed,
+                  self.selectedItemID == id else { return }
+            self.selectedItem = refreshed
+        }
+    }
 
     func selectItem(id: String?) {
         loadItemTask?.cancel()

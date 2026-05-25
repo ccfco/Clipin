@@ -97,16 +97,20 @@ actor URLMetadataCache {
               parts[2].allSatisfy({ $0.isNumber }),
               parts[3].allSatisfy({ $0.isNumber })
         else { return false }
+        // 0.0.0.0/8 any-cast / "this network"
+        if a == 0 { return true }
         // 10.0.0.0/8
         if a == 10 { return true }
-        // 172.16.0.0/12
-        if a == 172, (16...31).contains(b) { return true }
-        // 192.168.0.0/16
-        if a == 192, b == 168 { return true }
+        // 100.64.0.0/10 carrier-grade NAT（运营商内网，常见于移动网络/家用宽带后段）
+        if a == 100, (64...127).contains(b) { return true }
         // 127.0.0.0/8 loopback
         if a == 127 { return true }
         // 169.254.0.0/16 link-local
         if a == 169, b == 254 { return true }
+        // 172.16.0.0/12
+        if a == 172, (16...31).contains(b) { return true }
+        // 192.168.0.0/16
+        if a == 192, b == 168 { return true }
         return false
     }
 
