@@ -126,7 +126,19 @@ extension AppDelegate {
             && SettingsStore.shared.useCtrlVInTerminalForImages
             && PasteService.isTerminalApp(targetApp)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
+        // 旧实现固定 80ms 后 simulatePaste；冷启动目标 app 还没成为 frontmost 时粘贴会落在
+        // Clipin 或上一个 app 上，用户感知为"按了 Return 但什么都没发生"。
+        // 新实现：80ms 起轮询 frontmost，最多 480ms；超时仍然粘贴并发 notice。
+        Task { @MainActor [weak self] in
+            await Self.waitForFrontmost(targetApp: targetApp, maxWait: 0.48, interval: 0.08)
+            let didReachTarget = targetApp == nil
+                || NSWorkspace.shared.frontmostApplication?.processIdentifier == targetApp?.processIdentifier
+            if !didReachTarget {
+                self?.viewModel?.showNotice(
+                    NSLocalizedString("Target app didn’t come to front in time; paste may have missed.", comment: ""),
+                    style: .warning
+                )
+            }
             PasteService.simulatePaste(to: targetApp?.processIdentifier, useCtrlV: useCtrlV)
             self?.monitor?.resume()
 
@@ -135,6 +147,24 @@ extension AppDelegate {
                 self?.scheduleContinuousPasteFocusRestore(after: 0.15)
             }
         }
+    }
+
+    /// 在 main actor 上轮询直到目标 app 成为 frontmost 或超时。
+    /// targetApp 为 nil（无显式目标，落在系统当前 frontmost）时仍至少等 `interval` 让 activate 生效。
+    private static func waitForFrontmost(
+        targetApp: NSRunningApplication?,
+        maxWait: TimeInterval,
+        interval: TimeInterval
+    ) async {
+        let intervalNs = UInt64(interval * 1_000_000_000)
+        let deadline = Date().addingTimeInterval(maxWait)
+        repeat {
+            try? await Task.sleep(nanoseconds: intervalNs)
+            guard let target = targetApp else { return }
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier {
+                return
+            }
+        } while Date() < deadline
     }
 
     func performCopy(_ item: ClipItem) {

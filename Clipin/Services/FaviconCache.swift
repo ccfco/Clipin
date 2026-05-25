@@ -42,6 +42,9 @@ actor FaviconCache {
     /// 7 天 TTL：favicon 改动频率远低于此，但也不至于让旧文件永远滞留。
     private static let diskTTL: TimeInterval = 7 * 24 * 3600
 
+    /// 本进程是否已跑过磁盘过期清理。每个 session 跑一次足够，避免每次 icon 调用都遍历目录。
+    private var hasPrunedDisk = false
+
     /// favicon 图片下载大小上限 5MB：正常 favicon < 1MB（GitHub 512×512 PNG 约 50KB），
     /// 5MB 足够覆盖极端高分辨率 icon，又能挡住恶意服务器返回的 GB 级"图片炸弹"。
     private static let maxImageBytes = 5 * 1024 * 1024
@@ -59,6 +62,13 @@ actor FaviconCache {
     }()
 
     func icon(for url: URL) async -> NSImage? {
+        // 进程内首次 icon 调用时启动一次磁盘过期清理（detached 后台跑，不阻塞当前请求）。
+        // 旧实现 readDisk 命中 TTL 外只是返回 nil 重新下载，**旧文件本身从不删除**——
+        // 长期使用 favicon 目录会随访问过的不同站点无界增长。
+        if !hasPrunedDisk {
+            hasPrunedDisk = true
+            Self.pruneExpiredDiskFilesAsync()
+        }
         guard let origin = Self.origin(of: url) else { return nil }
 
         if let data = cache[origin] {
@@ -414,6 +424,27 @@ actor FaviconCache {
             .appendingPathExtension("png")
         Task.detached(priority: .utility) {
             try? data.write(to: file)
+        }
+    }
+
+    /// 删除磁盘上已超 TTL 的 favicon 文件。每个 session 跑一次。
+    /// detached + .utility 优先级：纯文件 IO，不抢主队列。
+    private static func pruneExpiredDiskFilesAsync() {
+        Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            guard let entries = try? fm.contentsOfDirectory(
+                at: Self.diskDir,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) else { return }
+            let now = Date()
+            for file in entries {
+                guard let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
+                      let modDate = attrs.contentModificationDate else { continue }
+                if now.timeIntervalSince(modDate) > Self.diskTTL {
+                    try? fm.removeItem(at: file)
+                }
+            }
         }
     }
 }

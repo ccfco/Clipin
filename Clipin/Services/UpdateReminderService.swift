@@ -88,9 +88,17 @@ final class UpdateReminderService: ObservableObject {
         defaults.set(enabled, forKey: Keys.autoCheckEnabled)
 
         if enabled {
+            // 关再开：原 timer 若已被 invalidate 需重新调度。schedulePeriodicChecks 是幂等的
+            schedulePeriodicChecks()
             Task { [weak self] in
                 await self?.checkForUpdatesIfNeeded()
             }
+        } else {
+            // 用户关闭自动检查时主动停掉 timer，避免「timer 仍每 6 小时跑 + 函数体里 guard
+            // autoCheckEnabled else { return }」这种"空转兜底"残留。timer 不耗显著 CPU，
+            // 但生命周期不可见的对象越少越好
+            periodicCheckTimer?.invalidate()
+            periodicCheckTimer = nil
         }
     }
 

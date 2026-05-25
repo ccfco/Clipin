@@ -31,7 +31,9 @@ final class ClipboardMonitor: ObservableObject {
         case text(String, String?, String?, [ClipboardRepresentation])
         case url(String, String?, String?, [ClipboardRepresentation])
         case file(String, String?, String?)
-        case image(Data, String?, String?)
+        /// 图片数据延迟到 detached task 内通过 MainActor.run 拉取：避免 500ms timer 主线程
+        /// 同步读 TIFF（截图原图可数 MB）卡 UI；用 captured changeCount 防止读到下一次复制的数据。
+        case imageLazy(changeCount: Int, sourceApp: String?, sourceName: String?)
     }
 
     private let core: ClipinCore
@@ -105,8 +107,10 @@ final class ClipboardMonitor: ObservableObject {
         } else if let urlString = pasteboard.string(forType: .URL) ?? extractURL(from: pasteboard) {
             let reps = ClipboardRepresentationExtractor.extract(from: pasteboard, primaryContent: urlString)
             persist(.url(urlString, sourceApp, sourceName, reps))
-        } else if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
-            persist(.image(imageData, sourceApp, sourceName))
+        } else if (pasteboard.types?.contains(where: { $0 == .tiff || $0 == .png })) == true {
+            // 不在这里同步读数据：types 探测廉价，timer 立即返回；data 由后台任务通过
+            // MainActor.run 拉，主线程读取还在但不再占用 timer 触发那一帧
+            persist(.imageLazy(changeCount: currentCount, sourceApp: sourceApp, sourceName: sourceName))
         } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
             // 超大文本（终端 dump、整本电子书等）跳过：FTS 重建会卡，磁盘也会被吃光
             if text.utf8.count > Self.maxTextBytes {
@@ -170,7 +174,16 @@ final class ClipboardMonitor: ObservableObject {
                         imagePath: nil
                     )
 
-                case let .image(data, sourceApp, sourceName):
+                case let .imageLazy(capturedChangeCount, sourceApp, sourceName):
+                    // 后台任务里 hop 回 main 拉 pasteboard data，timer 触发这一帧已经返回
+                    let data: Data? = await MainActor.run {
+                        let pb = NSPasteboard.general
+                        // 用户已经又复制了别的内容，捕获到的快照已过期，丢弃
+                        guard pb.changeCount == capturedChangeCount else { return nil }
+                        return pb.data(forType: .tiff) ?? pb.data(forType: .png)
+                    }
+                    guard let data else { return }
+                    if Task.isCancelled { return }
                     let imageDir = core.imageDir()
                     let filename = UUID().uuidString + ".png"
                     let path = (imageDir as NSString).appendingPathComponent(filename)
