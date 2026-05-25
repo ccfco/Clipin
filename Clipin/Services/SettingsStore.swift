@@ -313,11 +313,16 @@ final class SettingsStore: ObservableObject {
         let storedShortcut = defaults.data(forKey: Keys.shortcut)
             .flatMap { try? decoder.decode(HotKeyShortcut.self, from: $0) }
             ?? .default
-        // 老用户存过 "monthly" rawValue：v2 删除了 monthly case，迁移到 weekly 保持"低频"语义。
+        // 历史迁移（就近落点原则）：
+        // - "monthly" (v1)  → .weekly：v2 移除 monthly，保持"低频"语义
+        // - "onChange" (v2/v3) → .daily：v4 移除 onChange——onChange 的"两层节流"
+        //   只是把事件触发硬塞进周期模型的胶水，单层 hourly/daily/weekly 表达力更直白；
+        //   onChange 老用户多半是想要"实时感"，落到 daily 而非 hourly 更保守、不踩流量雷
         // 全新用户默认 .daily：备份语义是"保险"，daily 在流量/丢失风险之间是合适中间点。
         let storedRawInterval = defaults.string(forKey: Keys.autoBackupInterval)
         let storedInterval: AutoBackupInterval = {
             if storedRawInterval == "monthly" { return .weekly }
+            if storedRawInterval == "onChange" { return .daily }
             if let raw = storedRawInterval, let parsed = AutoBackupInterval(rawValue: raw) {
                 return parsed
             }
@@ -518,35 +523,35 @@ final class SettingsStore: ObservableObject {
 }
 
 enum AutoBackupInterval: String, CaseIterable {
-    case onChange = "onChange"
-    case daily    = "daily"
-    case weekly   = "weekly"
-    // 注意：曾有 .monthly case，在 v2 备份方案中删除——剪贴板高频数据不适合月度间隔，
-    // 一个月跨度内丢失大量历史的风险不可接受。老用户存的 raw "monthly" 在加载时迁移到 .weekly。
+    case hourly = "hourly"
+    case daily  = "daily"
+    case weekly = "weekly"
+    // 历史：v1 有 .monthly（迁 .weekly），v2/v3 有 .onChange（迁 .daily）。
+    // 现在统一为三档周期定时备份——无事件触发型，去掉了 onChange 的两层节流胶水。
 
     var displayName: String {
         switch self {
-        case .onChange: return NSLocalizedString("On Clipboard Change", comment: "")
-        case .daily:    return NSLocalizedString("Daily", comment: "")
-        case .weekly:   return NSLocalizedString("Weekly", comment: "")
+        case .hourly: return NSLocalizedString("Hourly", comment: "")
+        case .daily:  return NSLocalizedString("Daily", comment: "")
+        case .weekly: return NSLocalizedString("Weekly", comment: "")
         }
     }
 
-    /// 两次备份之间的最小间隔。nil = onChange 触发型，不使用定时器
-    var backupInterval: TimeInterval? {
+    /// 两次备份之间的最小间隔
+    var backupInterval: TimeInterval {
         switch self {
-        case .onChange: return nil
-        case .daily:    return 24 * 60 * 60
-        case .weekly:   return 7 * 24 * 60 * 60
+        case .hourly: return 60 * 60
+        case .daily:  return 24 * 60 * 60
+        case .weekly: return 7 * 24 * 60 * 60
         }
     }
 
     /// 定时检查"是否逾期"的轮询间隔，远小于 backupInterval 以保证不漏触发
-    var checkInterval: TimeInterval? {
+    var checkInterval: TimeInterval {
         switch self {
-        case .onChange: return nil
-        case .daily:    return 60 * 60          // 每小时检查
-        case .weekly:   return 6 * 60 * 60      // 每 6 小时检查
+        case .hourly: return 5 * 60             // 每 5 分钟检查
+        case .daily:  return 60 * 60            // 每小时检查
+        case .weekly: return 6 * 60 * 60        // 每 6 小时检查
         }
     }
 }

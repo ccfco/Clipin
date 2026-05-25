@@ -1,8 +1,11 @@
 import Combine
 import Foundation
 
-/// 自动备份服务：监听设置变化，定时或按剪贴板变化将历史写入指定文件夹的 .clipin.zip。
+/// 自动备份服务：按 hourly/daily/weekly 周期把历史写入指定文件夹的 .clipin.zip。
 /// 写盘细节（zip 打包、.previous 轮转、NSFileCoordinator 协调）由 ArchiveService 负责。
+///
+/// 设计：纯周期定时器，不再监听剪贴板变化（v4 移除 onChange 模式）——单一调度路径
+/// 更可预测，避免事件触发被多层节流后退化成"伪 hourly"的复杂胶水。
 @MainActor
 final class AutoBackupService: ObservableObject {
     static let shared = AutoBackupService(core: AppState.shared.core, settings: SettingsStore.shared)
@@ -16,6 +19,9 @@ final class AutoBackupService: ObservableObject {
         let host = sanitizedHostname()
         return host.isEmpty ? "clipin-backup.clipin.zip" : "clipin-backup-\(host).clipin.zip"
     }
+
+    /// 本机 hostname（已 sanitize），给 BackupCleanupService 判断"其他设备备份"用。
+    static var currentHostnameSlug: String { sanitizedHostname() }
 
     /// 推导默认备份文件夹路径。iCloud Drive 可用 → iCloud 下 "Clipin Backups"；
     /// 否则 → `~/Documents/Clipin Backups`。**只返回路径不创建目录**。
@@ -61,14 +67,8 @@ final class AutoBackupService: ObservableObject {
 
     private let core: ClipinCore
     private let settings: SettingsStore
-    private let changeDebounceDelay: Duration
-    /// 两次自动备份的最小间隔。onChange 模式下用 lastBackupAt 协作，避免一年后 1+ GB 库
-    /// 高频触发 → iCloud 上行流量雪崩。
-    private let minimumInterval: TimeInterval
     private var cancellables = Set<AnyCancellable>()
     private var timer: Timer?
-    private var changeObservers: [NSObjectProtocol] = []
-    private var debounceTask: Task<Void, Never>?
     private var backupTask: Task<Void, Never>?
     private var backupGeneration = UUID()
 
@@ -82,16 +82,9 @@ final class AutoBackupService: ObservableObject {
         static let paused = "autoBackup.paused"
     }
 
-    init(
-        core: ClipinCore,
-        settings: SettingsStore,
-        changeDebounceDelay: Duration = .seconds(10),
-        minimumInterval: TimeInterval = 5 * 60
-    ) {
+    init(core: ClipinCore, settings: SettingsStore) {
         self.core = core
         self.settings = settings
-        self.changeDebounceDelay = changeDebounceDelay
-        self.minimumInterval = minimumInterval
 
         let d = UserDefaults.standard
         self.lastBackupAt = d.object(forKey: Keys.lastBackupAt) as? Date
@@ -119,12 +112,6 @@ final class AutoBackupService: ObservableObject {
     private func reconfigure(settingsChanged: Bool) {
         timer?.invalidate()
         timer = nil
-        for observer in changeObservers {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        changeObservers.removeAll()
-        debounceTask?.cancel()
-        debounceTask = nil
         backupTask?.cancel()
         backupTask = nil
         isBackingUp = false
@@ -142,71 +129,23 @@ final class AutoBackupService: ObservableObject {
         if pausedDueToFailures { return }
 
         let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
+        let checkInterval = settings.autoBackupInterval.checkInterval
 
-        switch settings.autoBackupInterval {
-        case .onChange:
-            // reconfigure 立即触发改 scheduleDebounced：用户在设置里连点多个选项不会触发
-            // 多次立即备份；scheduleDebounced 内部还会再走 minimumInterval 节流
-            scheduleDebounced(folderURL: folderURL)
-            changeObservers = [.clipHistoryDidChange, .clipHistoryItemSaved].map { name in
-                NotificationCenter.default.addObserver(
-                    forName: name,
-                    object: nil,
-                    queue: nil
-                ) { [weak self] _ in
-                    Task { @MainActor [weak self] in self?.scheduleDebounced(folderURL: folderURL) }
-                }
-            }
+        if isBackupOverdue() {
+            performBackup(folderURL: folderURL)
+        }
 
-        case .daily, .weekly:
-            let checkInterval = settings.autoBackupInterval.checkInterval!
-
-            if isBackupOverdue() {
-                performBackup(folderURL: folderURL)
-            }
-
-            timer = Timer.scheduledTimer(withTimeInterval: checkInterval, repeats: true) { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self, self.isBackupOverdue() else { return }
-                    self.performBackup(folderURL: folderURL)
-                }
+        timer = Timer.scheduledTimer(withTimeInterval: checkInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.isBackupOverdue() else { return }
+                self.performBackup(folderURL: folderURL)
             }
         }
     }
 
     private func isBackupOverdue() -> Bool {
-        guard let interval = settings.autoBackupInterval.backupInterval else { return false }
+        let interval = settings.autoBackupInterval.backupInterval
         return Date().timeIntervalSince(lastBackupAt ?? .distantPast) >= interval
-    }
-
-    // MARK: - 调度
-
-    /// onChange 防抖 + 最小间隔双层节流：
-    /// - 防抖 10s 把"连续粘贴一批"合并为一次
-    /// - 防抖结束后检查最小间隔（默认 5min），未到则继续等
-    /// 双层组合避免极端场景"长期间断性使用每 10s 触发一次"导致全量重传雪崩。
-    ///
-    /// 每次 sleep 后重新读 `lastBackupAt` 计算 remaining：在 sleep 期间用户可能手动
-    /// Backup Now 或定时任务跑过，旧快照里的 elapsed 已失效；不重判会触发"自动备份取消
-    /// 正在进行的手动备份"竞态。真正进入 performBackup 前还检查 isBackingUp，避免和并发
-    /// 任务对撞。
-    private func scheduleDebounced(folderURL: URL) {
-        debounceTask?.cancel()
-        debounceTask = Task { [weak self] in
-            guard let self else { return }
-            do { try await Task.sleep(for: self.changeDebounceDelay) } catch { return }
-
-            while !Task.isCancelled {
-                let elapsed = Date().timeIntervalSince(self.lastBackupAt ?? .distantPast)
-                if elapsed >= self.minimumInterval { break }
-                let remaining = self.minimumInterval - elapsed
-                do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
-            }
-            if Task.isCancelled { return }
-            // 手动 Backup Now 正在跑、或并发任务先到 → 让出，让进行中的备份完成
-            if self.isBackingUp { return }
-            self.performBackup(folderURL: folderURL)
-        }
     }
 
     // MARK: - 执行
@@ -292,10 +231,6 @@ final class AutoBackupService: ObservableObject {
     func backupNow() {
         guard settings.autoBackupEnabled,
               let folderPath = settings.autoBackupFolderPath else { return }
-        // 取消正在等待的 debounce task，避免它在手动备份完成后醒来又触发一次自动备份
-        // （会把刚成功的状态又抹掉、spinner 闪一下）
-        debounceTask?.cancel()
-        debounceTask = nil
         // 手动触发：清 paused 给一次重试机会；失败仍会重新累积 failures
         if pausedDueToFailures {
             pausedDueToFailures = false

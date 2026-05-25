@@ -37,11 +37,6 @@
 "Max unpinned items" = "最多未固定条目数";
 "Oldest unpinned items are trimmed first." = "最旧的未固定条目优先清理。";
 "Run Cleanup Now" = "立即清理";
-"Transfer" = "数据迁移";
-"Export your clipboard history as JSON, or restore from a previous export." = "将剪贴板历史导出为 JSON，或从之前的导出文件恢复。";
-"Export JSON\u2026" = "导出 JSON\u2026";
-"Import JSON\u2026" = "导入 JSON\u2026";
-"Existing items are kept during import. Duplicates are skipped." = "导入时保留现有条目，重复内容自动跳过。";
 
 /* SettingsView - Retention picker */
 "7 days" = "7 天";
@@ -55,10 +50,9 @@
 /* SettingsStore */
 "Clipin will start automatically after you log in." = "Clipin 将在你登录后自动启动。";
 "Login launch is pending approval in System Settings." = "开机启动等待系统设置授权。";
-"On Clipboard Change" = "剪贴板变化时";
+"Hourly" = "每小时";
 "Daily" = "每天";
 "Weekly" = "每周";
-"Monthly" = "每月";
 
 /* MainPanel - bottom bar */
 "Clipboard History" = "剪贴板历史";
@@ -147,8 +141,7 @@
 "General" = "通用";
 "Privacy" = "隐私";
 "Retention" = "保留策略";
-"Transfer" = "导入导出";
-"Auto Backup" = "自动备份";
+"Backup & Restore" = "备份与恢复";
 "About" = "关于";
 
 /* SettingsView – General */
@@ -292,8 +285,9 @@
 "Fine-tune keyboard behavior, launch defaults, and how Clipin looks." = "微调键盘行为、启动默认入口，以及 Clipin 的整体观感。";
 "Control which clipboard writes are ignored so sensitive or noisy content stays out." = "控制哪些剪贴板写入会被忽略，让敏感或噪音内容留在历史之外。";
 "Set how long history stays around and when unpinned items should be trimmed." = "设置历史记录保留多久，以及未固定条目何时开始清理。";
-"Move clipboard history in or out of Clipin without losing your current library." = "在不丢失当前资料库的前提下，将剪贴板历史导入或导出 Clipin。";
-"Keep an automatic JSON backup on disk so history can be restored if needed." = "在磁盘上保留自动生成的 JSON 备份，需要时可以恢复历史记录。";
+"Keep an automatic archive on disk so history can be restored, and move history in or out anytime." = "在磁盘上保留自动归档，需要时可恢复历史，并随时一次性导入或导出。";
+"Export…" = "导出…";
+"Import…" = "导入…";
 "Clipin launches automatically after you sign in." = "登录后自动启动 Clipin。";
 "Remember panel position between sessions" = "记住面板位置";
 "Reopen the panel where you last moved it, even after restarting Clipin." = "即使重启 Clipin，也在你上次移动到的位置重新打开面板。";
@@ -305,9 +299,9 @@
 "Oldest unpinned items are trimmed first when the limit is reached." = "达到上限后，会优先清理最旧的未固定条目。";
 "Apply the current retention rules immediately and remove outdated unpinned items." = "立即应用当前保留策略，并移除过期的未固定条目。";
 "Export clipboard history" = "导出剪贴板历史";
-"Create a JSON snapshot of your current history so it can be archived or moved elsewhere." = "为当前历史生成一份 JSON 快照，便于归档或迁移到其他地方。";
-"Import from an existing export" = "从已有导出文件导入";
-"Bring items back from a previous JSON export. Existing items stay in place and duplicates are skipped." = "从之前的 JSON 导出文件中恢复条目；现有条目会保留，重复内容会自动跳过。";
+"Create a one-off .clipin.zip snapshot you can archive or share elsewhere." = "为当前历史生成一次性 .clipin.zip 快照，便于归档或分享。";
+"Import from a backup" = "从备份文件导入";
+"Bring items back from a .clipin.zip archive or a legacy JSON export. Existing items stay in place and duplicates are skipped." = "从 .clipin.zip 归档或老版 JSON 导出中恢复条目；现有条目会保留，重复内容会自动跳过。";
 "Enable auto backup" = "开启自动备份";
 "Export history as a .clipin.zip archive on a schedule. Store it in iCloud Drive, Dropbox, or any folder you trust." = "按计划将历史导出为 .clipin.zip 归档，可保存在 iCloud Drive、Dropbox 或任何你信任的文件夹。";
 "Existing backups in the folder are preserved when this is disabled." = "关闭后，文件夹内已生成的备份文件仍会保留。";
@@ -316,9 +310,20 @@
 "Choose Folder…" = "选择文件夹…";
 "Change…" = "更改…";
 "Use iCloud Drive" = "使用 iCloud Drive";
+"Reset to Default" = "恢复默认位置";
+"Backup folder reset to %@." = "备份位置已恢复默认：%@。";
 "Frequency" = "频率";
-"Choose how often Clipin writes a fresh backup file." = "选择 Clipin 写出新备份文件的频率。";
-"Daily is recommended. On Clipboard Change keeps the backup near real-time but uses more network on iCloud Drive." = "推荐选择「每天」。「剪贴板每次变化」接近实时，但在 iCloud Drive 上会消耗更多流量。";
+"Daily is recommended. Hourly keeps the archive fresher at the cost of more uploads on iCloud Drive." = "推荐选择「每天」。「每小时」让归档更新更及时，但在 iCloud Drive 上会上传更多次。";
+"Legacy backup files" = "历史备份文件";
+"Found %d legacy file(s) totaling %@ in this folder. These are old JSON backups or archives from other Macs." = "在此文件夹中发现 %d 个历史文件，共 %@。它们是旧版 JSON 备份或来自其他 Mac 的归档。";
+"Review & Clean Up…" = "查看并清理…";
+"Clean up legacy backups" = "清理历史备份";
+"These files were left over by previous versions or other devices and will be deleted permanently. Your current backup and its safety net are not affected." = "这些文件是旧版本或其他设备留下的，将被永久删除。当前主备份及其安全网不受影响。";
+"Delete %d File(s)" = "删除 %d 个文件";
+"Legacy JSON backup" = "旧版 JSON 备份";
+"From another Mac" = "来自其他 Mac";
+"Removed %d legacy backup file(s)." = "已删除 %d 个历史备份文件。";
+"Removed %d of %d files. The rest could not be deleted—see Console for details." = "已删除 %d/%d 个文件。其余文件删除失败，详情见 Console 日志。";
 "Backup status" = "备份状态";
 "No backup yet" = "尚未备份";
 "Backup Now" = "立即备份";
@@ -391,8 +396,6 @@
 "action.pasteAsRTF" = "粘贴为 RTF";
 "Paste as HTML" = "粘贴为 HTML";
 "Paste as RTF" = "粘贴为 RTF";
-"settings.archive.formatCaption" = "归档格式：Clipin Clipboard Archive v2 ·";
-"settings.archive.openSpec" = "查看规范 ↗";
 
 /* SearchBar / PreviewPane —— Codex review 指出的缺失 key */
 "Search clipboard history…" = "搜索剪贴板历史…";

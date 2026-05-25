@@ -155,7 +155,9 @@ enum ArchiveService {
         let archive = ClipboardArchive(
             schemaVersion: 3,
             format: "clipin.clipboard-archive",
-            formatURL: "https://github.com/ccfco/Clipin-archive-format",
+            // formatURL 历史上指向一个并不存在的 ccfco/Clipin-archive-format 仓库；移除写入
+            // 但解码字段保留 Optional，让老 archive 能正常导入
+            formatURL: nil,
             exportedAt: Date(),
             summary: ArchiveSummary(itemCount: archiveItems.count, imageCount: writtenImageHashes.count),
             items: archiveItems
