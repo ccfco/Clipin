@@ -5,11 +5,28 @@ import XCTest
 final class AutoBackupServiceTests: XCTestCase {
     private var tempRoots: [URL] = []
 
+    /// 关键：测试用 SettingsStore.shared + UserDefaults.standard，AutoBackupService
+    /// 的 applySuccess 会把 lastBackupAt/URL/Size/Skipped 写进 UserDefaults。
+    /// defer 只恢复 settings 不恢复 UserDefaults backup state——会让用户真实 app
+    /// 启动时看到测试 tmp 路径的"假上次备份"。每个测试结束必须清掉所有 autoBackup.*
+    /// keys，避免污染本机 production 状态。
+    private static let autoBackupDefaultsKeys = [
+        "autoBackup.lastBackupAt",
+        "autoBackup.lastBackupSize",
+        "autoBackup.lastBackupURL",
+        "autoBackup.lastBackupSkipped",
+        "autoBackup.consecutiveFailures",
+        "autoBackup.paused",
+    ]
+
     override func tearDown() {
         for root in tempRoots {
             try? FileManager.default.removeItem(at: root)
         }
         tempRoots.removeAll()
+        for key in Self.autoBackupDefaultsKeys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
         super.tearDown()
     }
 
@@ -58,6 +75,61 @@ final class AutoBackupServiceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(result.importedCount, 1)
         let items = try verifyCore.getItems(limit: 50, offset: 0, typeFilter: nil)
         XCTAssertTrue(items.contains { $0.content == "saved before init" })
+    }
+
+    /// 修 B2 防回归：lastBackupURL 指向不在当前 settings.autoBackupFolderPath 下的
+    /// 路径时（典型场景：测试残留的 tmp 路径污染了 UserDefaults），init 必须自愈
+    /// 清掉所有 lastBackup* 状态，否则设置页永久显示"假上次备份"。
+    func testInitPurgesStaleBackupStateWhenURLOutsideCurrentFolder() throws {
+        let previousFolder = SettingsStore.shared.autoBackupFolderPath
+        defer { SettingsStore.shared.autoBackupFolderPath = previousFolder }
+
+        let (core, rootURL) = try makeCore()
+        let realFolder = rootURL.appendingPathComponent("real-backups", isDirectory: true)
+        try FileManager.default.createDirectory(at: realFolder, withIntermediateDirectories: true)
+        SettingsStore.shared.autoBackupFolderPath = realFolder.path
+
+        // 注入「测试残留」状态：UserDefaults 里指向另一个 tmp 路径的旧备份记录
+        let stalePath = "/private/var/folders/stale/old-test-backup.clipin.zip"
+        let d = UserDefaults.standard
+        d.set(Date(), forKey: "autoBackup.lastBackupAt")
+        d.set(stalePath, forKey: "autoBackup.lastBackupURL")
+        d.set(NSNumber(value: Int64(12345)), forKey: "autoBackup.lastBackupSize")
+        d.set(7, forKey: "autoBackup.lastBackupSkipped")
+
+        let service = AutoBackupService(core: core, settings: SettingsStore.shared)
+
+        XCTAssertNil(service.lastBackupAt, "stale lastBackupAt must be purged")
+        XCTAssertNil(service.lastBackupURL, "stale lastBackupURL must be purged")
+        XCTAssertEqual(service.lastBackupSize, 0)
+        XCTAssertEqual(service.lastBackupSkipped, 0)
+        // 持久化也要清掉
+        XCTAssertNil(d.object(forKey: "autoBackup.lastBackupAt"))
+        XCTAssertNil(d.string(forKey: "autoBackup.lastBackupURL"))
+    }
+
+    /// 对偶测试：lastBackupURL 就在当前 folder 下 → 保留状态不清掉
+    func testInitKeepsBackupStateWhenURLInsideCurrentFolder() throws {
+        let previousFolder = SettingsStore.shared.autoBackupFolderPath
+        defer { SettingsStore.shared.autoBackupFolderPath = previousFolder }
+
+        let (core, rootURL) = try makeCore()
+        let realFolder = rootURL.appendingPathComponent("real-backups", isDirectory: true)
+        try FileManager.default.createDirectory(at: realFolder, withIntermediateDirectories: true)
+        SettingsStore.shared.autoBackupFolderPath = realFolder.path
+
+        let validURL = realFolder.appendingPathComponent("clipin-backup-Host.clipin.zip")
+        let date = Date()
+        let d = UserDefaults.standard
+        d.set(date, forKey: "autoBackup.lastBackupAt")
+        d.set(validURL.path, forKey: "autoBackup.lastBackupURL")
+        d.set(NSNumber(value: Int64(99999)), forKey: "autoBackup.lastBackupSize")
+
+        let service = AutoBackupService(core: core, settings: SettingsStore.shared)
+
+        XCTAssertEqual(service.lastBackupAt, date)
+        XCTAssertEqual(service.lastBackupURL, validURL)
+        XCTAssertEqual(service.lastBackupSize, 99999)
     }
 
     func testBackupFilenameContainsHostnameOrDefault() {

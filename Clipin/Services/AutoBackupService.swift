@@ -31,11 +31,21 @@ final class AutoBackupService: ObservableObject {
             .appendingPathComponent("Documents/Clipin Backups", isDirectory: true)
     }
 
-    /// 非沙盒 app 不能用 `ubiquityIdentityToken`（需 entitlement）。
-    /// 直接看 `~/Library/Mobile Documents/com~apple~CloudDocs` 是否存在且为目录——
-    /// 单纯 `fileExists` 不够：路径存在但是失效 symlink、被替换成普通文件等异常状态下
-    /// 仍会返回 true，让 UI 误启用 iCloud 路径。用 `isDirectory:` out-param 强校验。
+    /// iCloud Drive 是否真正可用。主判定用 `ubiquityIdentityToken`：
+    /// - 用户登录 iCloud + 启用 iCloud Drive → 非 nil
+    /// - 仅登录 Apple ID 没开 iCloud Drive → nil
+    /// - 完全没登录 iCloud → nil
+    ///
+    /// 历史踩坑：早先注释说"非沙盒 app 不能用 ubiquityIdentityToken（需 entitlement）"
+    /// 是错的——读 token 免 entitlement，只有 ubiquity container 读写需要。
+    /// 早先 fallback 仅看 `~/Library/Mobile Documents/com~apple~CloudDocs` 目录存在性，
+    /// 但这个目录在「用户曾开过 iCloud Drive 然后关掉」「macOS 升级时自动创建」等
+    /// 场景下会残留，导致误判 iCloud 可用 → 用户在「未开 iCloud」的机器上看到默认
+    /// 路径被设到 iCloud Mobile Documents 下，备份永远不会上云。
+    ///
+    /// 目录存在性仍作为第二道校验：登录态正常但目录被异常状态破坏时回到 Documents。
     static func isICloudDriveAvailable() -> Bool {
+        guard FileManager.default.ubiquityIdentityToken != nil else { return false }
         var isDir: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: iCloudDriveRoot().path, isDirectory: &isDir)
         return exists && isDir.boolValue
@@ -100,6 +110,12 @@ final class AutoBackupService: ObservableObject {
         self.consecutiveFailures = d.integer(forKey: Keys.consecutiveFailures)
         self.pausedDueToFailures = d.bool(forKey: Keys.paused)
         self.lastBackupSkipped = d.integer(forKey: Keys.lastBackupSkipped)
+
+        // 自愈：lastBackupURL 不在当前 settings.autoBackupFolderPath 下 → 视为 stale
+        // state（典型来源是 unit test 用 SettingsStore.shared 跑过后残留的 tmp 路径），
+        // 清掉所有 lastBackup* 相关 published state 和持久化值，避免设置页永久显示
+        // 一个指向不存在 tmp 路径的 "Last backup: ..." 假状态。
+        purgeStaleBackupStateIfNeeded()
 
         settings.$autoBackupEnabled
             .combineLatest(settings.$autoBackupFolderPath, settings.$autoBackupInterval)
@@ -257,6 +273,42 @@ final class AutoBackupService: ObservableObject {
             persist(paused: false)
         }
         performBackup(folderURL: URL(fileURLWithPath: folderPath, isDirectory: true))
+    }
+
+    /// init 自愈：检测 lastBackupURL 是否还在当前备份文件夹下。不在 → 清掉所有
+    /// lastBackup* 状态。这是 fail-healing 模式，专门解决两类污染：
+    /// ① 单元测试用 SettingsStore.shared + UserDefaults.standard 跑完留下的 tmp 路径
+    /// ② 用户改了 autoBackupFolderPath，旧 folder 下的 lastBackupURL 已不相关
+    ///
+    /// 设计权衡：用户「手动删了真备份文件」也会触发清理——但 lastBackup* 只是 UI
+    /// 显示状态，清掉后下次备份会重新写入，没有数据丢失风险；而留着 stale state
+    /// 会让 partial backup warning 永久挂在那里更糟。
+    private func purgeStaleBackupStateIfNeeded() {
+        guard let urlPath = lastBackupURL?.path else { return }
+        let folderPath = settings.autoBackupFolderPath.map {
+            URL(fileURLWithPath: $0, isDirectory: true).standardizedFileURL.path
+        }
+        let normalizedURLDir = URL(fileURLWithPath: urlPath)
+            .deletingLastPathComponent()
+            .standardizedFileURL.path
+
+        // 只在 lastBackupURL 不在当前 folder 下时清理；folderPath 为 nil 时也清掉
+        // （没配置 folder 却有 lastBackupURL 一定是 stale state）
+        if let folderPath, normalizedURLDir == folderPath {
+            return
+        }
+
+        lastBackupAt = nil
+        lastBackupURL = nil
+        lastBackupSize = 0
+        lastBackupSkipped = 0
+        lastBackupError = nil
+
+        let d = UserDefaults.standard
+        d.removeObject(forKey: Keys.lastBackupAt)
+        d.removeObject(forKey: Keys.lastBackupURL)
+        d.removeObject(forKey: Keys.lastBackupSize)
+        d.removeObject(forKey: Keys.lastBackupSkipped)
     }
 
     /// 用户在设置页点 Resume：清 paused + 重置 failures，重新进入调度
