@@ -509,11 +509,11 @@ struct PreviewPane: View {
         private var prettyJSON: String? {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard let first = trimmed.first, first == "{" || first == "[" else { return nil }
+            // `.fragmentsAllowed` 和 `.topLevelDictionaryAssumed` 互斥，同时设置 NSJSONSerialization
+            // 抛 NSInvalidArgumentException（"cannot be set at the same time"）。
+            // 上面 guard 已经守住 first == { || [，顶层一定是 dict/array，不需要任何特殊 options。
             guard let data = trimmed.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(
-                    with: data,
-                    options: [.fragmentsAllowed, .topLevelDictionaryAssumed]
-                  ),
+                  let object = try? JSONSerialization.jsonObject(with: data, options: []),
                   // 不能用 .sortedKeys：会改变 key 顺序，从 Pretty 模式框选复制时拿到的
                   // JSON 跟原始剪贴板不一致 —— 这是静默数据失真，比"键顺序乱"严重得多
                   let pretty = try? JSONSerialization.data(
