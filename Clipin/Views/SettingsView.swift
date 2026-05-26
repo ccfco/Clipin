@@ -251,6 +251,9 @@ struct SettingsView: View {
     func showNotice(_ text: String, isError: Bool = false) {
         notice = SettingsNotice(text: text, isError: isError)
         dismissTask?.cancel()
+        // 关键：新 notice 必须重置 hover 状态——否则上一条 notice 退场前用户
+        // 鼠标若仍在该位置，新 notice 出现就会继承 hovered=true 永不消失。
+        noticeHovered = false
         guard !isError else { return }
         scheduleNoticeAutoDismiss(after: .seconds(6))
     }

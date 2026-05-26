@@ -537,6 +537,7 @@ extension SettingsView {
     private func refreshCleanupCandidates() {
         guard let folderPath = settings.autoBackupFolderPath else {
             cleanupCandidates = []
+            cleanupSelection.removeAll()
             return
         }
         let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
@@ -554,6 +555,10 @@ extension SettingsView {
             cleanupCandidates = []
             showNotice(error.localizedDescription, isError: true)
         }
+        // 重新扫描后保留仍存在的选择——已被删/不在的 id 必须清掉，
+        // 否则 "Delete N File(s)" 按钮计数和实际可删数量不一致。
+        let liveIds = Set(cleanupCandidates.map(\.id))
+        cleanupSelection.formIntersection(liveIds)
     }
 
     private func confirmCleanup() {
