@@ -30,9 +30,10 @@ final class ClipboardMonitor: ObservableObject {
     private enum ClipboardPayload: Sendable {
         case text(String, String?, String?, [ClipboardRepresentation])
         case url(String, String?, String?, [ClipboardRepresentation])
-        case file(String, String?, String?)
+        case file(String, String?, String?, [ClipboardRepresentation])
         /// 图片数据延迟到 detached task 内通过 MainActor.run 拉取：避免 500ms timer 主线程
         /// 同步读 TIFF（截图原图可数 MB）卡 UI；用 captured changeCount 防止读到下一次复制的数据。
+        /// 辅助 reps（file-url/html/url 等）也在后台 hop 主线程时一起读，保持单次 pasteboard 快照一致性。
         case imageLazy(changeCount: Int, sourceApp: String?, sourceName: String?)
     }
 
@@ -111,7 +112,10 @@ final class ClipboardMonitor: ObservableObject {
             .urlReadingFileURLsOnly: true
         ]) as? [URL], !fileURLs.isEmpty {
             let paths = fileURLs.map(\.path)
-            persist(.file(FileClipboardContent.encodedContent(from: paths), sourceApp, sourceName))
+            // 辅助 reps：file 类型可能附带 image data（系统给的预览/缩略图）、HTML、URL 等；
+            // 粘到富文本编辑器能消费 image data 显示图，而不是裸路径字符串
+            let reps = ClipboardRepresentationExtractor.extractAuxiliary(from: pasteboard, primaryClipType: .file)
+            persist(.file(FileClipboardContent.encodedContent(from: paths), sourceApp, sourceName, reps))
         } else if let urlString = pasteboard.string(forType: .URL) ?? extractURL(from: pasteboard) {
             let reps = ClipboardRepresentationExtractor.extract(from: pasteboard, primaryContent: urlString)
             persist(.url(urlString, sourceApp, sourceName, reps))
@@ -169,36 +173,45 @@ final class ClipboardMonitor: ObservableObject {
                         representations: coreReps
                     )
 
-                case let .file(path, sourceApp, sourceName):
-                    _ = try core.saveItem(
+                case let .file(path, sourceApp, sourceName, reps):
+                    let coreReps = reps.map { ClipRepresentation(uti: $0.uti, data: $0.data) }
+                    _ = try core.saveItemWithRepresentations(
                         content: path,
                         clipType: .file,
                         sourceApp: sourceApp,
                         sourceName: sourceName,
-                        imagePath: nil
+                        imagePath: nil,
+                        representations: coreReps
                     )
 
                 case let .imageLazy(capturedChangeCount, sourceApp, sourceName):
-                    // 后台任务里 hop 回 main 拉 pasteboard data，timer 触发这一帧已经返回
-                    let data: Data? = await MainActor.run {
+                    // 后台任务里 hop 回 main 拉 pasteboard data + 辅助 reps：
+                    // 必须在单次 hop 内一起读，确保 image bytes 和 file-url/html 等
+                    // 都来自同一个 pasteboard 快照，否则中间用户又复制别的会割裂
+                    struct ImageSnapshot { let data: Data; let reps: [ClipboardRepresentation] }
+                    let snapshot: ImageSnapshot? = await MainActor.run {
                         let pb = NSPasteboard.general
                         // 用户已经又复制了别的内容，捕获到的快照已过期，丢弃
                         guard pb.changeCount == capturedChangeCount else { return nil }
-                        return Self.readImageData(from: pb)
+                        guard let imageData = Self.readImageData(from: pb) else { return nil }
+                        let auxReps = ClipboardRepresentationExtractor.extractAuxiliary(from: pb, primaryClipType: .image)
+                        return ImageSnapshot(data: imageData, reps: auxReps)
                     }
-                    guard let data else { return }
+                    guard let snapshot else { return }
                     if Task.isCancelled { return }
                     let imageDir = core.imageDir()
                     let filename = UUID().uuidString + ".png"
                     let path = (imageDir as NSString).appendingPathComponent(filename)
-                    let pngData = try Self.makePNGData(from: data)
+                    let pngData = try Self.makePNGData(from: snapshot.data)
                     try pngData.write(to: URL(fileURLWithPath: path), options: .atomic)
-                    let saved = try core.saveItem(
+                    let coreReps = snapshot.reps.map { ClipRepresentation(uti: $0.uti, data: $0.data) }
+                    let saved = try core.saveItemWithRepresentations(
                         content: "image",
                         clipType: .image,
                         sourceApp: sourceApp,
                         sourceName: sourceName,
-                        imagePath: path
+                        imagePath: path,
+                        representations: coreReps
                     )
                     // 入库后立即读图片头写回尺寸，让列表首次渲染就带 (宽×高)。
                     // 读尺寸失败不阻断采集（fire-and-forget），历史 backfill 会再补。

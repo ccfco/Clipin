@@ -22,20 +22,20 @@ extension AppDelegate {
     func performPaste(_ item: ClipItem) {
         monitor?.pause()
 
+        // 所有 clipType 都读 reps：image/file 也走 representations 副表保留多 UTI 表达
+        // （Phase 2：承认 pasteboard 是多 UTI 容器，采集时全收集、回放时全回放）。
+        // 存量 image/file 条目没有 reps（旧 saveItem 调用），返回空数组，由 PasteService
+        // 各分支退化为"仅主载体"行为，与改造前等价——无需 migration。
         let representations: [ClipRepresentation]
-        if item.clipType == .text || item.clipType == .url {
-            do {
-                representations = try appState.core.getRepresentations(id: item.id)
-            } catch {
-                // DB 读 representations 失败不能 ?? [] 静默退化成“只写纯文本”——
-                // 用户期待 HTML/RTF 跟着粘贴，悄悄丢格式属于“不兜底”里禁止的兜底行为。
-                ClipinLog.paste.error("Failed to load representations for paste: \(error.localizedDescription, privacy: .public)")
-                monitor?.resume()
-                viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
-                return
-            }
-        } else {
-            representations = []
+        do {
+            representations = try appState.core.getRepresentations(id: item.id)
+        } catch {
+            // DB 读 representations 失败不能 ?? [] 静默退化——用户期待多 UTI 跟着粘贴，
+            // 悄悄丢辅助 UTI 属于"不兜底"里禁止的兜底行为。
+            ClipinLog.paste.error("Failed to load representations for paste: \(error.localizedDescription, privacy: .public)")
+            monitor?.resume()
+            viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
+            return
         }
 
         guard PasteService.writeAllRepresentations(item, representations: representations) else {
@@ -183,7 +183,20 @@ extension AppDelegate {
 
     func performCopy(_ item: ClipItem) {
         monitor?.pause()
-        guard PasteService.writeToClipboard(item) else {
+
+        // Copy 和 Paste 必须对称：都读 reps 走多 UTI 回放，否则用户从 Clipin 历史复制条目
+        // 到系统剪贴板时会丢辅助 UTI（HTML/RTF/file-url 等），破坏 Phase 2 的"多 UTI 端到端保留"。
+        let representations: [ClipRepresentation]
+        do {
+            representations = try appState.core.getRepresentations(id: item.id)
+        } catch {
+            ClipinLog.paste.error("Failed to load representations for copy: \(error.localizedDescription, privacy: .public)")
+            monitor?.resume()
+            viewModel?.showNotice(NSLocalizedString(Self.pasteFailureMessageKey(for: item), comment: ""), style: .error)
+            return
+        }
+
+        guard PasteService.writeAllRepresentations(item, representations: representations) else {
             monitor?.resume()
             viewModel?.showNotice(NSLocalizedString(Self.pasteFailureMessageKey(for: item), comment: ""), style: .error)
             return

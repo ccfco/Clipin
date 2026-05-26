@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 /// 单条剪贴板条目的一种 UTI representation。
 /// 对应 Rust 侧的 ClipRepresentation。
@@ -57,5 +58,67 @@ enum ClipboardRepresentationExtractor {
         // 总和上限 → fallback 全丢
         guard totalBytes <= totalLimit else { return [] }
         return result
+    }
+
+    /// 给 image/file 类型采集时使用的辅助 UTI 收集器。
+    ///
+    /// 区别于 extract(from:primaryContent:)：image/file 没有"primary 字符串"可做去重锚点
+    /// （image 主载体是 imagePath 上的 PNG 文件、file 主载体是 content 列的多路径文本）。
+    /// 这里收集的是 pasteboard 上"对粘贴有补充价值"的辅助 UTI——让粘贴时能多 UTI 回放：
+    /// - image 类型：拿到 file-url 后，粘到 Finder 仍是文件粘贴（前提是源文件还在）；
+    ///   拿到 html/url 后，富文本编辑器有更多消费方式。
+    /// - file 类型：拿到 image data 后，粘到富文本编辑器是图而不是路径字符串。
+    ///
+    /// 主载体对应的 UTI 由 primaryClipType 决定并跳过：
+    /// - .image 跳过所有 image-conforming UTI（已经在 imagePath 里）
+    /// - .file 跳过 public.file-url（已经在 content 里）
+    /// 单条/总量上限沿用 perRepresentationLimit / totalLimit。
+    static func extractAuxiliary(
+        from pasteboard: NSPasteboard,
+        primaryClipType: ClipType
+    ) -> [ClipboardRepresentation] {
+        // 辅助白名单：HTML/RTF/URL 是任何类型都可能附带的富表达；
+        // 跨类型补充："file 复制" 顺带的 image bytes、"image 复制" 顺带的 file-url。
+        // 与 whitelist 不同：whitelist 是 text/url primary 之外的补充，这里覆盖跨类型。
+        var candidates: [NSPasteboard.PasteboardType] = [
+            .html,
+            .rtf,
+            NSPasteboard.PasteboardType("public.rtfd"),
+            .URL,
+        ]
+        if primaryClipType == .file {
+            // file 主载体不挂 image bytes；可以补一份 image 给富文本消费方
+            candidates.append(.png)
+            candidates.append(.tiff)
+        }
+        if primaryClipType == .image {
+            // image 主载体已落 imagePath；file-url 是关键补充——本地图片场景能继续按文件粘贴
+            candidates.append(.fileURL)
+        }
+
+        var result: [ClipboardRepresentation] = []
+        var totalBytes = 0
+        let availableTypes = pasteboard.types ?? []
+
+        for type in candidates where availableTypes.contains(type) {
+            // primary 已涵盖的 UTI 跳过——防止与主载体重复占用
+            if primaryClipType == .image, isImageConformingType(type) { continue }
+            if primaryClipType == .file, type == .fileURL { continue }
+
+            guard let data = pasteboard.data(forType: type), !data.isEmpty else { continue }
+            guard data.count <= perRepresentationLimit else { continue }
+            result.append(ClipboardRepresentation(uti: type.rawValue, data: data))
+            totalBytes += data.count
+        }
+
+        guard totalBytes <= totalLimit else { return [] }
+        return result
+    }
+
+    /// 判断 UTI 是否表示图片内容。复用 ClipboardMonitor 同源判定逻辑，避免散布。
+    private static func isImageConformingType(_ type: NSPasteboard.PasteboardType) -> Bool {
+        guard type.rawValue != "public.file-url" else { return false }
+        guard let utType = UTType(type.rawValue) else { return false }
+        return utType.conforms(to: .image)
     }
 }

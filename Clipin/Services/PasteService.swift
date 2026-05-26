@@ -17,58 +17,42 @@ enum PasteService {
     /// 将 ClipItem 写回剪贴板，成功返回 true
     @discardableResult
     static func writeToClipboard(_ item: ClipItem) -> Bool {
-        let pasteboard = NSPasteboard.general
-
-        switch item.clipType {
-        case .text, .url:
-            // 先把 string(+URL) 写进游离 pbItem 验证成功，再 clearContents + writeObjects。
-            // 与 writeAllRepresentations/.image/.file 保持同一「写前先验证 payload」语义，
-            // 避免 setString 失败时已清空用户当前系统剪贴板。
-            let pbItem = NSPasteboardItem()
-            guard pbItem.setString(item.content, forType: .string) else { return false }
-            if item.clipType == .url {
-                guard pbItem.setString(item.content, forType: .URL) else { return false }
-            }
-            pasteboard.clearContents()
-            return pasteboard.writeObjects([pbItem])
-
-        case .image:
-            guard let path = item.imagePath,
-                  let image = NSImage(contentsOfFile: path) else { return false }
-            pasteboard.clearContents()
-            return pasteboard.writeObjects([image])
-
-        case .file:
-            let paths = FileClipboardContent.paths(from: item.content)
-            let urls = paths
-                .map(URL.init(fileURLWithPath:))
-                .filter { FileManager.default.fileExists(atPath: $0.path) }
-                .map { $0 as NSURL }
-            guard !urls.isEmpty, urls.count == paths.count else { return false }
-            pasteboard.clearContents()
-            return pasteboard.writeObjects(urls)
-        }
+        // 等价于"主载体 + 空辅助 reps"——所有 clipType 都走 writeAllRepresentations 单一路径。
+        // 由调用方（如 performCopy）决定是否读 reps 后调 writeAllRepresentations 拿多 UTI 回放。
+        return writeAllRepresentations(item, representations: [])
     }
 
-    /// Return 路径的"全量回放"：把所有 representation 写到一个 NSPasteboardItem。
-    /// 由调用方（ViewModel/AppDelegate）通过 ClipinCore.getRepresentations 先取出 reps 再传入。
-    /// pasteboard 参数仅供测试注入；生产路径走 NSPasteboard.general。
+    /// 写剪贴板的统一入口：主载体 + 辅助 reps 一起回放。
+    /// - text/url：主载体是 content 字符串，reps 是 HTML/RTF/URL 等富表达
+    /// - image：主载体是 imagePath 的 PNG bytes，reps 是 file-url（本地图片场景能再粘成文件）等
+    /// - file：主载体是多个 file-url（独立 NSPasteboardItem），reps 是 image bytes（系统给的预览）等
+    ///
+    /// 不变量保护（CLAUDE.md）：所有 setData 在游离 pbItem 上先校验，
+    /// 全部成功后才 clearContents+writeObjects——任一失败不擦掉用户当前系统剪贴板。
+    /// 存量条目 reps 为空时自然退化为"仅主载体"，与改造前行为等价。
     @discardableResult
     static func writeAllRepresentations(
         _ item: ClipItem,
         representations: [ClipRepresentation],
         to pasteboard: NSPasteboard = .general
     ) -> Bool {
-        guard item.clipType == .text || item.clipType == .url else {
-            return writeToClipboard(item)
+        switch item.clipType {
+        case .text, .url:
+            return writeTextOrURL(item, representations: representations, to: pasteboard)
+        case .image:
+            return writeImage(item, representations: representations, to: pasteboard)
+        case .file:
+            return writeFile(item, representations: representations, to: pasteboard)
         }
+    }
 
+    /// text/url：主载体是 content 字符串，reps 是富表达白名单（HTML/RTF/URL 等）。
+    private static func writeTextOrURL(
+        _ item: ClipItem,
+        representations: [ClipRepresentation],
+        to pasteboard: NSPasteboard
+    ) -> Bool {
         let pbItem = NSPasteboardItem()
-
-        // 所有写入都先落到游离的 pbItem 并校验返回值；任一失败立即 return false，
-        // 此时尚未 clearContents，用户当前系统剪贴板不受影响。全部成功后才 clear+write。
-        // setData/setString 对**已存在的同一 type** 会返回 false，故先按 type 去重再写，
-        // 避免 url item 的 .URL 与 representations 里的 public.url 冲突导致整体失败（回归）。
         guard pbItem.setString(item.content, forType: .string) else { return false }
         var writtenTypes: Set<NSPasteboard.PasteboardType> = [.string]
 
@@ -79,13 +63,98 @@ enum PasteService {
 
         for rep in representations {
             let type = NSPasteboard.PasteboardType(rep.uti)
-            // 已写过的 type 跳过（数据已在），而不是触发必然失败的重复 setData
+            // 已写过的 type 跳过（避免 url 的 .URL 与 rep 的 public.url 重复触发必败的 setData）
             guard writtenTypes.insert(type).inserted else { continue }
             guard pbItem.setData(rep.data, forType: type) else { return false }
         }
 
         pasteboard.clearContents()
         return pasteboard.writeObjects([pbItem])
+    }
+
+    /// image：主载体同时挂 PNG + TIFF 两种 UTI（旧 Photoshop / IM apps 仅识别 TIFF，
+    /// 单 PNG 会让这类消费方读不到图）；辅助 reps 中的 file-url 若指向的源文件仍在，
+    /// 也挂上（让"Finder 复制本地图片"经 Clipin 历史回放仍可粘到 Finder 当文件）。
+    /// 手动构造 pbItem 而不是 NSImage.writeObjects：直接控制 UTI 集合，
+    /// 让辅助 reps 能挂到同一个 pbItem——多 UTI 必须挂在同一个 pbItem 上才会被消费方一起感知。
+    private static func writeImage(
+        _ item: ClipItem,
+        representations: [ClipRepresentation],
+        to pasteboard: NSPasteboard
+    ) -> Bool {
+        guard let path = item.imagePath,
+              let pngData = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+            return false
+        }
+        let pbItem = NSPasteboardItem()
+        guard pbItem.setData(pngData, forType: .png) else { return false }
+        var writtenTypes: Set<NSPasteboard.PasteboardType> = [.png]
+
+        // 补 TIFF：从 PNG bytes 通过 NSImage 转 TIFF。失败容忍——主载体 PNG 已就位，
+        // 多挂一种 UTI 是为了兼容旧 TIFF-only 消费方，不应让整体写入失败。
+        if let image = NSImage(data: pngData), let tiffData = image.tiffRepresentation,
+           pbItem.setData(tiffData, forType: .tiff) {
+            writtenTypes.insert(.tiff)
+        }
+
+        // 辅助 reps：file-url 校验源文件存在，其他 UTI 直接挂
+        for rep in representations {
+            let type = NSPasteboard.PasteboardType(rep.uti)
+            guard writtenTypes.insert(type).inserted else { continue }
+            if rep.uti == NSPasteboard.PasteboardType.fileURL.rawValue,
+               !isFileURLDataValid(rep.data) {
+                // 隔空剪贴板/临时文件场景：源已被系统清理，写进剪贴板会变成死链
+                continue
+            }
+            _ = pbItem.setData(rep.data, forType: type)  // 辅助失败容忍：主载体已就位
+        }
+
+        pasteboard.clearContents()
+        return pasteboard.writeObjects([pbItem])
+    }
+
+    /// file：每个源 URL 一个独立 NSPasteboardItem（多文件粘到 Finder 才正确分裂）；
+    /// 辅助 reps（image bytes / HTML / URL）挂到第一个 pbItem 上——富文本编辑器优先消费它。
+    private static func writeFile(
+        _ item: ClipItem,
+        representations: [ClipRepresentation],
+        to pasteboard: NSPasteboard
+    ) -> Bool {
+        let paths = FileClipboardContent.paths(from: item.content)
+        let urls = paths
+            .map(URL.init(fileURLWithPath:))
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        // 全量校验：缺一个都让用户当前剪贴板不动，与 CLAUDE.md 不变量一致
+        guard !urls.isEmpty, urls.count == paths.count else { return false }
+
+        let pbItems: [NSPasteboardItem] = urls.map { url in
+            let pbItem = NSPasteboardItem()
+            pbItem.setString(url.absoluteString, forType: .fileURL)
+            return pbItem
+        }
+
+        // 辅助 reps 挂到第一个 pbItem。已包含 fileURL 故跳过任何重复 file-url 的 rep。
+        if let firstItem = pbItems.first {
+            var writtenTypes: Set<NSPasteboard.PasteboardType> = [.fileURL]
+            for rep in representations {
+                let type = NSPasteboard.PasteboardType(rep.uti)
+                guard writtenTypes.insert(type).inserted else { continue }
+                _ = firstItem.setData(rep.data, forType: type)  // 辅助失败容忍
+            }
+        }
+
+        pasteboard.clearContents()
+        return pasteboard.writeObjects(pbItems)
+    }
+
+    /// 校验 reps 副表里的 file-url bytes 指向的文件是否仍存在。
+    /// 隔空剪贴板临时文件被系统清理后 reps 里的 file-url 变死链——回放时跳过避免污染剪贴板。
+    private static func isFileURLDataValid(_ data: Data) -> Bool {
+        guard let urlString = String(data: data, encoding: .utf8) else { return false }
+        // file-url bytes 可能末尾带 null 终止符，需 trim
+        let trimmed = urlString.trimmingCharacters(in: CharacterSet(charactersIn: "\0"))
+        guard let url = URL(string: trimmed), url.isFileURL else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
     }
 
     /// 动作面板 "Paste as X" 入口：仅写一种 UTI。
