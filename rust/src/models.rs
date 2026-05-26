@@ -38,6 +38,8 @@ pub struct ClipItem {
     pub is_pinned: bool,
     pub created_at: i64,
     pub image_path: Option<String>,
+    /// file 类型的图片附件缓存路径 JSON 数组。图片 bytes 仍在磁盘，不进入 SQLite BLOB。
+    pub attachment_paths: Option<String>,
     pub char_count: i32,
     pub copy_count: i32,
     pub first_copied_at: i64,
@@ -60,6 +62,8 @@ pub struct ClipListItem {
     pub is_pinned: bool,
     pub created_at: i64,
     pub image_path: Option<String>,
+    /// file 类型的图片附件缓存路径 JSON 数组，列表预览/Quick Look 用。
+    pub attachment_paths: Option<String>,
     pub char_count: i32,
     pub paste_count: i32,
     pub copy_count: i32,

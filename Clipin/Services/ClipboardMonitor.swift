@@ -30,16 +30,11 @@ final class ClipboardMonitor: ObservableObject {
     private enum ClipboardPayload: Sendable {
         case text(String, String?, String?, [ClipboardRepresentation])
         case url(String, String?, String?, [ClipboardRepresentation])
-        case file(String, String?, String?, [ClipboardRepresentation])
+        case file([URL], String, String?, String?, [ClipboardRepresentation])
         /// 图片数据延迟到 detached task 内通过 MainActor.run 拉取：避免 500ms timer 主线程
         /// 同步读 TIFF（截图原图可数 MB）卡 UI；用 captured changeCount 防止读到下一次复制的数据。
         /// 辅助 reps（file-url/html/url 等）也在后台 hop 主线程时一起读，保持单次 pasteboard 快照一致性。
         case imageLazy(changeCount: Int, sourceApp: String?, sourceName: String?)
-        /// 单个 file-url 指向图片文件时主动读 bytes 升级为 image：
-        /// iPhone 隔空剪贴板从文件 app 复制 jpeg 时，NSPasteboard 上只有 file-url、没有 image bytes，
-        /// 不主动读 file 就只能存 useractivityd 临时路径（粘贴时已被系统清理 → 死链）。
-        /// 文件 URL 作为辅助 rep 一并存进副表，让 Finder 本地图场景仍能粘成文件（临时文件回放时自动失效跳过）。
-        case imageFromFile(url: URL, sourceApp: String?, sourceName: String?)
     }
 
     private let core: ClipinCore
@@ -116,19 +111,13 @@ final class ClipboardMonitor: ObservableObject {
         } else if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
             .urlReadingFileURLsOnly: true
         ]) as? [URL], !fileURLs.isEmpty {
-            // 特例：单个 file-url 指向图片文件 → 升级为 image 类型，主动读文件 bytes 落地。
-            // 这是 iPhone 隔空剪贴板从文件 app 复制 jpeg 这条死链路径的真正修复——
-            // Apple 跨设备协议下 pasteboard 不会把 image bytes 跨设备复制（数据量考虑），
-            // 只挂 file-url 指向 useractivityd 临时文件；不主动读就只能存死路径。
-            if fileURLs.count == 1, let url = fileURLs.first, Self.isImageFileURL(url) {
-                persist(.imageFromFile(url: url, sourceApp: sourceApp, sourceName: sourceName))
-            } else {
-                let paths = fileURLs.map(\.path)
-                // 辅助 reps：file 类型可能附带 image data（系统给的预览/缩略图）、HTML、URL 等；
-                // 粘到富文本编辑器能消费 image data 显示图，而不是裸路径字符串
-                let reps = ClipboardRepresentationExtractor.extractAuxiliary(from: pasteboard, primaryClipType: .file)
-                persist(.file(FileClipboardContent.encodedContent(from: paths), sourceApp, sourceName, reps))
-            }
+            let paths = fileURLs.map(\.path)
+            // file 类型不能把 image bytes 塞进 clip_representations.data；图片文件的可回放缓存
+            // 统一走 attachment_paths -> imageDir PNG。其他非 image UTI 仍可作为辅助表达保留。
+            let reps = ClipboardRepresentationExtractor
+                .extractAuxiliary(from: pasteboard, primaryClipType: .file)
+                .filter { !Self.isImageContentType(NSPasteboard.PasteboardType($0.uti)) }
+            persist(.file(fileURLs, FileClipboardContent.encodedContent(from: paths), sourceApp, sourceName, reps))
         } else if let urlString = pasteboard.string(forType: .URL) ?? extractURL(from: pasteboard) {
             let reps = ClipboardRepresentationExtractor.extract(from: pasteboard, primaryContent: urlString)
             persist(.url(urlString, sourceApp, sourceName, reps))
@@ -186,15 +175,14 @@ final class ClipboardMonitor: ObservableObject {
                         representations: coreReps
                     )
 
-                case let .file(path, sourceApp, sourceName, reps):
-                    let coreReps = reps.map { ClipRepresentation(uti: $0.uti, data: $0.data) }
-                    _ = try core.saveItemWithRepresentations(
-                        content: path,
-                        clipType: .file,
+                case let .file(urls, content, sourceApp, sourceName, reps):
+                    try await self?.persistFile(
+                        urls: urls,
+                        content: content,
                         sourceApp: sourceApp,
                         sourceName: sourceName,
-                        imagePath: nil,
-                        representations: coreReps
+                        auxReps: reps,
+                        core: core
                     )
 
                 case let .imageLazy(capturedChangeCount, sourceApp, sourceName):
@@ -221,47 +209,6 @@ final class ClipboardMonitor: ObservableObject {
                     )
                     return  // persistImage 内自行 notify，跳过下方公共 notifyNewItem
 
-                case let .imageFromFile(url, sourceApp, sourceName):
-                    // 主动读 file-url 指向的图片 bytes 升级为 image 类型——
-                    // 解决 iPhone 隔空剪贴板从文件 app 复制 jpeg 死链场景：pasteboard 上
-                    // 只有 file-url 没有 image bytes，必须主动读文件才能拿到图。
-                    // file-url 同时写进辅助 reps，让 Finder 本地图场景仍能粘成文件（回放时校验失效自动跳过）。
-                    //
-                    // 双轨 fallback：因新分支已把"单图片文件"从 file 路径劫走，
-                    // 读/解码/入库任何一环失败都必须回退保存原始 file 路径条目，
-                    // 否则用户的剪贴板记录会无声消失——这是 R10 / R2 修复的核心。
-                    let fileData: Data
-                    do {
-                        fileData = try Data(contentsOf: url)
-                    } catch {
-                        ClipinLog.monitor.error("Failed to read file-url image bytes from \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public). Falling back to file capture.")
-                        try await self?.persistFileFallback(url: url, sourceApp: sourceApp, sourceName: sourceName, core: core)
-                        return
-                    }
-                    if Task.isCancelled { return }
-                    let auxReps: [ClipboardRepresentation]
-                    if let fileURLBytes = url.absoluteString.data(using: .utf8), !fileURLBytes.isEmpty {
-                        auxReps = [ClipboardRepresentation(
-                            uti: NSPasteboard.PasteboardType.fileURL.rawValue,
-                            data: fileURLBytes
-                        )]
-                    } else {
-                        auxReps = []
-                    }
-                    do {
-                        try await self?.persistImage(
-                            rawData: fileData,
-                            sourceApp: sourceApp,
-                            sourceName: sourceName,
-                            auxReps: auxReps,
-                            core: core
-                        )
-                    } catch {
-                        // makePNGData/DB save 失败：CGImageSource 不识别这个 bytes、磁盘满、SQLite 写失败等
-                        ClipinLog.monitor.error("persistImage failed for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public). Falling back to file capture.")
-                        try await self?.persistFileFallback(url: url, sourceApp: sourceApp, sourceName: sourceName, core: core)
-                    }
-                    return  // persistImage / persistFileFallback 内已 notify
                 }
 
                 guard let self else { return }
@@ -367,10 +314,56 @@ final class ClipboardMonitor: ObservableObject {
         return utType.conforms(to: .image)
     }
 
-    /// imageFromFile 升级失败时的 fallback：以原始 file-url 路径作为 file 类型条目保存。
-    /// 仅当 imageFromFile 升级路径整体失败（读文件 / makePNGData / DB save）时调用，
-    /// 用来保住"用户复制过这条记录"的事实，避免新分支劫走 file 路径却让记录消失。
-    /// 不收集辅助 reps（pasteboard 已经可能变了），只保住主路径——这是 fail-safe，不是兜底。
+    /// file-url 保存的主路径：先缓存其中可解码的图片文件，再以 file 类型落库。
+    /// 图片缓存失败只影响对应 fallback，不影响原始文件路径记录；粘贴时仍会先试原始 URL。
+    nonisolated private func persistFile(
+        urls: [URL],
+        content: String,
+        sourceApp: String?,
+        sourceName: String?,
+        auxReps: [ClipboardRepresentation],
+        core: ClipinCore
+    ) async throws {
+        let itemID = UUID().uuidString
+        var cachedPaths = Array(repeating: "", count: urls.count)
+
+        for (index, url) in urls.enumerated() where Self.isImageFileURL(url) {
+            do {
+                let rawData = try Data(contentsOf: url)
+                let pngData = try Self.makePNGData(from: rawData)
+                cachedPaths[index] = try core.writeAttachmentPng(
+                    itemId: itemID,
+                    index: Int32(index),
+                    bytes: pngData
+                )
+            } catch {
+                ClipinLog.monitor.error("Failed to cache image file attachment \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+            if Task.isCancelled { return }
+        }
+
+        let attachmentPaths: String?
+        if cachedPaths.contains(where: { !$0.isEmpty }) {
+            let data = try JSONEncoder().encode(cachedPaths)
+            attachmentPaths = String(data: data, encoding: .utf8)
+        } else {
+            attachmentPaths = nil
+        }
+
+        let coreReps = auxReps.map { ClipRepresentation(uti: $0.uti, data: $0.data) }
+        _ = try core.saveItemWithAttachmentPaths(
+            itemId: itemID,
+            content: content,
+            clipType: .file,
+            sourceApp: sourceApp,
+            sourceName: sourceName,
+            imagePath: nil,
+            attachmentPaths: attachmentPaths,
+            representations: coreReps
+        )
+        await self.notifyNewItem()
+    }
+
     nonisolated private func persistFileFallback(
         url: URL,
         sourceApp: String?,

@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import SwiftUI
 import Combine
+import UniformTypeIdentifiers
 
 struct ClipSection: Identifiable {
     let title: String
@@ -63,6 +64,7 @@ final class ClipboardViewModel: ObservableObject {
     @Published var isShortcutHintVisible: Bool = false
     @Published private(set) var launcherNotice: LauncherNotice?
     @Published private(set) var isPreparingPreview = false
+    @Published var fileAttachmentPreviewIndex = 0
     @Published private(set) var selectedRepresentationUTIs: [String] = []
     /// 非 nil 表示该 id 的列表行正处于 inline 改名编辑态。
     @Published var renamingItemID: String?
@@ -345,6 +347,7 @@ final class ClipboardViewModel: ObservableObject {
         previewTask?.cancel()
         previewTask = nil
         isPreparingPreview = false
+        fileAttachmentPreviewIndex = 0
         selectedItemID = id
         reloadRepresentationsForSelected()
         guard let id else {
@@ -418,6 +421,17 @@ final class ClipboardViewModel: ObservableObject {
             return
         }
         selectItem(id: flatOrder[max(idx - 1, 0)].id)
+    }
+
+    @discardableResult
+    func stepFileAttachmentPreview(delta: Int) -> Bool {
+        guard let item = displayedItem, item.clipType == .file else { return false }
+        let count = Self.filePreviewImagePaths(for: item).count
+        guard count > 1 else { return false }
+        let next = max(0, min(count - 1, fileAttachmentPreviewIndex + delta))
+        guard next != fileAttachmentPreviewIndex else { return true }
+        fileAttachmentPreviewIndex = next
+        return true
     }
 
     /// 按 ⌘1-9 快捷键序列的第 index 项（0-based）直接粘贴
@@ -933,6 +947,38 @@ final class ClipboardViewModel: ObservableObject {
     private func currentPreviewEntries() -> [ClipPreviewEntry]? {
         guard let item = currentSelectedItem() else { return nil }
         return ClipPreviewResolver.resolve(item: item)
+    }
+
+    private static func filePreviewImagePaths(for item: ClipItem) -> [String] {
+        let paths = FileClipboardContent.paths(from: item.content)
+        let attachmentPaths = decodedAttachmentPaths(from: item.attachmentPaths)
+        return paths.enumerated().compactMap { index, path in
+            if attachmentPaths.indices.contains(index) {
+                let cachedPath = attachmentPaths[index]
+                if !cachedPath.isEmpty,
+                   FileManager.default.fileExists(atPath: cachedPath),
+                   isImageFile(cachedPath) {
+                    return cachedPath
+                }
+            }
+            guard FileManager.default.fileExists(atPath: path), isImageFile(path) else { return nil }
+            return path
+        }
+    }
+
+    private static func decodedAttachmentPaths(from raw: String?) -> [String] {
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let paths = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return paths
+    }
+
+    private static func isImageFile(_ path: String) -> Bool {
+        let ext = URL(fileURLWithPath: path).pathExtension
+        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
+        return type.conforms(to: .image)
     }
 
     /// section 标题用的简短月日格式。旧实现硬编码 "M月d日"，英文环境也会显示中文，

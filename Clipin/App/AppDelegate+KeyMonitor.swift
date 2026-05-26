@@ -426,6 +426,10 @@ extension AppDelegate {
         case KeyCode.arrowDown:
             vm.selectNext()
             return nil
+        case KeyCode.arrowLeft:
+            return vm.stepFileAttachmentPreview(delta: -1) ? nil : event
+        case KeyCode.arrowRight:
+            return vm.stepFileAttachmentPreview(delta: 1) ? nil : event
         case KeyCode.returnKey where flags.isEmpty:
             vm.pasteSelected()
             return nil

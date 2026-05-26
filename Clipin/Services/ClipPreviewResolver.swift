@@ -20,7 +20,10 @@ enum ClipPreviewResolver {
             urls = existingFileURLs(from: [path])
 
         case .file:
-            urls = existingFileURLs(from: FileClipboardContent.paths(from: item.content))
+            urls = existingFileURLs(
+                from: FileClipboardContent.paths(from: item.content),
+                attachmentPaths: attachmentPaths(from: item.attachmentPaths)
+            )
 
         case .url:
             guard let url = URL(string: item.content) else { return nil }
@@ -76,6 +79,30 @@ enum ClipPreviewResolver {
             guard FileManager.default.fileExists(atPath: url.path) else { return nil }
             return url
         }
+    }
+
+    private static func existingFileURLs(from paths: [String], attachmentPaths: [String]) -> [URL] {
+        paths.enumerated().compactMap { index, path in
+            let original = URL(fileURLWithPath: path)
+            if FileManager.default.fileExists(atPath: original.path) {
+                return original
+            }
+            guard attachmentPaths.indices.contains(index) else { return nil }
+            let cachedPath = attachmentPaths[index]
+            guard !cachedPath.isEmpty else { return nil }
+            let cached = URL(fileURLWithPath: cachedPath)
+            guard FileManager.default.fileExists(atPath: cached.path) else { return nil }
+            return cached
+        }
+    }
+
+    private static func attachmentPaths(from raw: String?) -> [String] {
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let paths = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return paths
     }
 
     private static func resolve(listItem: ClipListItem, loadItem: (String) -> ClipItem?) -> [ClipPreviewEntry] {

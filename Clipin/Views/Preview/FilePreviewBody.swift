@@ -20,22 +20,30 @@ struct FilePreviewBody: View {
         FileClipboardContent.paths(from: item.content)
     }
 
+    private var attachmentPaths: [String] {
+        guard let raw = item.attachmentPaths,
+              let data = raw.data(using: .utf8),
+              let paths = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return paths
+    }
+
     var body: some View {
         let allPaths = paths
         let primaryPath = allPaths.first ?? item.content
         let primaryURL = URL(fileURLWithPath: primaryPath)
-        let singleImageFile = allPaths.count == 1 && isImageFile(primaryPath)
+        let imagePreviewPaths = resolvedImagePreviewPaths(originalPaths: allPaths)
 
         ScrollView {
             VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 header(primaryPath: primaryPath, primaryURL: primaryURL, paths: allPaths)
 
-                if singleImageFile {
-                    AsyncPreviewImage(path: primaryPath, maxHeight: 360) {
-                        pathFallback(allPaths: allPaths)
+                if !imagePreviewPaths.isEmpty {
+                    imagePreview(paths: imagePreviewPaths)
+                    if allPaths.count > 1 {
+                        multiFileList(paths: allPaths)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 } else if allPaths.count > 1 {
                     multiFileList(paths: allPaths)
                 } else {
@@ -60,6 +68,49 @@ struct FilePreviewBody: View {
                 }
             }
             fileIcons = snapshot
+        }
+    }
+
+    @ViewBuilder
+    private func imagePreview(paths: [String]) -> some View {
+        let clampedIndex = min(vm.fileAttachmentPreviewIndex, paths.count - 1)
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+            ZStack(alignment: .bottomTrailing) {
+                AsyncPreviewImage(path: paths[clampedIndex], maxHeight: 360) {
+                    pathFallback(allPaths: [paths[clampedIndex]])
+                }
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if paths.count > 1 {
+                    HStack(spacing: ClipinChrome.gap) {
+                        Button {
+                            vm.stepFileAttachmentPreview(delta: -1)
+                        } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(clampedIndex == 0)
+
+                        Text("\(clampedIndex + 1) / \(paths.count)")
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(ClipinInk.secondary)
+                            .monospacedDigit()
+
+                        Button {
+                            vm.stepFileAttachmentPreview(delta: 1)
+                        } label: {
+                            Image(systemName: "chevron.right")
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(clampedIndex == paths.count - 1)
+                    }
+                    .padding(.horizontal, ClipinChrome.groupGap)
+                    .padding(.vertical, ClipinChrome.gap)
+                    .glassEffect(.regular, in: Capsule())
+                    .padding(ClipinChrome.groupGap)
+                }
+            }
         }
     }
 
@@ -163,6 +214,22 @@ struct FilePreviewBody: View {
         let ext = URL(fileURLWithPath: path).pathExtension
         guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
         return type.conforms(to: .image)
+    }
+
+    private func resolvedImagePreviewPaths(originalPaths: [String]) -> [String] {
+        let cached = attachmentPaths
+        return originalPaths.enumerated().compactMap { index, path in
+            if cached.indices.contains(index) {
+                let cachedPath = cached[index]
+                if !cachedPath.isEmpty,
+                   FileManager.default.fileExists(atPath: cachedPath),
+                   isImageFile(cachedPath) {
+                    return cachedPath
+                }
+            }
+            guard FileManager.default.fileExists(atPath: path), isImageFile(path) else { return nil }
+            return path
+        }
     }
 
     private func fileHeaderSubtitle(paths: [String], primaryURL: URL) -> String {

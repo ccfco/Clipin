@@ -59,6 +59,42 @@ impl ClipinCore {
         )
     }
 
+    /// 保存带磁盘附件缓存路径的剪贴板记录。item_id 由调用方先生成，用于先写
+    /// <item_id>_<index>.png，再以同一个 id 入库。
+    #[allow(clippy::too_many_arguments)]
+    pub fn save_item_with_attachment_paths(
+        &self,
+        item_id: String,
+        content: String,
+        clip_type: ClipType,
+        source_app: Option<String>,
+        source_name: Option<String>,
+        image_path: Option<String>,
+        attachment_paths: Option<String>,
+        representations: Vec<ClipRepresentation>,
+    ) -> Result<ClipItem, ClipinError> {
+        self.storage.save_item_with_attachment_paths(
+            Some(&item_id),
+            &content,
+            &clip_type,
+            source_app.as_deref(),
+            source_name.as_deref(),
+            image_path.as_deref(),
+            attachment_paths.as_deref(),
+            &representations,
+        )
+    }
+
+    /// 把图片附件 bytes 写入 imageDir，返回可持久化到 attachment_paths 的 PNG 路径。
+    pub fn write_attachment_png(
+        &self,
+        item_id: String,
+        index: i32,
+        bytes: Vec<u8>,
+    ) -> Result<String, ClipinError> {
+        self.storage.write_attachment_png(&item_id, index, &bytes)
+    }
+
     /// 读取一条条目的所有 representations
     pub fn get_representations(
         &self,
@@ -1244,5 +1280,53 @@ mod tests {
         core.delete_item(item.id).unwrap();
 
         assert!(!PathBuf::from(image_path).exists());
+    }
+
+    #[test]
+    fn test_write_attachment_png_uses_image_dir() {
+        let (core, img_dir) = setup_core_with_image_dir();
+
+        let path = core
+            .write_attachment_png("item-123".into(), 2, b"cached-png".to_vec())
+            .unwrap();
+
+        assert_eq!(PathBuf::from(&path).parent(), Some(img_dir.as_path()));
+        assert!(
+            path.ends_with("item-123_2.png"),
+            "attachment filename must be stable for item/index cleanup"
+        );
+        assert_eq!(fs::read(path).unwrap(), b"cached-png");
+    }
+
+    #[test]
+    fn test_file_item_carries_attachment_paths_and_delete_removes_cached_files() {
+        let (core, img_dir) = setup_core_with_image_dir();
+        let first = write_image(&img_dir, "cached-a.png", b"a");
+        let second = write_image(&img_dir, "cached-b.png", b"b");
+        let attachment_paths = format!("[\"{}\",\"{}\"]", first, second);
+
+        let item = core
+            .save_item_with_attachment_paths(
+                "file-item-1".into(),
+                "/tmp/original-a.jpg\n/tmp/original-b.jpg".into(),
+                ClipType::File,
+                None,
+                None,
+                None,
+                Some(attachment_paths.clone()),
+                vec![],
+            )
+            .unwrap();
+        assert_eq!(item.attachment_paths.as_deref(), Some(attachment_paths.as_str()));
+
+        let fetched = core.get_item(item.id.clone()).unwrap();
+        assert_eq!(fetched.attachment_paths.as_deref(), Some(attachment_paths.as_str()));
+
+        let list = core.get_list_items(10, 0, Some(ClipType::File)).unwrap();
+        assert_eq!(list[0].attachment_paths.as_deref(), Some(attachment_paths.as_str()));
+
+        core.delete_item(item.id).unwrap();
+        assert!(!PathBuf::from(first).exists());
+        assert!(!PathBuf::from(second).exists());
     }
 }

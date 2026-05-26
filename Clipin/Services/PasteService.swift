@@ -121,9 +121,18 @@ enum PasteService {
         to pasteboard: NSPasteboard
     ) -> Bool {
         let paths = FileClipboardContent.paths(from: item.content)
-        let urls = paths
-            .map(URL.init(fileURLWithPath:))
-            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        let attachmentPaths = attachmentPaths(from: item.attachmentPaths)
+        let urls: [URL] = paths.enumerated().compactMap { index, path in
+            let original = URL(fileURLWithPath: path)
+            if FileManager.default.fileExists(atPath: original.path) {
+                return original
+            }
+            guard attachmentPaths.indices.contains(index) else { return nil }
+            let cachedPath = attachmentPaths[index]
+            guard !cachedPath.isEmpty,
+                  FileManager.default.fileExists(atPath: cachedPath) else { return nil }
+            return URL(fileURLWithPath: cachedPath)
+        }
         // 全量校验：缺一个都让用户当前剪贴板不动，与 CLAUDE.md 不变量一致
         guard !urls.isEmpty, urls.count == paths.count else { return false }
 
@@ -145,6 +154,15 @@ enum PasteService {
 
         pasteboard.clearContents()
         return pasteboard.writeObjects(pbItems)
+    }
+
+    private static func attachmentPaths(from raw: String?) -> [String] {
+        guard let raw,
+              let data = raw.data(using: .utf8),
+              let paths = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return paths
     }
 
     /// 校验 reps 副表里的 file-url bytes 指向的文件是否仍存在。
@@ -219,7 +237,13 @@ enum PasteService {
     static func fileFailureReason(_ item: ClipItem) -> FilePasteFailureReason {
         guard item.clipType == .file else { return .writeRejected }
         let paths = FileClipboardContent.paths(from: item.content)
-        let existingCount = paths.filter { FileManager.default.fileExists(atPath: $0) }.count
+        let attachmentPaths = attachmentPaths(from: item.attachmentPaths)
+        let existingCount = paths.enumerated().filter { index, path in
+            if FileManager.default.fileExists(atPath: path) { return true }
+            guard attachmentPaths.indices.contains(index) else { return false }
+            let cachedPath = attachmentPaths[index]
+            return !cachedPath.isEmpty && FileManager.default.fileExists(atPath: cachedPath)
+        }.count
         if existingCount == 0 { return .sourceMissing }
         if existingCount < paths.count { return .partial }
         return .writeRejected
