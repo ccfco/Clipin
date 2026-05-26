@@ -65,6 +65,13 @@ enum ClipinChrome {
     /// 纯渲染细节，远小于最小网格单位，不挂 edge。
     static let footerHoverRimInset: CGFloat = 2
 
+    /// 设置页 Picker 宽度三档：短数字 / 中等枚举 / 长枚举。
+    /// 不挂 edge 网格——Picker 宽度由内部文本决定，不是设计间距。
+    /// 收口在此避免散落 120/160/170/220 等魔数。
+    static let pickerNarrow: CGFloat = 120
+    static let pickerMedium: CGFloat = 170
+    static let pickerWide: CGFloat = 220
+
     /// 搜索框输入字号。刻意远大于列表行标题（13.5），让输入框读作 launcher 的视觉主角
     /// （Raycast / Spotlight 心智），而非又一行列表项。
     static let searchFieldFontSize: CGFloat = 20

@@ -61,6 +61,23 @@ final class AutoBackupService: ObservableObject {
             .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs", isDirectory: true)
     }
 
+    /// 当前路径是否就是动态推导出的默认路径——把"两条 standardizedFileURL.path
+    /// 字符串比较"收口到 service，避免 SettingsView 重复实现。
+    static func isDefaultBackupFolder(_ path: String?) -> Bool {
+        guard let path else { return false }
+        let normalized = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.path
+        return normalized == computeDefaultBackupFolder().standardizedFileURL.path
+    }
+
+    /// 当前路径是否落在 iCloud Drive 默认目录。
+    /// iCloud 不可用时永远 false——不要把 ~/Library/Mobile Documents 残留路径
+    /// 误判为"在 iCloud 上"。
+    static func isICloudBackupFolder(_ path: String?) -> Bool {
+        guard let path, let icloud = iCloudBackupFolder() else { return false }
+        let normalized = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL.path
+        return normalized == icloud.standardizedFileURL.path
+    }
+
     // MARK: - Published
 
     @Published private(set) var lastBackupAt: Date?

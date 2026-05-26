@@ -29,6 +29,18 @@ extension SettingsView {
             .frame(height: 1)
     }
 
+    /// 子分组小标题——比 row title (13/medium) 视觉更轻、更小，
+    /// 区分"这是分组名"和"这是设置项名"。
+    /// uppercase + tracking 是 macOS 系统设置 eyebrow 标准做法。
+    func groupHeader(_ title: LocalizedStringKey) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(0.6)
+            .textCase(.uppercase)
+            .foregroundStyle(ClipinInk.tertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     var settingsSelectionPlaceholder: some View {
         contentGroup(padding: ClipinChrome.groupGap) {
             ClipinSectionIntro(

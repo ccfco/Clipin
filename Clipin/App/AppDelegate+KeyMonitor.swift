@@ -570,9 +570,9 @@ extension AppDelegate {
                     settings: settings,
                     updateReminder: updateReminder,
                     autoBackup: autoBackupService,
+                    cleanupService: cleanupService,
                     navigation: settingsNavigation,
-                    core: appState.core,
-                    cleanupService: cleanupService
+                    core: appState.core
                 )
             )
             settingsWindow = newWindow

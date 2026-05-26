@@ -3,14 +3,17 @@ import AppKit
 
 extension SettingsView {
 
-    // MARK: - Backup & Restore Tab
-
-    /// 合并 v4 之前的 Auto Backup + Transfer 两个 tab。结构：
-    /// 1. Enable toggle（始终显示）
-    /// 2. 启用后：folder / frequency / status / cleanup（折叠在一个 contentGroup 里）
-    /// 3. 一次性导入导出（始终显示，独立 contentGroup）
-    var backupContent: some View {
+    // MARK: - Storage Tab
+    //
+    // v5: Retention（保留多久）+ Auto Backup（自动备份）+ Transfer（一次性导入导出）
+    // 合并为单一 Storage tab，自上而下贯穿"保多久 → 怎么归档 → 一次性搬运"心智链路。
+    /// 1. Retention：picker 规则 + 上次清理状态（retentionSection）
+    /// 2. Enable auto backup toggle
+    /// 3. 启用后：folder / frequency / status / legacy cleanup
+    /// 4. 一次性导入导出（始终显示）
+    var storageContent: some View {
         VStack(spacing: contentStackSpacing) {
+            retentionSection
             autoBackupToggleGroup
             if settings.autoBackupEnabled {
                 autoBackupDetailGroup
@@ -129,41 +132,67 @@ extension SettingsView {
                 // 有这个按钮"的隐藏感。
                 Button("Use Default Folder") { resetBackupFolderToDefault() }
                     .buttonStyle(.bordered)
-                    .disabled(isCurrentFolderDefault)
+                    .disabled(AutoBackupService.isDefaultBackupFolder(settings.autoBackupFolderPath))
 
                 // iCloud 入口保留作为"明确表达 iCloud 意图"的独立按钮：当 iCloud 可用
                 // 且用户当前不在 iCloud 时给一次直达机会，不必经过"默认"语义绕一圈。
                 Button("Use iCloud Drive") { useICloudDrive() }
                     .buttonStyle(.bordered)
-                    .disabled(!AutoBackupService.isICloudDriveAvailable() || isCurrentFolderICloudDefault)
+                    .disabled(
+                        !AutoBackupService.isICloudDriveAvailable()
+                            || AutoBackupService.isICloudBackupFolder(settings.autoBackupFolderPath)
+                    )
             }
 
             // helper text：把"默认在哪"显式写出来，消除"默认"随 iCloud 可用性变化的歧义
             defaultFolderHint
 
+            // iCloud 不可用是"用户曾选了 iCloud 思维但前提不成立"——必须升级为 callout
+            // 视觉权重，不再混在 tertiary hint 里被无视。
             if !AutoBackupService.isICloudDriveAvailable() {
-                HStack(spacing: ClipinChrome.gap) {
-                    Image(systemName: "icloud.slash")
-                        .font(.system(size: 11))
-                        .foregroundStyle(ClipinInk.tertiary)
-                    Text("iCloud Drive is not enabled.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(ClipinInk.tertiary)
-                    Button("Open System Settings") { openICloudSettings() }
-                        .buttonStyle(.link)
-                        .font(.system(size: 11))
-                }
+                iCloudUnavailableCallout
             }
         }
+    }
+
+    /// iCloud 不可用提示——orange callout 风格，跟 backup paused/partial 同等地位。
+    private var iCloudUnavailableCallout: some View {
+        HStack(alignment: .firstTextBaseline, spacing: ClipinChrome.gap) {
+            Image(systemName: "icloud.slash")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.orange)
+                .frame(width: 18, alignment: .center)
+
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                Text("iCloud Drive is not enabled")
+                    .font(.system(size: 12, weight: .medium))
+                Text("Backups will be saved locally. Enable iCloud Drive in System Settings to sync across Macs.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(ClipinInk.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Button("Open System Settings…") { openICloudSettings() }
+                .buttonStyle(.link)
+                .font(.system(size: 11))
+        }
+        .padding(ClipinChrome.gap)
+        .background(
+            RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
+                .fill(Color.orange.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
+                .strokeBorder(Color.orange.opacity(0.28), lineWidth: 0.5)
+        )
     }
 
     /// 默认文件夹位置提示：把动态的"默认 = iCloud 或 Documents"显式化，避免用户
     /// 看到 "Use Default Folder" 时不知道点了会跳去哪里。
     private var defaultFolderHint: some View {
         let defaultURL = AutoBackupService.computeDefaultBackupFolder()
-        let isICloud = AutoBackupService.isICloudDriveAvailable()
-            && AutoBackupService.iCloudBackupFolder()?.standardizedFileURL.path
-                == defaultURL.standardizedFileURL.path
+        let isICloud = AutoBackupService.isICloudBackupFolder(defaultURL.path)
         let icon = isICloud ? "icloud" : "folder"
         let label = isICloud
             ? String(format: NSLocalizedString("Default: iCloud Drive · %@", comment: ""), abbreviatedPath(defaultURL.path))
@@ -180,22 +209,6 @@ extension SettingsView {
         }
     }
 
-    /// 当前路径是否就是默认路径（用于 Use Default Folder 按钮的 disable 判定）
-    private var isCurrentFolderDefault: Bool {
-        guard let current = settings.autoBackupFolderPath else { return false }
-        let normalizedCurrent = URL(fileURLWithPath: current, isDirectory: true).standardizedFileURL.path
-        let defaultPath = AutoBackupService.computeDefaultBackupFolder().standardizedFileURL.path
-        return normalizedCurrent == defaultPath
-    }
-
-    /// iCloud 按钮的禁用判定：已经在 iCloud 默认路径上时不重复触发
-    private var isCurrentFolderICloudDefault: Bool {
-        guard let current = settings.autoBackupFolderPath,
-              let icloud = AutoBackupService.iCloudBackupFolder() else { return false }
-        return URL(fileURLWithPath: current, isDirectory: true).standardizedFileURL.path
-            == icloud.standardizedFileURL.path
-    }
-
     // MARK: - Frequency Section
 
     private var backupFrequencySection: some View {
@@ -209,7 +222,7 @@ extension SettingsView {
                 }
             }
             .labelsHidden()
-            .frame(width: 160)
+            .frame(width: ClipinChrome.pickerMedium)
         }
     }
 
@@ -386,14 +399,19 @@ extension SettingsView {
 
             HStack(spacing: ClipinChrome.gap) {
                 Spacer(minLength: 0)
-                Button("Review & Clean Up…") { showCleanupSheet = true }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .disabled(activeOperation == .cleanupBackupFolder)
+                Button("Review & Clean Up…") {
+                    cleanupSelection = Set(cleanupCandidates.map(\.id))
+                    showCleanupSheet = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(activeOperation == .cleanupBackupFolder)
             }
         }
     }
 
+    /// 备份是用户安全网，CLAUDE.md 红线："备份是用户安全网，自动决策必出错"——
+    /// 清理 sheet 必须让用户精细决定。默认全选 + 类型快速过滤 + 单行 toggle。
     private var cleanupSheet: some View {
         VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
             Text("Clean up legacy backups")
@@ -401,6 +419,8 @@ extension SettingsView {
             Text("These files were left over by previous versions or other devices and will be deleted permanently. Your current backup and its safety net are not affected.")
                 .font(.system(size: 12))
                 .foregroundStyle(ClipinInk.secondary)
+
+            cleanupBulkSelectionBar
 
             ScrollView {
                 VStack(alignment: .leading, spacing: ClipinChrome.gap) {
@@ -413,24 +433,77 @@ extension SettingsView {
 
             HStack {
                 Spacer()
-                Button("Cancel", role: .cancel) { showCleanupSheet = false }
-                    .keyboardShortcut(.cancelAction)
+                Button("Cancel", role: .cancel) {
+                    showCleanupSheet = false
+                    cleanupSelection.removeAll()
+                }
+                .keyboardShortcut(.cancelAction)
+
                 Button(
-                    String(format: NSLocalizedString("Delete %d File(s)", comment: ""), cleanupCandidates.count),
+                    String(format: NSLocalizedString("Delete %d File(s)", comment: ""), cleanupSelection.count),
                     role: .destructive
                 ) {
                     confirmCleanup()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(activeOperation == .cleanupBackupFolder || cleanupCandidates.isEmpty)
+                .disabled(activeOperation == .cleanupBackupFolder || cleanupSelection.isEmpty)
             }
         }
         .padding(ClipinChrome.groupGap * 2)
         .frame(width: 520)
     }
 
+    private var cleanupBulkSelectionBar: some View {
+        let allIds = Set(cleanupCandidates.map(\.id))
+        let legacyIds = Set(cleanupCandidates.filter { $0.reason == .legacyJSON }.map(\.id))
+        let foreignIds = Set(cleanupCandidates.filter { $0.reason == .foreignHost }.map(\.id))
+        let isAllSelected = !allIds.isEmpty && cleanupSelection == allIds
+        return HStack(spacing: ClipinChrome.gap) {
+            Toggle(isOn: Binding(
+                get: { isAllSelected },
+                set: { cleanupSelection = $0 ? allIds : [] }
+            )) {
+                Text(
+                    String(format: NSLocalizedString("Select all (%d)", comment: ""), allIds.count)
+                )
+                .font(.system(size: 11))
+            }
+            .toggleStyle(.checkbox)
+
+            Spacer(minLength: 0)
+
+            if !legacyIds.isEmpty {
+                Button(String(format: NSLocalizedString("Only legacy JSON (%d)", comment: ""), legacyIds.count)) {
+                    cleanupSelection = legacyIds
+                }
+                .buttonStyle(.link)
+                .font(.system(size: 11))
+            }
+            if !foreignIds.isEmpty {
+                Button(String(format: NSLocalizedString("Only other Macs (%d)", comment: ""), foreignIds.count)) {
+                    cleanupSelection = foreignIds
+                }
+                .buttonStyle(.link)
+                .font(.system(size: 11))
+            }
+        }
+        .padding(.vertical, ClipinChrome.gap / 2)
+    }
+
     private func cleanupRow(_ candidate: BackupCleanupService.Candidate) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: ClipinChrome.gap) {
+            Toggle(isOn: Binding(
+                get: { cleanupSelection.contains(candidate.id) },
+                set: { isOn in
+                    if isOn { cleanupSelection.insert(candidate.id) }
+                    else { cleanupSelection.remove(candidate.id) }
+                }
+            )) {
+                EmptyView()
+            }
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+
             Image(systemName: candidate.reason == .legacyJSON ? "doc.text" : "externaldrive.badge.icloud")
                 .foregroundStyle(ClipinInk.tertiary)
                 .font(.system(size: 12))
@@ -485,12 +558,16 @@ extension SettingsView {
 
     private func confirmCleanup() {
         guard activeOperation == nil else { return }
-        let snapshot = cleanupCandidates
+        // 只删用户勾选的——粒度选择关键路径，不再是"全删或不删"
+        let snapshot = cleanupCandidates.filter { cleanupSelection.contains($0.id) }
         guard !snapshot.isEmpty else { return }
         activeOperation = .cleanupBackupFolder
         showCleanupSheet = false
         Task { @MainActor in
-            defer { activeOperation = nil }
+            defer {
+                activeOperation = nil
+                cleanupSelection.removeAll()
+            }
             let deleted = BackupCleanupService.delete(snapshot)
             refreshCleanupCandidates()
             if deleted == snapshot.count {

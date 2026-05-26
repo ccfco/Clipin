@@ -100,34 +100,27 @@ extension SettingsView {
             }
 
             contentGroup {
-                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                    Text("Project")
-                        .font(.system(size: 13, weight: .medium))
+                // 三个 GitHub 链接合成一个 horizontal 按钮组——它们都是"打开 GitHub 子页"
+                // 同类动作，不需要各占一整行 actionRow，节省 ~80px 垂直空间且分类更清晰。
+                HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
+                    VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                        Text("Project")
+                            .font(.system(size: 13, weight: .medium))
 
-                    actionRow(
-                        "Source code",
-                        description: "Browse the repository, implementation details, and development history on GitHub.",
-                        buttonTitle: "Open GitHub",
-                        action: { openExternalURL(Self.repositoryURL) }
-                    )
+                        Text("Browse the repository, all shipped releases, or report a bug—everything on GitHub.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(ClipinInk.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    groupDivider
-
-                    actionRow(
-                        "Release history",
-                        description: "Browse all shipped builds and release notes on GitHub.",
-                        buttonTitle: "Open Releases",
-                        action: { updateReminder.openReleasesListPage() }
-                    )
-
-                    groupDivider
-
-                    actionRow(
-                        "Report an issue",
-                        description: "Open GitHub Issues to report bugs, request features, or continue a discussion.",
-                        buttonTitle: "Open Issues",
-                        action: { openExternalURL(Self.issuesURL) }
-                    )
+                    HStack(spacing: ClipinChrome.gap) {
+                        Button("Source") { openExternalURL(Self.repositoryURL) }
+                            .buttonStyle(.bordered)
+                        Button("Releases") { updateReminder.openReleasesListPage() }
+                            .buttonStyle(.bordered)
+                        Button("Issues") { openExternalURL(Self.issuesURL) }
+                            .buttonStyle(.bordered)
+                    }
                 }
             }
         }

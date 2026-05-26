@@ -181,6 +181,20 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(skipTransientContent, forKey: Keys.skipTransientContent) }
     }
 
+    /// 因 skipTransientContent / concealed 而被跳过的剪贴板写入累计次数——
+    /// Privacy tab 用它显示"过滤器在工作"的证据。
+    /// 不区分 transient vs concealed 类型：用户视角只关心"屏蔽了多少噪声"。
+    /// 持久化跨重启，不可重置（重置等于"丢失隐私统计信息"的负向价值，无必要）。
+    @Published private(set) var noiseSkippedTotal: Int {
+        didSet { defaults.set(noiseSkippedTotal, forKey: Keys.noiseSkippedTotal) }
+    }
+
+    /// 由 ClipboardMonitor 在 shouldPersistContents 返回 false 时调用。
+    /// 必须在 MainActor 上调，调用方已是 @MainActor。
+    func incrementNoiseSkipped() {
+        noiseSkippedTotal &+= 1
+    }
+
     @Published var autoBackupEnabled: Bool {
         didSet { defaults.set(autoBackupEnabled, forKey: Keys.autoBackupEnabled) }
     }
@@ -283,6 +297,7 @@ final class SettingsStore: ObservableObject {
         static let richPasteNoticeCountSeen = "settings.richPasteNoticeCountSeen"
         static let onboardingVersion = "settings.onboardingVersion"
         static let onboardingCohort = "settings.onboardingCohort"
+        static let noiseSkippedTotal = "settings.noiseSkippedTotal"
     }
 
     /// 老用户迁移信号：任意一个 key 已存在，就说明这个安装已经被实际使用过，不应突然弹欢迎页。
@@ -346,6 +361,7 @@ final class SettingsStore: ObservableObject {
         self.maxHistoryItems = storedMaxItems
         self.shortcut = storedShortcut
         self.skipTransientContent = defaults.object(forKey: Keys.skipTransientContent) as? Bool ?? false
+        self.noiseSkippedTotal = defaults.integer(forKey: Keys.noiseSkippedTotal)
         self.autoBackupEnabled = defaults.bool(forKey: Keys.autoBackupEnabled)
         self.autoBackupFolderPath = defaults.string(forKey: Keys.autoBackupFolderPath)
         self.autoBackupInterval = storedInterval
