@@ -161,6 +161,24 @@ extension AppDelegate {
         }
     }
 
+    /// 启动时清理 imageDir 中的孤儿 PNG：file 类型采集中 PNG 已落盘但 DB save 没完成
+    /// 就崩溃/Kill 时累积的废文件。R1 修复（Codex review b1d5181）。
+    /// detach 后台跑——文件扫描和 DB 查询都不阻塞主线程；启动时一次即可。
+    /// max_age_seconds=300 保护 5 分钟内的文件不被误删（保留 in-flight 采集冗余窗口）。
+    func reconcileOrphanAttachments() {
+        let core = appState.core
+        Task.detached(priority: .background) {
+            do {
+                let removed = try core.reconcileOrphanAttachments(maxAgeSeconds: 300)
+                if removed > 0 {
+                    ClipinLog.monitor.info("Reconciled \(removed, privacy: .public) orphan attachment PNG(s) at startup")
+                }
+            } catch {
+                ClipinLog.monitor.error("Orphan attachment reconcile failed: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     /// 为历史图片补测像素尺寸（仅处理 image_width 为 NULL 的条目，分页直到处理完毕）。
     /// 与 OCR backfill 同构，但每条都必须写回一个值：成功写真实尺寸，文件缺失 / 不可解析
     /// 写 0×0 哨兵——否则 getUnsizedImages 会反复返回同一批，while 循环无法收敛。

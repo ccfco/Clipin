@@ -95,6 +95,16 @@ impl ClipinCore {
         self.storage.write_attachment_png(&item_id, index, &bytes)
     }
 
+    /// 扫 imageDir 清理无主 PNG（崩溃 / 异常终止留下的孤儿）。
+    /// max_age_seconds：mtime 保护——只删早于该时长的文件，避免误删 in-flight 采集
+    /// 还未入库的 PNG。启动时 detach 调用一次，返回清理数量。
+    pub fn reconcile_orphan_attachments(
+        &self,
+        max_age_seconds: i64,
+    ) -> Result<i32, ClipinError> {
+        self.storage.reconcile_orphan_attachments(max_age_seconds)
+    }
+
     /// 读取一条条目的所有 representations
     pub fn get_representations(
         &self,

@@ -326,6 +326,17 @@ final class ClipboardMonitor: ObservableObject {
     ) async throws {
         let itemID = UUID().uuidString
         var cachedPaths = Array(repeating: "", count: urls.count)
+        var dbSaved = false
+        // R9 修复：在 DB save 完成前已写盘的 PNG 是孤儿（被 task cancel 或下游 throw
+        // 截断时累积）。defer 在所有 return / throw 路径都跑，dbSaved=true 时跳过清理；
+        // 否则把本次任务写过的 PNG 全删掉，保证"DB 引用 vs 磁盘文件"二者强一致。
+        defer {
+            if !dbSaved {
+                for path in cachedPaths where !path.isEmpty {
+                    try? FileManager.default.removeItem(atPath: path)
+                }
+            }
+        }
 
         for (index, url) in urls.enumerated() where Self.isImageFileURL(url) {
             do {
@@ -339,7 +350,7 @@ final class ClipboardMonitor: ObservableObject {
             } catch {
                 ClipinLog.monitor.error("Failed to cache image file attachment \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
-            if Task.isCancelled { return }
+            if Task.isCancelled { return }  // defer 会清理本次已写的 PNG
         }
 
         let attachmentPaths: String?
@@ -361,6 +372,7 @@ final class ClipboardMonitor: ObservableObject {
             attachmentPaths: attachmentPaths,
             representations: coreReps
         )
+        dbSaved = true  // DB 写入成功，defer 不再清理
         await self.notifyNewItem()
     }
 

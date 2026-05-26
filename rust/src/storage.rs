@@ -2088,6 +2088,71 @@ impl Storage {
         Ok(affected as i32)
     }
 
+    /// 扫 image_dir 找未被任何 clip_items 引用的 PNG，删掉。
+    /// 引用源 = image_path 列 + attachment_paths JSON 数组（解析后展开）。
+    ///
+    /// 防误删：只删 mtime 早于 (now - max_age_seconds) 的文件——保护正在采集
+    /// 还未入库的 PNG（典型 race：PNG 已写 → 用户立刻触发 reconcile → DB save 未到）。
+    /// 启动时调用一次清理上次崩溃/异常终止留下的孤儿——R1 修复（Codex review）。
+    /// 调用方在启动时 detach 跑，避免阻塞 main actor。
+    pub fn reconcile_orphan_attachments(
+        &self,
+        max_age_seconds: i64,
+    ) -> Result<i32, ClipinError> {
+        let conn = self.conn();
+        let mut referenced: HashSet<String> = HashSet::new();
+        {
+            let mut stmt = conn.prepare(
+                "SELECT image_path, attachment_paths FROM clip_items"
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            })?;
+            for row in rows {
+                let (image_path, attachment_paths) = row?;
+                if let Some(p) = image_path {
+                    if !p.is_empty() { referenced.insert(p); }
+                }
+                for p in Self::attachment_paths_from_json(attachment_paths) {
+                    if !p.is_empty() { referenced.insert(p); }
+                }
+            }
+        }
+        drop(conn);  // 让 query 提早释放锁，扫盘期间不持有 DB 连接
+
+        let entries = match fs::read_dir(&self.image_dir) {
+            Ok(e) => e,
+            // image_dir 不存在 = 还没有任何图片采集过 = 没有孤儿可清
+            Err(_) => return Ok(0),
+        };
+        let max_age = max_age_seconds.max(0) as u64;
+        let cutoff = std::time::SystemTime::now()
+            .checked_sub(std::time::Duration::from_secs(max_age));
+        let mut removed = 0;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            // 只处理 image_dir 顶层的 PNG（不递归子目录）
+            if path.extension().and_then(|s| s.to_str()) != Some("png") {
+                continue;
+            }
+            let path_str = path.to_string_lossy().into_owned();
+            if referenced.contains(&path_str) { continue; }
+            // mtime 保护：太新的文件可能正在 in-flight 采集
+            if let (Some(cutoff), Ok(meta)) = (cutoff, entry.metadata()) {
+                if let Ok(modified) = meta.modified() {
+                    if modified > cutoff { continue; }
+                }
+            }
+            if fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     pub fn write_attachment_png(
         &self,
         item_id: &str,

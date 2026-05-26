@@ -206,6 +206,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()
         backfillImageDimensionsForExistingImages()
+        reconcileOrphanAttachments()
         // QA 自截图钩子(语义见 QAFlags)。用 showPanel() 而非 togglePanel():
         // showLaunchExperienceIfNeeded() 现在可能已在启动时点亮面板,
         // toggle 会把已可见的面板反向关掉;QA 钩子的意图是「确保面板可见」,showPanel 幂等。
