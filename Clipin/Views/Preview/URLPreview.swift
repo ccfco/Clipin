@@ -16,8 +16,11 @@ import SwiftUI
 actor URLMetadataCache {
     struct Snapshot: Sendable, Equatable {
         let title: String?
+        /// og:image 或 twitter:image 提取的图片绝对 URL，用于预览顶部大图渲染。
+        /// nil 表示页面没声明 OG image，预览面板退化到仅 favicon 布局。
+        let ogImageURL: String?
     }
-    static let empty = Snapshot(title: nil)
+    static let empty = Snapshot(title: nil, ogImageURL: nil)
     static let shared = URLMetadataCache()
 
     private var cache: [String: Snapshot] = [:]
@@ -126,12 +129,12 @@ actor URLMetadataCache {
     }
 
     private nonisolated static func fetch(urlString: String) async -> Snapshot {
-        guard let url = URL(string: urlString) else { return Snapshot(title: nil) }
+        guard let url = URL(string: urlString) else { return Snapshot(title: nil, ogImageURL: nil) }
         // 三道硬性黑名单：token query / 私网 host / webhook 路径。这三类无论用户开关如何
         // 都不自动 GET——预览侧不能默默触发用户路由器/Webhook/审计敏感的远端动作。
-        if hasSensitiveToken(url) { return Snapshot(title: nil) }
-        if hasPrivateHost(url) { return Snapshot(title: nil) }
-        if hasWebhookPath(url) { return Snapshot(title: nil) }
+        if hasSensitiveToken(url) { return Snapshot(title: nil, ogImageURL: nil) }
+        if hasPrivateHost(url) { return Snapshot(title: nil, ogImageURL: nil) }
+        if hasWebhookPath(url) { return Snapshot(title: nil, ogImageURL: nil) }
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
         // 限制下载量：HTML head 在前 64KB 内的概率 >95%，部分 CDN 忽略 Range 也有 4s 兜底
@@ -143,13 +146,56 @@ actor URLMetadataCache {
         )
         // 经 FaviconCache.downloadWithLimit 限制响应大小，防服务器忽略 Range 返回超大页面
         guard let data = await FaviconCache.downloadWithLimit(request, maxBytes: maxHTMLBytes) else {
-            return Snapshot(title: nil)
+            return Snapshot(title: nil, ogImageURL: nil)
         }
         guard let html = String(data: data, encoding: .utf8)
               ?? String(data: data, encoding: .isoLatin1) else {
-            return Snapshot(title: nil)
+            return Snapshot(title: nil, ogImageURL: nil)
         }
-        return Snapshot(title: extractTitle(from: html))
+        let scope = headScope(of: html)
+        return Snapshot(
+            title: extractTitle(from: html),
+            ogImageURL: extractOGImageURL(in: scope, baseURL: url)
+        )
+    }
+
+    /// 从 HTML 中提取 og:image / twitter:image 的绝对 URL。
+    /// 优先级 og:image > twitter:image（与 title 同款 OpenGraph > Twitter Cards 顺序）。
+    /// 相对路径以 baseURL 为锚转绝对路径——CDN 拼接 src 时 src 可能是 /og/foo.png。
+    /// 校验 absoluteURL.host 非空避免 javascript: / data: 等非 HTTP scheme 漏进来。
+    ///
+    /// 安全防护：用户复制的原 URL 经过 sensitiveToken/privateHost/webhook 黑名单，
+    /// 但 og:image URL 是页面注入的、独立 URL——恶意 producer 可能把 og:image 写成
+    /// `http://192.168.1.1/admin` 让 Clipin 预览时自动 GET 私网。在这里额外过 host
+    /// 黑名单（私网 + webhook 路径），否则拉 og:image 等于绕开第一层防护。
+    private nonisolated static func extractOGImageURL(in scope: String, baseURL: URL) -> String? {
+        let candidate = extractMetaContent(in: scope, property: "og:image")
+            ?? extractMetaContent(in: scope, property: "og:image:url")
+            ?? extractMetaContent(in: scope, name: "twitter:image")
+            ?? extractMetaContent(in: scope, name: "twitter:image:src")
+        guard let raw = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let decoded = decodeHTMLEntities(raw)
+        // baseURL 做锚解析相对路径
+        guard let url = URL(string: decoded, relativeTo: baseURL)?.absoluteURL,
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty else {
+            return nil
+        }
+        // 二次安全过滤：og:image URL 自身也不允许私网 / webhook
+        if hasPrivateHost(url) || hasWebhookPath(url) { return nil }
+        return url.absoluteString
+    }
+
+    /// 截取 <head>...</head> 范围，避免扫到 body 里的 meta 碎片（与 extractTitle 同款思路）。
+    private nonisolated static func headScope(of html: String) -> String {
+        if let openTag = html.range(of: "<head", options: .caseInsensitive),
+           let closeTag = html.range(of: "</head>", options: .caseInsensitive, range: openTag.upperBound..<html.endIndex) {
+            return String(html[openTag.lowerBound..<closeTag.upperBound])
+        }
+        return html
     }
 
     /// 提取 title 优先级：og:title > twitter:title > <title>。
@@ -336,6 +382,64 @@ struct FaviconLetterMark: View {
     }
 }
 
+/// OG image 内存缓存。与 favicon 不同，OG image 是 per-URL（同 host 不同 path 不同 image），
+/// 不做磁盘持久化——预览侧用户路径很分散，磁盘缓存命中率低；内存 LRU 200 条足够覆盖
+/// "选中→切走→再选回"短时间内的反复查询。
+/// 借用 FaviconCache.downloadWithLimit 复用 4s timeout + Safari UA + Range + size cap 防护栈。
+actor OGImageCache {
+    static let shared = OGImageCache()
+    private var cache: [String: NSImage] = [:]
+    private var pending: [String: Task<NSImage?, Never>] = [:]
+    private var lru: [String] = []
+    private let maxEntries = 200
+    /// 单张 OG image 上限 5MB（同 FaviconCache.maxImageBytes）。OG image 通常 100-500KB，
+    /// 5MB 兜底防恶意 image bomb（与 favicon 同款防护）。
+    private static let maxImageBytes = 5 * 1024 * 1024
+
+    func image(for urlString: String) async -> NSImage? {
+        if let cached = cache[urlString] {
+            touch(urlString)
+            return cached
+        }
+        if let task = pending[urlString] { return await task.value }
+        let task = Task<NSImage?, Never> { await Self.download(urlString) }
+        pending[urlString] = task
+        let result = await task.value
+        pending[urlString] = nil
+        if let result {
+            store(urlString, image: result)
+        }
+        return result
+    }
+
+    private func store(_ key: String, image: NSImage) {
+        if cache[key] == nil, cache.count >= maxEntries, let evict = lru.first {
+            cache.removeValue(forKey: evict)
+            lru.removeFirst()
+        }
+        cache[key] = image
+        touch(key)
+    }
+
+    private func touch(_ key: String) {
+        lru.removeAll { $0 == key }
+        lru.append(key)
+    }
+
+    private nonisolated static func download(_ urlString: String) async -> NSImage? {
+        guard let url = URL(string: urlString) else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 4
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
+            forHTTPHeaderField: "User-Agent"
+        )
+        guard let data = await FaviconCache.downloadWithLimit(request, maxBytes: maxImageBytes),
+              let image = NSImage(data: data) else { return nil }
+        return image
+    }
+}
+
 struct URLPreviewView: View {
     let urlString: String
     let searchQuery: String
@@ -343,12 +447,18 @@ struct URLPreviewView: View {
     /// 从 URLMetadataCache 异步拉取的页面标题；nil 表示尚未加载或拉不到。
     /// 加载完成后会显示在 header 顶部，host 退到次行——同其他应用对齐。
     @State private var pageTitle: String?
+    /// OG image：参考 Raycast 把页面分享图放在预览顶部大渲染。
+    /// nil = 页面无 og:image / 拉取失败 / 用户关闭自动抓取——预览退化到仅 favicon 布局。
+    @State private var ogImage: NSImage?
 
     private var url: URL? { URL(string: urlString) }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+                if let ogImage {
+                    ogImageHero(ogImage)
+                }
                 header
                 fullURLBlock
                 if let url, !queryItems(for: url).isEmpty {
@@ -360,6 +470,7 @@ struct URLPreviewView: View {
         .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
         .task(id: urlString) {
             pageTitle = nil
+            ogImage = nil
             // 用户关闭自动抓取后预览只显示 URL 本身——硬性黑名单（私网/webhook/token query）
             // 仍在 actor 内执行，这里只跳过用户偏好层
             guard SettingsStore.shared.urlPreviewAutoFetch else { return }
@@ -368,7 +479,22 @@ struct URLPreviewView: View {
             // 快速切条目时旧 URL 的响应可能晚到 → guard 当前仍在显示同一 URL
             guard !Task.isCancelled, requested == urlString else { return }
             pageTitle = snapshot.title
+            // OG image 下载是独立网络请求，独立检查 task 状态——拉的同时用户可能已切走条目
+            if let ogURL = snapshot.ogImageURL {
+                let img = await OGImageCache.shared.image(for: ogURL)
+                guard !Task.isCancelled, requested == urlString else { return }
+                ogImage = img
+            }
         }
+    }
+
+    /// OG image 顶部大渲染：方角（与列表行图片缩略图 / FilePreviewBody 大缩略图同款视觉语言）。
+    /// 高度上限 220 让图片不会无限挤压下方 metadata；contentMode .fit 不裁切让品牌图完整呈现。
+    private func ogImageHero(_ image: NSImage) -> some View {
+        Image(nsImage: image)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: .infinity, maxHeight: 220, alignment: .center)
     }
 
     private var header: some View {
