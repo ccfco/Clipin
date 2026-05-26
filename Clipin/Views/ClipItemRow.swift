@@ -195,23 +195,21 @@ private struct RowFaviconView: View {
     let url: URL?
     @State private var image: NSImage?
 
-    /// favicon 图在 24×24 块内的四周内缩——抓到的 favicon 多是满幅方图，
-    /// 留这一圈让它和「SF 图标坐灰块上」的其它行图标视觉统一，而不是一整块彩色方图。
-    private let glyphInset: CGFloat = 3
-
     var body: some View {
         ZStack {
             if let image {
-                RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
-                    .fill(Color.primary.opacity(0.05))
+                // 用户明确要求：favicon 透明且不缩小。
+                // 透明 = 不画灰底/不描边；不缩小 = favicon 直接满铺 24×24 块（无 inset）。
+                // 让品牌色直接进入列表视觉，强化"这是真实站点而非占位"的辨识度。
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .padding(glyphInset)
             } else if let host = url?.host, !host.isEmpty {
+                // 占位字母圈：保留灰底——它是"还没加载到 favicon"的稳定锚点，
+                // 不能透明（透明会让条目看着像空白图标），与"已加载到的彩色 favicon"是两种语义。
                 RowFaviconLetterMark(host: host)
             } else {
-                // 解析不出 host（极少数 URL 字符串损坏） → 兜底 globe
+                // 解析不出 host（极少数 URL 字符串损坏） → 兜底 globe（同字母圈灰底语义）
                 RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
                     .fill(Color.primary.opacity(0.05))
                 Image(systemName: "globe")
@@ -220,11 +218,6 @@ private struct RowFaviconView: View {
             }
         }
         .frame(width: 24, height: 24)
-        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
         .task(id: url?.absoluteString ?? "") {
             image = nil
             guard let url, url.host?.isEmpty == false else { return }
@@ -280,6 +273,7 @@ private struct ClipThumbnailImage: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
+                // 占位灰底保留圆角（占位是"还没加载到图"的稳定锚点，与真图是两种语义）
                 Image(systemName: "photo")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(ClipinInk.secondary)
@@ -291,11 +285,9 @@ private struct ClipThumbnailImage: View {
             }
         }
         .frame(width: 24, height: 24)
-        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-        )
+        // 用户明确要求：图片缩略图方角，方便和"卡片化的图标"在列表里一眼区分。
+        // 真图加载到后不再描边/圆角——纯像素直接进入列表视觉。
+        .clipShape(Rectangle())
         .task(id: path) {
             thumbnail = ClipImageThumbnailCache.shared.cachedThumbnail(for: path)
             if thumbnail == nil {
@@ -400,6 +392,14 @@ struct ClipItemRow: View {
             ClipThumbnailImage(
                 path: path
             )
+        } else if item.clipType == .file,
+                  let cachedThumbPath = firstAttachmentThumbnailPath(in: item) {
+            // file 类型如果采集时缓存了图片附件（隔空剪贴板/Finder 本地图），
+            // 列表行也显示缩略图——视觉上跟 image 类型统一（图就是图，不要靠 jpeg 文件图标推断）。
+            // 与 image 类型的区分通过条目标题（文件名 vs "图片·App"）而非图标传达。
+            ClipThumbnailImage(
+                path: cachedThumbPath
+            )
         } else if item.clipType == .text, let color = detectHexColor(in: item.preview) {
             ZStack {
                 RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous).fill(color)
@@ -503,6 +503,19 @@ struct ClipItemRow: View {
     }
 
     private var iconName: String { item.typeIconName }
+
+    /// 从 file 类型条目的 attachment_paths 取第一个可用的缓存图片路径——
+    /// 列表行只展示一张代表性缩略图（多文件由预览面板按 ←/→ 切换查看）。
+    /// 空字符串占位（采集时非图位置）跳过；不验证 fileExists——列表渲染高频，
+    /// 命中率绝大多数情况由 ClipImageThumbnailCache 内部容错（拿不到就显示占位 photo）。
+    private func firstAttachmentThumbnailPath(in item: ClipListItem) -> String? {
+        guard let raw = item.attachmentPaths,
+              let data = raw.data(using: .utf8),
+              let paths = try? JSONDecoder().decode([String].self, from: data) else {
+            return nil
+        }
+        return paths.first(where: { !$0.isEmpty })
+    }
 
     private var timeLabel: String {
         let date = Date(timeIntervalSince1970: TimeInterval(item.createdAt) / 1000.0)

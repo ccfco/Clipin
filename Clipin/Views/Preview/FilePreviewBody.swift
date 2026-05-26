@@ -79,7 +79,8 @@ struct FilePreviewBody: View {
                 AsyncPreviewImage(path: paths[clampedIndex], maxHeight: 360) {
                     pathFallback(allPaths: [paths[clampedIndex]])
                 }
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
+                    // 方角：用户明确要求，方便识别"这是张真实的图"而非"卡片化包装"。
+                    // 与列表行图片缩略图保持一致的视觉语言。
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if paths.count > 1 {
