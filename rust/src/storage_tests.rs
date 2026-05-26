@@ -9,7 +9,7 @@ fn test_fresh_db_is_version_1() {
     std::fs::create_dir_all(&img_dir).unwrap();
 
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 11, "新建数据库应为 v11");
+    assert_eq!(storage.schema_version(), 12, "新建数据库应为 v12");
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn test_existing_v0_migrates_to_v1() {
 
     // Storage::new 应自动 migrate 到 v1
     let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 11, "旧数据库应 migrate 到 v11");
+    assert_eq!(storage.schema_version(), 12, "旧数据库应 migrate 到 v12");
 
     // 数据表应已创建
     let conn = storage.conn.lock().unwrap();
@@ -55,7 +55,7 @@ fn test_migration_is_idempotent() {
 
     // 第二次 open 不应出错
     let s2 = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(s2.schema_version(), 11);
+    assert_eq!(s2.schema_version(), 12);
 }
 
 #[test]
@@ -163,9 +163,9 @@ fn test_v10_migration_is_reentrant() {
         let conn = Connection::open(&db_path).unwrap();
         conn.execute_batch("PRAGMA user_version = 9;").unwrap();
     }
-    // 列还在、版本回到 9 → migrate_to_v10 必须跳过 ALTER；随后继续跑 v11 到 head。
+    // 列还在、版本回到 9 → migrate_to_v10 必须跳过 ALTER；随后继续跑 v11/v12 到 head。
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 11);
+    assert_eq!(storage.schema_version(), 12);
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn test_v11_adds_alias_column_and_rebuilds_fts() {
     std::fs::create_dir_all(&img_dir).unwrap();
 
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 11);
+    assert_eq!(storage.schema_version(), 12);
 
     let conn = storage.conn.lock().unwrap();
 
@@ -212,6 +212,115 @@ fn test_v11_adds_alias_column_and_rebuilds_fts() {
             "AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initials"
         ),
         "clip_items_au 应在 UPDATE OF 列集里包含 alias"
+    );
+}
+
+#[test]
+fn test_v12_adds_attachment_paths_column() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+    let conn = storage.conn.lock().unwrap();
+
+    let has_attachment_paths: bool = conn
+        .prepare("PRAGMA table_info(clip_items)")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(1))
+        .unwrap()
+        .any(|name| name.as_deref() == Ok("attachment_paths"));
+    assert!(has_attachment_paths, "clip_items 应有 attachment_paths 列");
+}
+
+#[test]
+fn test_v12_migration_is_reentrant() {
+    // 与 v10/v11 测试同款套路：列已存在时 migrate 必须跳过 ALTER 而不是抛 duplicate column
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+
+    Storage::new(&db_path, &img_dir).unwrap(); // 正常建库到 v12
+    {
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch("PRAGMA user_version = 11;").unwrap();
+    }
+    // 列还在、版本回到 11 → migrate_to_v12 必须跳过 ALTER
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+    assert_eq!(storage.schema_version(), 12);
+}
+
+#[test]
+fn test_reconcile_orphan_attachments_protects_recent_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images");
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let img_dir_str = img_dir.to_string_lossy().to_string();
+    let storage = Storage::new(&db_path, &img_dir_str).unwrap();
+
+    // 写一个孤儿 PNG，立刻 reconcile(300) → 5 分钟保护应让它幸存
+    let fresh = img_dir.join("fresh_0.png");
+    std::fs::write(&fresh, b"fresh").unwrap();
+
+    let removed = storage.reconcile_orphan_attachments(300).unwrap();
+    assert_eq!(removed, 0, "刚写的孤儿应被 mtime 保护");
+    assert!(fresh.exists(), "新文件应受 mtime 保护不被删");
+}
+
+#[test]
+fn test_reconcile_orphan_attachments_deletes_aged_orphans() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images");
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let img_dir_str = img_dir.to_string_lossy().to_string();
+    let storage = Storage::new(&db_path, &img_dir_str).unwrap();
+
+    let aged = img_dir.join("aged_0.png");
+    std::fs::write(&aged, b"aged").unwrap();
+    // 用 max_age_seconds=0 模拟"任何文件都已超出保护期"——
+    // 比修改文件 mtime 更可靠（filetime 标准库 set_modified 是 Rust 1.75+）。
+    let removed = storage.reconcile_orphan_attachments(0).unwrap();
+    assert_eq!(removed, 1, "超出保护期的孤儿应被删");
+    assert!(!aged.exists(), "孤儿 PNG 应已清理");
+}
+
+#[test]
+fn test_reconcile_orphan_attachments_keeps_referenced_files() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images");
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let img_dir_str = img_dir.to_string_lossy().to_string();
+    let storage = Storage::new(&db_path, &img_dir_str).unwrap();
+
+    // 创建一个真实被引用的 attachment（写盘 + 入库带 attachment_paths）
+    let referenced = storage
+        .write_attachment_png("test-item-id", 0, b"referenced")
+        .unwrap();
+    let attachment_json = format!("[\"{}\"]", referenced);
+    storage
+        .save_item_with_attachment_paths(
+            Some("test-item-id"),
+            "/tmp/foo.jpg",
+            &ClipType::File,
+            None,
+            None,
+            None,
+            Some(&attachment_json),
+            &[],
+        )
+        .unwrap();
+
+    // 0 秒保护窗口：所有未被引用的孤儿都应被立刻删
+    let removed = storage.reconcile_orphan_attachments(0).unwrap();
+    assert_eq!(removed, 0, "被引用的 PNG 不应被误删");
+    assert!(
+        std::path::Path::new(&referenced).exists(),
+        "被引用的 PNG 必须保留"
     );
 }
 
