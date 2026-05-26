@@ -103,7 +103,7 @@ final class ClipboardMonitor: ObservableObject {
         // 让 file 抢走会让"翻历史回放"在临时文件清理后死掉。Clipin 是历史型应用，
         // 语义上"翻历史的图"应该是图片数据而不是磁盘文件引用；损失"Finder 间复制
         // 图片文件经 Clipin 回放为文件粘贴"的边角场景，换主流图片场景可靠。
-        if (pasteboard.types?.contains(where: { $0 == .tiff || $0 == .png })) == true {
+        if Self.hasImageData(in: pasteboard) {
             // 不在这里同步读数据：types 探测廉价，timer 立即返回；data 由后台任务通过
             // MainActor.run 拉，主线程读取还在但不再占用 timer 触发那一帧
             persist(.imageLazy(changeCount: currentCount, sourceApp: sourceApp, sourceName: sourceName))
@@ -184,7 +184,7 @@ final class ClipboardMonitor: ObservableObject {
                         let pb = NSPasteboard.general
                         // 用户已经又复制了别的内容，捕获到的快照已过期，丢弃
                         guard pb.changeCount == capturedChangeCount else { return nil }
-                        return pb.data(forType: .tiff) ?? pb.data(forType: .png)
+                        return Self.readImageData(from: pb)
                     }
                     guard let data else { return }
                     if Task.isCancelled { return }
@@ -307,6 +307,39 @@ final class ClipboardMonitor: ObservableObject {
     private func extractURL(from pasteboard: NSPasteboard) -> String? {
         guard let text = pasteboard.string(forType: .string) else { return nil }
         return Self.httpURLString(in: text)
+    }
+
+    /// 判定 pasteboard 是否含有"图片数据"。
+    /// 旧实现只白名单 .tiff / .png，漏掉 iPhone 隔空剪贴板复制 jpeg 时挂的 public.jpeg
+    /// （也漏 heic/heif/gif/webp/bmp 等所有非 PNG/TIFF 格式）。
+    /// 现改为 UTType conformance 动态判定：任何 conforms to public.image 的 UTI 都算图片。
+    /// 显式排除 public.file-url：它自身不 conforms to image，但保险起见排除，
+    /// 避免未来 macOS 给 file-url 加 image conformance 时让"file 复制"误入 image 分支。
+    nonisolated private static func hasImageData(in pasteboard: NSPasteboard) -> Bool {
+        guard let types = pasteboard.types else { return false }
+        return types.contains(where: { Self.isImageContentType($0) })
+    }
+
+    /// 从 pasteboard 读出任意 image UTI 的原始 bytes。
+    /// PNG/TIFF 优先（macOS 原生格式，无需重编码就能落地），其他格式（jpeg/heic/gif/webp 等）
+    /// 兜底——makePNGData 用 CGImageSource 统一转 PNG，所有 ImageIO 支持的格式都能跑。
+    nonisolated private static func readImageData(from pasteboard: NSPasteboard) -> Data? {
+        let preferred: [NSPasteboard.PasteboardType] = [.png, .tiff]
+        let availableTypes = Set(pasteboard.types ?? [])
+        for type in preferred where availableTypes.contains(type) {
+            if let data = pasteboard.data(forType: type) { return data }
+        }
+        for type in pasteboard.types ?? [] where Self.isImageContentType(type) {
+            if let data = pasteboard.data(forType: type) { return data }
+        }
+        return nil
+    }
+
+    /// 判定单个 UTI 是否表示"图片内容"。public.file-url 显式排除（理由见 hasImageData 注释）。
+    nonisolated private static func isImageContentType(_ type: NSPasteboard.PasteboardType) -> Bool {
+        guard type.rawValue != "public.file-url" else { return false }
+        guard let utType = UTType(type.rawValue) else { return false }
+        return utType.conforms(to: .image)
     }
 
     nonisolated private static func makePNGData(from data: Data) throws -> Data {
