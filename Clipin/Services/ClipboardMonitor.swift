@@ -97,9 +97,17 @@ final class ClipboardMonitor: ObservableObject {
         let sourceApp = source.bundleIdentifier
         let sourceName = source.appName
 
-        // 高层语义优先，低层二进制兜底
-        // file → url → image → text
-        if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
+        // 判定顺序：image → file → url → text
+        // image 必须优先于 file：iPhone 隔空剪贴板复制图片时，pasteboard 同时挂载
+        // file-url（指向 useractivityd 临时文件，会被系统清理）+ image bytes。
+        // 让 file 抢走会让"翻历史回放"在临时文件清理后死掉。Clipin 是历史型应用，
+        // 语义上"翻历史的图"应该是图片数据而不是磁盘文件引用；损失"Finder 间复制
+        // 图片文件经 Clipin 回放为文件粘贴"的边角场景，换主流图片场景可靠。
+        if (pasteboard.types?.contains(where: { $0 == .tiff || $0 == .png })) == true {
+            // 不在这里同步读数据：types 探测廉价，timer 立即返回；data 由后台任务通过
+            // MainActor.run 拉，主线程读取还在但不再占用 timer 触发那一帧
+            persist(.imageLazy(changeCount: currentCount, sourceApp: sourceApp, sourceName: sourceName))
+        } else if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
             .urlReadingFileURLsOnly: true
         ]) as? [URL], !fileURLs.isEmpty {
             let paths = fileURLs.map(\.path)
@@ -107,10 +115,6 @@ final class ClipboardMonitor: ObservableObject {
         } else if let urlString = pasteboard.string(forType: .URL) ?? extractURL(from: pasteboard) {
             let reps = ClipboardRepresentationExtractor.extract(from: pasteboard, primaryContent: urlString)
             persist(.url(urlString, sourceApp, sourceName, reps))
-        } else if (pasteboard.types?.contains(where: { $0 == .tiff || $0 == .png })) == true {
-            // 不在这里同步读数据：types 探测廉价，timer 立即返回；data 由后台任务通过
-            // MainActor.run 拉，主线程读取还在但不再占用 timer 触发那一帧
-            persist(.imageLazy(changeCount: currentCount, sourceApp: sourceApp, sourceName: sourceName))
         } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
             // 超大文本（终端 dump、整本电子书等）跳过：FTS 重建会卡，磁盘也会被吃光
             if text.utf8.count > Self.maxTextBytes {

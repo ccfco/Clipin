@@ -5,6 +5,20 @@ import Combine
 extension AppDelegate {
     // MARK: - Paste
 
+    /// 写剪贴板失败时根据 item 类型挑选 notice 文案 key。
+    /// file 类型再追问 PasteService 失败原因（源失效是隔空剪贴板的常见场景，
+    /// 不区分会让用户误以为是 Clipin 的 bug 而不是源文件已被系统清理）。
+    static func pasteFailureMessageKey(for item: ClipItem) -> String {
+        guard item.clipType == .file else {
+            return "Could not write this item to the clipboard."
+        }
+        switch PasteService.fileFailureReason(item) {
+        case .sourceMissing: return "Source files no longer exist on disk."
+        case .partial: return "Some source files are missing; cannot paste."
+        case .writeRejected: return "Could not write this item to the clipboard."
+        }
+    }
+
     func performPaste(_ item: ClipItem) {
         monitor?.pause()
 
@@ -26,7 +40,7 @@ extension AppDelegate {
 
         guard PasteService.writeAllRepresentations(item, representations: representations) else {
             monitor?.resume()
-            viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
+            viewModel?.showNotice(NSLocalizedString(Self.pasteFailureMessageKey(for: item), comment: ""), style: .error)
             return
         }
         do { try appState.core.incrementPasteCount(id: item.id) } catch { ClipinLog.paste.error("Failed to increment paste count id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
@@ -171,7 +185,7 @@ extension AppDelegate {
         monitor?.pause()
         guard PasteService.writeToClipboard(item) else {
             monitor?.resume()
-            viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
+            viewModel?.showNotice(NSLocalizedString(Self.pasteFailureMessageKey(for: item), comment: ""), style: .error)
             return
         }
         let continuousPasteEnabled = viewModel?.isContinuousPasteEnabled ?? false

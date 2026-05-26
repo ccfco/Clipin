@@ -1,5 +1,17 @@
 import AppKit
 
+/// file 类型写剪贴板失败时的失败原因，供调用方区分文案语义。
+/// 不改 writeToClipboard 的 Bool 签名——失败原因是诊断信息，不影响主控制流，
+/// 调用方在已知写失败后单独 stat 一次磁盘即可，避免侵入式 enum 返回值改造所有 6+ 调用点。
+enum FilePasteFailureReason {
+    /// 整组源文件都不存在（典型：iPhone 隔空剪贴板临时文件被系统清理）
+    case sourceMissing
+    /// 部分源文件丢失（整组校验失败但还有幸存文件）
+    case partial
+    /// 真正的写入被系统拒绝（权限等罕见原因）
+    case writeRejected
+}
+
 /// 模拟粘贴 — 写回剪贴板 + CGEvent 模拟 Cmd+V
 enum PasteService {
     /// 将 ClipItem 写回剪贴板，成功返回 true
@@ -130,6 +142,18 @@ enum PasteService {
         guard pbItem.setString(text, forType: .string) else { return false }
         pasteboard.clearContents()
         return pasteboard.writeObjects([pbItem])
+    }
+
+    /// 在 file 类型的 writeToClipboard 返回 false 之后调用，告知调用方失败原因。
+    /// 实现上是按现有 writeToClipboard 的 file 校验语义重做一次 stat，
+    /// 不与 writeToClipboard 共享代码以避免 Bool 签名被 enum 污染。
+    static func fileFailureReason(_ item: ClipItem) -> FilePasteFailureReason {
+        guard item.clipType == .file else { return .writeRejected }
+        let paths = FileClipboardContent.paths(from: item.content)
+        let existingCount = paths.filter { FileManager.default.fileExists(atPath: $0) }.count
+        if existingCount == 0 { return .sourceMissing }
+        if existingCount < paths.count { return .partial }
+        return .writeRejected
     }
 
     /// 已知终端仿真器的 bundle ID 集合（用于图片粘贴时自动切换到 Ctrl+V）

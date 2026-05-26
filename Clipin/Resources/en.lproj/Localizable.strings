@@ -387,6 +387,8 @@
 "Undo" = "Undo";
 "Deletion undone." = "Deletion undone.";
 "Could not write this item to the clipboard." = "Could not write this item to the clipboard.";
+"Source files no longer exist on disk." = "Source files no longer exist on disk.";
+"Some source files are missing; cannot paste." = "Some source files are missing; cannot paste.";
 "Could not preview this item." = "Could not preview this item.";
 "preview.metadata.formats" = "Formats";
 "Accessibility permission is required to paste automatically." = "Accessibility permission is required to paste automatically.";
