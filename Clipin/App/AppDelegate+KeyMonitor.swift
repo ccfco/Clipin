@@ -420,6 +420,15 @@ extension AppDelegate {
         return false
     }
 
+    /// 焦点是否在文本编辑控件(搜索框 field editor / Edit Content TextEditor / 文本预览的
+    /// SelectableTextPreview NSTextView)。是 → ← →/⌫/普通字符等应按"光标移动 / 编辑文本"
+    /// 处理,不应被全局快捷键(尤其是 multi-image file 的 ← → 切图)抢走。
+    func isTextEditingInPanel() -> Bool {
+        if panel?.firstResponder is NSTextView { return true }
+        if NSApp.keyWindow?.firstResponder is NSTextView { return true }
+        return false
+    }
+
     func handlePanelKeyEvent(_ event: NSEvent, flags: NSEvent.ModifierFlags, viewModel vm: ClipboardViewModel) -> NSEvent? {
         if isIMEComposingInPanel() {
             switch event.keyCode {
@@ -445,8 +454,13 @@ extension AppDelegate {
             vm.selectNext()
             return nil
         case KeyCode.arrowLeft:
+            // 焦点在文本编辑控件(搜索框 / Edit Content / 文本预览选区)时,← 必须留给
+            // field editor 移动光标。否则用户在搜索框打错字想后退,左箭头会被 multi-image
+            // file 切图吞掉,搜索框光标不动——焦点反馈与按键行为分离,严重割裂。
+            if isTextEditingInPanel() { return event }
             return vm.stepFileAttachmentPreview(delta: -1) ? nil : event
         case KeyCode.arrowRight:
+            if isTextEditingInPanel() { return event }
             return vm.stepFileAttachmentPreview(delta: 1) ? nil : event
         case KeyCode.returnKey where flags.isEmpty:
             vm.pasteSelected()
