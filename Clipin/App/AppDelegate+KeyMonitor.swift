@@ -420,15 +420,6 @@ extension AppDelegate {
         return false
     }
 
-    /// 焦点是否在文本编辑控件(搜索框 field editor / Edit Content TextEditor / 文本预览的
-    /// SelectableTextPreview NSTextView)。是 → ← →/⌫/普通字符等应按"光标移动 / 编辑文本"
-    /// 处理,不应被全局快捷键抢走。
-    func isTextEditingInPanel() -> Bool {
-        if panel?.firstResponder is NSTextView { return true }
-        if NSApp.keyWindow?.firstResponder is NSTextView { return true }
-        return false
-    }
-
     /// ← → 是否应让给文本编辑控件而非走全局路由(叠放卡切换)。
     /// 关键区分:
     /// - 搜索框 field editor + 有文本 → 让给搜索框移光标(用户在打字修错)

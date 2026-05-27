@@ -2,7 +2,6 @@ import AppKit
 import Foundation
 import SwiftUI
 import Combine
-import UniformTypeIdentifiers
 
 struct ClipSection: Identifiable {
     let title: String
@@ -951,38 +950,6 @@ final class ClipboardViewModel: ObservableObject {
     private func currentPreviewEntries() -> [ClipPreviewEntry]? {
         guard let item = currentSelectedItem() else { return nil }
         return ClipPreviewResolver.resolve(item: item)
-    }
-
-    private static func filePreviewImagePaths(for item: ClipItem) -> [String] {
-        let paths = FileClipboardContent.paths(from: item.content)
-        let attachmentPaths = decodedAttachmentPaths(from: item.attachmentPaths)
-        return paths.enumerated().compactMap { index, path in
-            if attachmentPaths.indices.contains(index) {
-                let cachedPath = attachmentPaths[index]
-                if !cachedPath.isEmpty,
-                   FileManager.default.fileExists(atPath: cachedPath),
-                   isImageFile(cachedPath) {
-                    return cachedPath
-                }
-            }
-            guard FileManager.default.fileExists(atPath: path), isImageFile(path) else { return nil }
-            return path
-        }
-    }
-
-    private static func decodedAttachmentPaths(from raw: String?) -> [String] {
-        guard let raw,
-              let data = raw.data(using: .utf8),
-              let paths = try? JSONDecoder().decode([String].self, from: data) else {
-            return []
-        }
-        return paths
-    }
-
-    private static func isImageFile(_ path: String) -> Bool {
-        let ext = URL(fileURLWithPath: path).pathExtension
-        guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
-        return type.conforms(to: .image)
     }
 
     /// section 标题用的简短月日格式。旧实现硬编码 "M月d日"，英文环境也会显示中文，

@@ -98,8 +98,16 @@ struct PreviewPane: View {
             // 包裹;给它留一条独立路径,不强行套容器。
             switch item.clipType {
             case .text:
+                // text 路径 SelectableTextPreview 内嵌 NSScrollView,无法被外层 SwiftUI
+                // ScrollView 包裹,所以走 safeAreaInset。但仍要套 `PreviewBottomFadeMask`
+                // 让"底部渐隐"视觉与 image/file/url 一致——空内容时遮罩在透明区域无差异,
+                // 内容溢出时底部 32pt 自然淡化提示"下方还有"。
+                // .mask 必须挂在 safeAreaInset **之前**:否则 footer rail 也会被淡掉。
+                // SelectableTextPreview 自带 NSScrollView 没法上报 SwiftUI 端的滚动状态,
+                // isScrolling 写死 true——内容不溢出时遮罩覆盖空白区,视觉与无遮罩等价。
                 content(for: item)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .mask(PreviewBottomFadeMask(isScrolling: true))
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         previewFooter(for: item)
                             .padding(.top, ClipinChrome.gap)

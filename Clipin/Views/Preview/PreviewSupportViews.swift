@@ -50,6 +50,31 @@ struct PreviewFooterRail: View {
     }
 }
 
+/// 底部渐隐遮罩。供 `.mask()` 复用——image/file/url 走 `PreviewFadeFooterContainer`,
+/// text 路径(SelectableTextPreview 内嵌 NSScrollView 无法包外层 ScrollView)直接挂本 mask,
+/// 视觉语言一致。`isScrolling` 决定下方 32pt 是渐隐(true)还是全黑等价无遮罩(false)。
+struct PreviewBottomFadeMask: View {
+    let isScrolling: Bool
+
+    /// 渐隐段高度。32pt 对应正文 ~2 行,既能明显标记"下方还有内容",又不大到吃掉信息。
+    /// 不下沉到 ClipinChrome:渲染微调档位,与"间距/圆角"网格不同源。
+    private static let fadeHeight: CGFloat = 32  // spacing-exempt: 渐隐遮罩段高度,纯渲染微调
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.black
+            LinearGradient(
+                colors: isScrolling
+                    ? [Color.black, Color.black.opacity(0)]
+                    : [Color.black, Color.black],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: Self.fadeHeight)
+        }
+    }
+}
+
 /// 滚动内容 + 渐隐遮罩 + 元数据底栏的共享容器。
 /// 所有需要 "可滚动正文 + 底栏徽章" 的 preview body(image / file / url)统一用它,
 /// 把"是否在滚动""底部渐隐多高""与底栏间距"等渲染细节单点收口。
@@ -66,11 +91,6 @@ struct PreviewFadeFooterContainer<Content: View>: View {
     @State private var contentHeight: CGFloat = 0
     @State private var scrollViewHeight: CGFloat = 0
 
-    /// 底部渐隐段高度。32pt 对应正文 ~2 行,既能明显标记"下方还有内容",又不大到吃掉信息。
-    /// computed 而非 static let:Swift 不允许 generic struct 持有 static stored property。
-    /// 不下沉到 ClipinChrome:渲染微调档位,与"间距/圆角"网格不同源。
-    private var fadeHeight: CGFloat { 32 }  // spacing-exempt: 渐隐遮罩段高度,纯渲染微调
-
     private var isScrolling: Bool { contentHeight > scrollViewHeight + 1 }
 
     var body: some View {
@@ -82,25 +102,11 @@ struct PreviewFadeFooterContainer<Content: View>: View {
             }
             .frame(maxHeight: contentHeight > 0 ? contentHeight : nil)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { scrollViewHeight = $0 }
-            .mask(fadeMask)
+            .mask(PreviewBottomFadeMask(isScrolling: isScrolling))
 
             PreviewFooterRail(entries: footerEntries)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    private var fadeMask: some View {
-        VStack(spacing: 0) {
-            Color.black
-            LinearGradient(
-                colors: isScrolling
-                    ? [Color.black, Color.black.opacity(0)]
-                    : [Color.black, Color.black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: fadeHeight)
-        }
     }
 }
 
