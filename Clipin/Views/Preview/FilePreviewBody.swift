@@ -17,6 +17,12 @@ struct FilePreviewBody: View {
     /// 渲染时直接走 PreviewMetadataCache 的 cached* 路径，永远不在主线程同步读 IconServices。
     @State private var fileIcons: [String: NSImage] = [:]
 
+    /// 多文件叠放栈的 matchedGeometryEffect namespace:让同一张卡(按 paths 索引为 id)在
+    /// 切换 currentIndex 后从旧位置(front / back-left / back-right) 平滑插值到新位置。
+    /// Apple 文档专门为这种"同元素在不同角色间转换位置"场景设计——比自造 .scale + .offset 动画
+    /// 系统感强,跟随 a11y reduce motion + ProMotion 自动适配。
+    @Namespace private var stackNamespace
+
     /// mini list 最多展示多少行；超出折叠成 "+N more"。
     /// Finder 实测多选超过 8 个就开始体验冗余，8 是经验上限。
     private let maxRows = 8
@@ -154,28 +160,35 @@ struct FilePreviewBody: View {
         let stackWidth = Self.stackCardWidth + Self.stackBackOffset * 2 + 28
         let stackHeight = Self.stackCardHeight + 24
 
-        // 循环 wrap 的背景卡索引:
-        // - count == 2:仅露 back-right(back-left 会和 back-right 重复同一张,视觉冗余)
-        // - count >= 3:双侧都 wrap,任意位置均看到前后两张,视觉强化"这是循环栈"
-        let backLeftIndex: Int? = count >= 3 ? (clampedIndex - 1 + count) % count : nil
-        let backRightIndex: Int? = count >= 2 ? (clampedIndex + 1) % count : nil
+        // 视觉层不循环,只显示 currentIndex ± 1 范围内可见的卡:
+        // - 数据层循环已由 stepFileAttachmentPreview 处理(← 从 0 跳到 N-1)
+        // - 视觉层若也循环 wrap,count==3 时同一张卡需从 back-left 飞到 back-right,看着诡异
+        // - 边界处少一张卡可见,是给用户"这是端点"的微妙信号;跨边界循环瞬间卡片 fade in/out
+        let backLeftIndex: Int? = clampedIndex > 0 ? clampedIndex - 1 : nil
+        let backRightIndex: Int? = clampedIndex < count - 1 ? clampedIndex + 1 : nil
 
         VStack(spacing: ClipinChrome.gap) {
             ZStack {
                 if let i = backLeftIndex {
                     stackCard(at: i, paths: paths)
+                        // matchedGeometryEffect 让 SwiftUI 把"卡 i 在 back-left 位置"和
+                        // "卡 i 在 front/back-right 位置"识别为同一元素,index 变化时
+                        // 自动算 rotation + offset 插值——3 张卡一起动,真实"翻栈"物理感。
+                        .matchedGeometryEffect(id: i, in: stackNamespace)
                         .rotationEffect(.degrees(-Self.stackBackRotation))
                         .offset(x: -Self.stackBackOffset, y: 4)  // spacing-exempt: 叠放卡垂直微偏
                         .zIndex(0)
                 }
                 if let i = backRightIndex {
                     stackCard(at: i, paths: paths)
+                        .matchedGeometryEffect(id: i, in: stackNamespace)
                         .rotationEffect(.degrees(Self.stackBackRotation))
                         .offset(x: Self.stackBackOffset, y: 4)  // spacing-exempt: 叠放卡垂直微偏
                         .zIndex(0)
                 }
                 // 前景卡:用户当前关注的文件,无旋转,zIndex=1 始终在最上层。
                 stackCard(at: clampedIndex, paths: paths)
+                    .matchedGeometryEffect(id: clampedIndex, in: stackNamespace)
                     .zIndex(1)
 
                 // ← → chevron 浮在两侧。循环切换后任何位置 chevron 都常亮(用户期望"按下去总有反应")。
@@ -189,7 +202,10 @@ struct FilePreviewBody: View {
                 .zIndex(2)
             }
             .frame(width: stackWidth, height: stackHeight)
-            .animation(ClipinMotion.feedback, value: clampedIndex)
+            // Apple WWDC23 curated spring 预设,系统 a11y(reduce motion) + ProMotion 自动适配。
+            // 显式 duration 0.28:`.smooth` 默认 ~0.5s 偏拖,栈翻动场景用户期望"响应即时",
+            // 0.25–0.32s 是视觉甜点(低于 0.2 突兀,高于 0.35 拖)。
+            .animation(.smooth(duration: 0.28), value: clampedIndex)
 
             // N / Total 指示器:与前面 chevron 同源数据,告诉用户在叠放栈的哪个位置。
             Text("\(clampedIndex + 1) / \(count)")
