@@ -175,7 +175,13 @@ struct FilePreviewBody: View {
                         .zIndex(0)
                 }
                 // 前景卡:用户当前关注的文件,无旋转,zIndex=1 始终在最上层。
+                // `.id(clampedIndex)` 让 SwiftUI 把每次 index 变化识别为"换了一张卡",
+                // 触发 `.transition(.push)` 的插入/移除动画;`.push(from:)` 是 macOS 14+
+                // 系统级 transition(NavigationStack push 同款),按方向自动滑入推出,
+                // 跟随 a11y reduce motion 与 ProMotion 适配,无需自造。
                 stackCard(at: clampedIndex, paths: paths)
+                    .id(clampedIndex)
+                    .transition(.push(from: vm.lastStepDirection >= 0 ? .trailing : .leading))
                     .zIndex(1)
 
                 // ← → chevron 浮在两侧。循环切换后任何位置 chevron 都常亮(用户期望"按下去总有反应")。
@@ -189,7 +195,11 @@ struct FilePreviewBody: View {
                 .zIndex(2)
             }
             .frame(width: stackWidth, height: stackHeight)
-            .animation(ClipinMotion.feedback, value: clampedIndex)
+            // `Animation.smooth` 是 Apple WWDC23 起 curated 的"通用 UI 切换" spring 预设,
+            // 跟随系统 a11y / ProMotion 自动适配,比自造 spring 更"系统感"。
+            // 不用 ClipinMotion.feedback(0.22/0.82)——那个定位是"按钮触发反馈",太脆;
+            // 切栈是"内容转场",.smooth 更契合(且与 Apple 推荐路径同源)。
+            .animation(.smooth, value: clampedIndex)
 
             // N / Total 指示器:与前面 chevron 同源数据,告诉用户在叠放栈的哪个位置。
             Text("\(clampedIndex + 1) / \(count)")
