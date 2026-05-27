@@ -13,6 +13,7 @@ final class PasteServiceRepresentationTests: XCTestCase {
             isPinned: false,
             createdAt: 0,
             imagePath: nil,
+            attachmentPaths: nil,
             charCount: Int32(content.count),
             copyCount: 0,
             firstCopiedAt: 0,
