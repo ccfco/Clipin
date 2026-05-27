@@ -97,6 +97,10 @@ enum ClipinMotion {
     static let paletteReveal = Animation.spring(response: 0.30, dampingFraction: 0.80)
     /// ⌘K 动作面板退场：向右下角快速收回，不回弹、收得干脆。
     static let paletteDismiss = Animation.spring(response: 0.20, dampingFraction: 0.92)
+    /// 多文件叠放栈切换动画。Apple `.smooth` 同款曲线(WWDC23 curated),自动适配
+    /// reduce motion + ProMotion;显式 duration 0.28s 替代默认 ~0.5s——栈翻动场景
+    /// 用户期望"响应即时",0.25–0.32s 是视觉甜点(低于 0.2 突兀,高于 0.35 拖)。
+    static let stackSwitch = Animation.smooth(duration: 0.28)
 }
 
 /// 主面板共享状态语法。把“正在搜索 / 打开命令面板 / 连续粘贴”等状态

@@ -56,15 +56,14 @@ struct FilePreviewBody: View {
                     let clampedIndex = min(max(0, vm.fileAttachmentPreviewIndex), allPaths.count - 1)
                     let currentPath = allPaths[clampedIndex]
                     let currentURL = URL(fileURLWithPath: currentPath)
-                    multiFileStack(paths: allPaths)
+                    multiFileStack(paths: allPaths, currentIndex: clampedIndex)
                     multiFileTextHeader(currentPath: currentPath, currentURL: currentURL, paths: allPaths)
                     multiFileList(paths: allPaths, currentIndex: clampedIndex)
                 } else {
                     // 单文件:沿用原 header + 大图/路径回退布局
                     header(primaryPath: primaryPath, primaryURL: primaryURL, paths: allPaths)
-                    let imagePreviewPaths = resolvedImagePreviewPaths(originalPaths: allPaths)
-                    if !imagePreviewPaths.isEmpty {
-                        imagePreview(paths: imagePreviewPaths)
+                    if let imgPath = imagePathForPreview(originalPath: primaryPath, originalIndex: 0) {
+                        imagePreview(path: imgPath)
                     } else {
                         pathFallback(allPaths: allPaths)
                     }
@@ -91,48 +90,14 @@ struct FilePreviewBody: View {
         }
     }
 
+    /// 单文件 image 预览:多文件由 multiFileStack 承担,这里只画一张大图。
+    /// 方角(.fit + .frame.alignment):用户明确要求,与列表行图片缩略图保持视觉语言一致。
     @ViewBuilder
-    private func imagePreview(paths: [String]) -> some View {
-        let clampedIndex = min(vm.fileAttachmentPreviewIndex, paths.count - 1)
-        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-            ZStack(alignment: .bottomTrailing) {
-                AsyncPreviewImage(path: paths[clampedIndex], maxHeight: 360) {
-                    pathFallback(allPaths: [paths[clampedIndex]])
-                }
-                    // 方角：用户明确要求，方便识别"这是张真实的图"而非"卡片化包装"。
-                    // 与列表行图片缩略图保持一致的视觉语言。
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if paths.count > 1 {
-                    HStack(spacing: ClipinChrome.gap) {
-                        Button {
-                            vm.stepFileAttachmentPreview(delta: -1)
-                        } label: {
-                            Image(systemName: "chevron.left")
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(clampedIndex == 0)
-
-                        Text("\(clampedIndex + 1) / \(paths.count)")
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(ClipinInk.secondary)
-                            .monospacedDigit()
-
-                        Button {
-                            vm.stepFileAttachmentPreview(delta: 1)
-                        } label: {
-                            Image(systemName: "chevron.right")
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(clampedIndex == paths.count - 1)
-                    }
-                    .padding(.horizontal, ClipinChrome.groupGap)
-                    .padding(.vertical, ClipinChrome.gap)
-                    .glassEffect(.regular, in: Capsule())
-                    .padding(ClipinChrome.groupGap)
-                }
-            }
+    private func imagePreview(path: String) -> some View {
+        AsyncPreviewImage(path: path, maxHeight: 360) {
+            pathFallback(allPaths: [path])
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func icon(for path: String) -> NSImage? {
@@ -153,9 +118,8 @@ struct FilePreviewBody: View {
     private static let stackBackRotation: Double = 9
 
     @ViewBuilder
-    private func multiFileStack(paths: [String]) -> some View {
+    private func multiFileStack(paths: [String], currentIndex clampedIndex: Int) -> some View {
         let count = paths.count
-        let clampedIndex = min(max(0, vm.fileAttachmentPreviewIndex), count - 1)
         // 叠放总 frame:前景卡 + 背景偏移 *2 + 旋转引入的额外宽度(估算 28pt)
         let stackWidth = Self.stackCardWidth + Self.stackBackOffset * 2 + 28
         let stackHeight = Self.stackCardHeight + 24
@@ -202,10 +166,9 @@ struct FilePreviewBody: View {
                 .zIndex(2)
             }
             .frame(width: stackWidth, height: stackHeight)
-            // Apple WWDC23 curated spring 预设,系统 a11y(reduce motion) + ProMotion 自动适配。
-            // 显式 duration 0.28:`.smooth` 默认 ~0.5s 偏拖,栈翻动场景用户期望"响应即时",
-            // 0.25–0.32s 是视觉甜点(低于 0.2 突兀,高于 0.35 拖)。
-            .animation(.smooth(duration: 0.28), value: clampedIndex)
+            // 走 ClipinMotion.stackSwitch token(Apple .smooth 同款 + 0.28s 紧凑时长),
+            // 与其他动画一样从 ClipinMotion 单点取值,改这一处全 app 同步。
+            .animation(ClipinMotion.stackSwitch, value: clampedIndex)
 
             // N / Total 指示器:与前面 chevron 同源数据,告诉用户在叠放栈的哪个位置。
             Text("\(clampedIndex + 1) / \(count)")
@@ -340,8 +303,19 @@ struct FilePreviewBody: View {
 
     @ViewBuilder
     private func multiFileList(paths: [String], currentIndex: Int) -> some View {
-        let shown = Array(paths.prefix(maxRows))
-        let overflow = paths.count - shown.count
+        // 滑动窗口:保证 currentIndex 始终在视野内。
+        // 旧实现固定 paths.prefix(maxRows),paths.count > 8 时用户切到 file 9 后列表
+        // 无任何行高亮(index 0..<8 永远不等于 currentIndex>=8),三处视觉信号(栈/标题/列表)
+        // 失同步。改为以 currentIndex 为中心取窗口,头/尾 overflow 分开显示。
+        let windowStart: Int = {
+            guard paths.count > maxRows else { return 0 }
+            let half = maxRows / 2
+            return max(0, min(paths.count - maxRows, currentIndex - half))
+        }()
+        let windowEnd = min(paths.count, windowStart + maxRows)
+        let shown = Array(paths[windowStart..<windowEnd])
+        let prefixOverflow = windowStart
+        let suffixOverflow = paths.count - windowEnd
         // 文件行图标边长。命名后既驱动图标 frame，又驱动 "+N more" 的对齐缩进。
         let iconSize: CGFloat = 18
 
@@ -351,8 +325,12 @@ struct FilePreviewBody: View {
                 .foregroundStyle(ClipinInk.secondary)
 
             VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                ForEach(Array(shown.enumerated()), id: \.offset) { index, path in
-                    let isCurrent = index == currentIndex
+                if prefixOverflow > 0 {
+                    overflowIndicator(count: prefixOverflow, leadingInset: iconSize + ClipinChrome.gap)
+                }
+                ForEach(Array(shown.enumerated()), id: \.offset) { offset, path in
+                    let absoluteIndex = windowStart + offset
+                    let isCurrent = absoluteIndex == currentIndex
                     HStack(spacing: ClipinChrome.gap) {
                         if let img = icon(for: path) {
                             Image(nsImage: img)
@@ -380,18 +358,21 @@ struct FilePreviewBody: View {
                             .fill(isCurrent ? Color.accentColor.opacity(0.12) : Color.clear)
                     )
                 }
-                if overflow > 0 {
-                    Text(String(format: NSLocalizedString("+%d more", comment: ""), overflow))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(ClipinInk.secondary)
-                        // 缩进 = 图标宽 + 图标↔文字间距，让 "+N more" 与上方文件名左缘对齐。
-                        .padding(.leading, iconSize + ClipinChrome.gap)
-                        .padding(.top, ClipinChrome.gap)
+                if suffixOverflow > 0 {
+                    overflowIndicator(count: suffixOverflow, leadingInset: iconSize + ClipinChrome.gap)
                 }
             }
         }
         .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 列表头/尾 overflow 指示器:与文件名左缘对齐(缩进 = 图标宽 + 图标↔文字间距)。
+    private func overflowIndicator(count: Int, leadingInset: CGFloat) -> some View {
+        Text(String(format: NSLocalizedString("+%d more", comment: ""), count))
+            .font(.system(size: 11.5))
+            .foregroundStyle(ClipinInk.secondary)
+            .padding(.leading, leadingInset)
     }
 
     @ViewBuilder
@@ -417,22 +398,6 @@ struct FilePreviewBody: View {
         let ext = URL(fileURLWithPath: path).pathExtension
         guard !ext.isEmpty, let type = UTType(filenameExtension: ext) else { return false }
         return type.conforms(to: .image)
-    }
-
-    private func resolvedImagePreviewPaths(originalPaths: [String]) -> [String] {
-        let cached = attachmentPaths
-        return originalPaths.enumerated().compactMap { index, path in
-            if cached.indices.contains(index) {
-                let cachedPath = cached[index]
-                if !cachedPath.isEmpty,
-                   FileManager.default.fileExists(atPath: cachedPath),
-                   isImageFile(cachedPath) {
-                    return cachedPath
-                }
-            }
-            guard FileManager.default.fileExists(atPath: path), isImageFile(path) else { return nil }
-            return path
-        }
     }
 
     private func fileHeaderSubtitle(paths: [String], primaryURL: URL) -> String {
