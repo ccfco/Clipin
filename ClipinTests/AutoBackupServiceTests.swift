@@ -74,12 +74,36 @@ final class AutoBackupServiceTests: XCTestCase {
         // (① source core 没数据 ② 备份归档构造时丢失 ③ import 路径解析失败)。
         // 修复后可删除。
         let sourceItems = (try? core.getItems(limit: 50, offset: 0, typeFilter: nil)) ?? []
+        let exportSnapshot = (try? core.exportArchiveSnapshot()) ?? []
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: backupURL.path))
             .flatMap { $0[.size] as? Int64 } ?? -1
+
+        // 把 zip 解开看 manifest.json 实际内容(不是只看大小)——
+        // 357 bytes vs 449 bytes 差异显示归档结构本身不同,manifest 才是真相。
+        var manifestJSON: String = "<unzip failed>"
+        let inspectDir = FileManager.default.temporaryDirectory.appendingPathComponent("DIAG-inspect-\(UUID().uuidString)")
+        if let _ = try? FileManager.default.createDirectory(at: inspectDir, withIntermediateDirectories: true) {
+            let process = Process()
+            process.launchPath = "/usr/bin/unzip"
+            process.arguments = ["-o", backupURL.path, "-d", inspectDir.path]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            try? process.run()
+            process.waitUntilExit()
+            let manifestPath = inspectDir.appendingPathComponent("manifest.json").path
+            if let data = try? Data(contentsOf: URL(fileURLWithPath: manifestPath)),
+               let txt = String(data: data, encoding: .utf8) {
+                manifestJSON = String(txt.prefix(1000))
+            }
+            try? FileManager.default.removeItem(at: inspectDir)
+        }
+
         print("[AutoBackupTest:DIAG] backupURL=\(backupURL.path)")
         print("[AutoBackupTest:DIAG] backupFile size=\(fileSize) bytes")
         print("[AutoBackupTest:DIAG] sourceCore items count=\(sourceItems.count)")
         print("[AutoBackupTest:DIAG] sourceCore contents=\(sourceItems.prefix(5).map { String($0.content.prefix(40)) })")
+        print("[AutoBackupTest:DIAG] exportArchiveSnapshot count=\(exportSnapshot.count)")
+        print("[AutoBackupTest:DIAG] manifest.json=\(manifestJSON)")
         print("[AutoBackupTest:DIAG] backupFilename=\(AutoBackupService.backupFilename)")
         print("[AutoBackupTest:DIAG] settings.folderPath=\(SettingsStore.shared.autoBackupFolderPath ?? "nil")")
 
