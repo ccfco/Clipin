@@ -443,6 +443,8 @@ actor OGImageCache {
 struct URLPreviewView: View {
     let urlString: String
     let searchQuery: String
+    /// 元数据底栏徽章数据;由 PreviewFadeFooterContainer 统一渲染。
+    let footerEntries: [PreviewPane.PreviewRailEntry]
     @EnvironmentObject var vm: ClipboardViewModel
     /// 从 URLMetadataCache 异步拉取的页面标题；nil 表示尚未加载或拉不到。
     /// 加载完成后会显示在 header 顶部，host 退到次行——同其他应用对齐。
@@ -454,7 +456,7 @@ struct URLPreviewView: View {
     private var url: URL? { URL(string: urlString) }
 
     var body: some View {
-        ScrollView {
+        PreviewFadeFooterContainer(footerEntries: footerEntries) {
             VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 if let ogImage {
                     ogImageHero(ogImage)
@@ -465,9 +467,8 @@ struct URLPreviewView: View {
                     queryBlock(items: queryItems(for: url))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: 560, alignment: .leading)
         }
-        .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
         .task(id: urlString) {
             pageTitle = nil
             ogImage = nil

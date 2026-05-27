@@ -422,10 +422,35 @@ extension AppDelegate {
 
     /// 焦点是否在文本编辑控件(搜索框 field editor / Edit Content TextEditor / 文本预览的
     /// SelectableTextPreview NSTextView)。是 → ← →/⌫/普通字符等应按"光标移动 / 编辑文本"
-    /// 处理,不应被全局快捷键(尤其是 multi-image file 的 ← → 切图)抢走。
+    /// 处理,不应被全局快捷键抢走。
     func isTextEditingInPanel() -> Bool {
         if panel?.firstResponder is NSTextView { return true }
         if NSApp.keyWindow?.firstResponder is NSTextView { return true }
+        return false
+    }
+
+    /// ← → 是否应让给文本编辑控件而非走全局路由(叠放卡切换)。
+    /// 关键区分:
+    /// - 搜索框 field editor + 有文本 → 让给搜索框移光标(用户在打字修错)
+    /// - 搜索框 field editor + 空文本 → 全局路由(panel 默认聚焦,用户没在打字,应允许切栈)
+    /// - 自定义 NSTextView(文本预览选区) → 让给编辑器(选区/光标真的在移动)
+    /// `isFieldEditor` 区分"系统共享 field editor"(NSTextField 单行输入)和"自定义 NSTextView"(预览/TextEditor)。
+    func shouldArrowKeyDeferToTextEditing() -> Bool {
+        guard let vm = viewModel else { return false }
+        if let textView = panel?.firstResponder as? NSTextView {
+            if textView.isFieldEditor {
+                // 搜索框 / 任何单行 NSTextField 的 field editor
+                return !vm.searchQuery.isEmpty
+            }
+            // 自定义 NSTextView(预览选区等)
+            return true
+        }
+        if let textView = NSApp.keyWindow?.firstResponder as? NSTextView {
+            if textView.isFieldEditor {
+                return !vm.searchQuery.isEmpty
+            }
+            return true
+        }
         return false
     }
 
@@ -454,13 +479,13 @@ extension AppDelegate {
             vm.selectNext()
             return nil
         case KeyCode.arrowLeft:
-            // 焦点在文本编辑控件(搜索框 / Edit Content / 文本预览选区)时,← 必须留给
-            // field editor 移动光标。否则用户在搜索框打错字想后退,左箭头会被 multi-image
-            // file 切图吞掉,搜索框光标不动——焦点反馈与按键行为分离,严重割裂。
-            if isTextEditingInPanel() { return event }
+            // 双向兼容:搜索框有文本时 ← 留给光标移动(避免用户打字时被吞);
+            // 搜索框空(panel 默认聚焦无文本)或焦点不在搜索框时,← 走全局路由切换多文件叠放栈。
+            // 自定义 NSTextView(预览选区)永远留给编辑器。
+            if shouldArrowKeyDeferToTextEditing() { return event }
             return vm.stepFileAttachmentPreview(delta: -1) ? nil : event
         case KeyCode.arrowRight:
-            if isTextEditingInPanel() { return event }
+            if shouldArrowKeyDeferToTextEditing() { return event }
             return vm.stepFileAttachmentPreview(delta: 1) ? nil : event
         case KeyCode.returnKey where flags.isEmpty:
             vm.pasteSelected()

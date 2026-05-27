@@ -5,71 +5,35 @@ struct ImagePreviewBody: View {
     let item: ClipItem
     let searchQuery: String
     let vm: ClipboardViewModel
-    /// 元数据底栏的徽章数据；底栏由本视图固定渲染在滚动区下方。
+    /// 元数据底栏的徽章数据;底栏由 PreviewFadeFooterContainer 渲染在滚动区下方。
     let footerEntries: [PreviewPane.PreviewRailEntry]
 
-    /// 滚动内容底部淡出渐隐段高度（scroll edge effect）。
-    private let ocrScrollFadeLength: CGFloat = 32
-    /// 可滚动内容（图片 + OCR）的自然高度，用于让滚动区按内容收缩。
-    @State private var contentHeight: CGFloat = 0
-    /// 滚动区实际渲染高度；与 contentHeight 比较即可判断是否真的在滚动。
-    @State private var scrollViewHeight: CGFloat = 0
-
-    /// 内容比滚动区高 → 正在滚动，此时才需要底部淡出柔边。
-    private var isScrolling: Bool { contentHeight > scrollViewHeight + 1 }
-
     var body: some View {
-        // 元数据底栏固定在滚动区下方、始终可见（不进滚动流）；滚动区按内容自然高度
-        // 收缩（.frame(maxHeight: contentHeight)）——短内容时底栏紧贴正文不留空档，
-        // 长内容时滚动区填满可用高度、内容在内部滚动。
-        VStack(spacing: ClipinChrome.gap) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                    if let path = item.imagePath {
-                        AsyncPreviewImage(path: path, maxHeight: 392) {
-                            Label("Image not found", systemImage: "exclamationmark.triangle")
-                                .font(.system(size: 13))
-                                .foregroundStyle(ClipinInk.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
+        // 共享容器:负责滚动 + 底部渐隐遮罩 + 元数据底栏。
+        // 旧实现内联 VStack + mask + 自管 contentHeight/scrollViewHeight,现由
+        // PreviewFadeFooterContainer 单点收口,所有 preview body 视觉一致(决策见 CLAUDE.md)。
+        PreviewFadeFooterContainer(footerEntries: footerEntries) {
+            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+                if let path = item.imagePath {
+                    AsyncPreviewImage(path: path, maxHeight: 392) {
                         Label("Image not found", systemImage: "exclamationmark.triangle")
                             .font(.system(size: 13))
                             .foregroundStyle(ClipinInk.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-
-                    if let ocr = item.ocrText, !ocr.isEmpty {
-                        ocrBlock(ocr)
-                    }
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    Label("Image not found", systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(ClipinInk.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+
+                if let ocr = item.ocrText, !ocr.isEmpty {
+                    ocrBlock(ocr)
+                }
             }
-            .frame(maxHeight: contentHeight > 0 ? contentHeight : nil)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { scrollViewHeight = $0 }
-            .mask(scrollFadeMask)
-
-            // 元数据底栏：固定在滚动区下方，任何时候都不被滚动卷走。
-            PreviewFooterRail(entries: footerEntries)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    /// 滚动内容底部淡出遮罩：仅在真正滚动时渐隐；内容刚好放下时保持全黑、不淡末行。
-    private var scrollFadeMask: some View {
-        VStack(spacing: 0) {
-            Color.black
-            LinearGradient(
-                colors: isScrolling
-                    ? [Color.black, Color.black.opacity(0)]
-                    : [Color.black, Color.black],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: ocrScrollFadeLength)
         }
     }
 

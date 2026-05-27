@@ -92,28 +92,34 @@ struct PreviewPane: View {
 
     private func contentStage(for item: ClipItem) -> some View {
         contentStage {
-            if item.clipType == .image {
-                // 图片预览的元数据底栏改为随内容滚动（见 ImagePreviewBody），不再
-                // safeAreaInset 钉死在视口底沿——短内容时底栏会被推远、撑出大空档。
-                content(for: item)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
+            // 所有 clip 类型统一走自带底栏的 preview body(image/file/url 都包在
+            // PreviewFadeFooterContainer 内,底栏 + 渐隐遮罩统一)。text 走 safeAreaInset
+            // 是因为 SelectableTextPreview 内嵌 NSScrollView,无法被外层 SwiftUI ScrollView
+            // 包裹;给它留一条独立路径,不强行套容器。
+            switch item.clipType {
+            case .text:
                 content(for: item)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .safeAreaInset(edge: .bottom, spacing: 0) {
                         previewFooter(for: item)
                             .padding(.top, ClipinChrome.gap)
                     }
+            case .image, .file, .url:
+                content(for: item)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
     }
 
     private func contentStage<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        // 预览是阅读区（非选中行），内容内距用 groupGap —— 仍是 edge 派生的统一值，
-        // 但给正文/图片/元数据留出阅读呼吸位，不像选中行那样贴到 gap。
+        // 预览是阅读区(非选中行),内容左右上内距用 groupGap 留出阅读呼吸位。
+        // 内容下内距单独用 gap(8)而非 groupGap(16):FooterRail 下方紧接浮动底栏 Paste 胶囊,
+        // 胶囊自带 .padding(.bottom, gap),最终可见距离 = gap(下内距 8) + gap(胶囊上缓冲 8) = 8+8 一致节奏。
+        // 若两边都用 groupGap,胶囊上方会多出 8pt 错位,与全 app gap 网格不齐。
         content()
             .padding(.horizontal, ClipinChrome.groupGap)
-            .padding(.vertical, ClipinChrome.groupGap)
+            .padding(.top, ClipinChrome.groupGap)
+            .padding(.bottom, ClipinChrome.gap)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.bottom, ClipinChrome.floatingFooterBand)
     }
@@ -149,7 +155,8 @@ struct PreviewPane: View {
         case .url:
             URLPreviewView(
                 urlString: item.content,
-                searchQuery: searchQuery
+                searchQuery: searchQuery,
+                footerEntries: footerEntries(for: item)
             )
             .environmentObject(vm)
 
@@ -166,8 +173,13 @@ struct PreviewPane: View {
         case .file:
             // 同上：fileIcons 虽然每次 .task 都会全量覆盖，但 .id 是更稳的防御，
             // 保证未来再加 @State 时不会无声地跨 item 携带状态。
-            FilePreviewBody(item: item, searchQuery: searchQuery, vm: vm)
-                .id(item.id)
+            FilePreviewBody(
+                item: item,
+                searchQuery: searchQuery,
+                vm: vm,
+                footerEntries: footerEntries(for: item)
+            )
+            .id(item.id)
         }
     }
 

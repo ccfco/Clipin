@@ -426,9 +426,13 @@ final class ClipboardViewModel: ObservableObject {
     @discardableResult
     func stepFileAttachmentPreview(delta: Int) -> Bool {
         guard let item = displayedItem, item.clipType == .file else { return false }
-        let count = Self.filePreviewImagePaths(for: item).count
+        // 步进覆盖所有文件,不仅图片:Raycast 风格叠放卡可同时展示图片缩略图和文件 icon,
+        // 用户预期 ←→ 走遍整组(否则混合复制时只能切到图,DMG/ZIP 反而切不到,语义割裂)。
+        let count = FileClipboardContent.paths(from: item.content).count
         guard count > 1 else { return false }
-        let next = max(0, min(count - 1, fileAttachmentPreviewIndex + delta))
+        // 循环切换:最后一张 → 第一张,反向同理。Swift `%` 对负数返回负数(不同 Python),
+        // 必须 ((x % n) + n) % n 双取余才能把"向左从 0 翻到末尾"算对。
+        let next = ((fileAttachmentPreviewIndex + delta) % count + count) % count
         guard next != fileAttachmentPreviewIndex else { return true }
         fileAttachmentPreviewIndex = next
         return true

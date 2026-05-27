@@ -393,10 +393,19 @@ struct ClipItemRow: View {
                 path: path
             )
         } else if item.clipType == .file,
+                  let count = multiFileCount(in: item), count > 1 {
+            // 多文件 file 条目:用 accent 计数徽记替代缩略图——视觉上一眼区分"单文件 vs 多文件",
+            // 与 Raycast 同款心智(预览面板用叠放卡片承担"看到内容"的角色,列表行只需传达"这是 N 个")。
+            Text("\(count)")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.accentColor))
+        } else if item.clipType == .file,
                   let cachedThumbPath = firstAttachmentThumbnailPath(in: item) {
-            // file 类型如果采集时缓存了图片附件（隔空剪贴板/Finder 本地图），
-            // 列表行也显示缩略图——视觉上跟 image 类型统一（图就是图，不要靠 jpeg 文件图标推断）。
-            // 与 image 类型的区分通过条目标题（文件名 vs "图片·App"）而非图标传达。
+            // 单文件 file 且采集时缓存了图片附件(隔空剪贴板/Finder 本地图):
+            // 列表行显示缩略图——视觉上跟 image 类型统一(图就是图,不要靠 jpeg 文件图标推断)。
+            // 与 image 类型的区分通过条目标题(文件名 vs "图片·App")而非图标传达。
             ClipThumbnailImage(
                 path: cachedThumbPath
             )
@@ -515,6 +524,24 @@ struct ClipItemRow: View {
             return nil
         }
         return paths.first(where: { !$0.isEmpty })
+    }
+
+    /// 多文件 file 条目的总文件数。
+    /// 优先取 attachment_paths.count——采集时初始化为 `Array(repeating: "", count: urls.count)`,
+    /// 即使所有位置都是非图(空字符串),数组长度也等于真实文件数。
+    /// attachment_paths 为 nil 的兜底:解析 preview 的 JSON 路径数组。短路径多文件通常在 240
+    /// 字符内未被截断;长路径场景解析失败 → 返回 nil 不显示徽记(长尾,可接受)。
+    private func multiFileCount(in item: ClipListItem) -> Int? {
+        if let raw = item.attachmentPaths,
+           let data = raw.data(using: .utf8),
+           let paths = try? JSONDecoder().decode([String].self, from: data) {
+            return paths.count
+        }
+        guard let data = item.preview.data(using: .utf8),
+              let paths = try? JSONDecoder().decode([String].self, from: data) else {
+            return nil
+        }
+        return paths.count
     }
 
     private var timeLabel: String {
