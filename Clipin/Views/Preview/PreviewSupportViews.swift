@@ -76,33 +76,66 @@ struct PreviewBottomFadeMask: View {
 }
 
 /// 滚动内容 + 渐隐遮罩 + 元数据底栏的共享容器。
-/// 所有需要 "可滚动正文 + 底栏徽章" 的 preview body(image / file / url)统一用它,
-/// 把"是否在滚动""底部渐隐多高""与底栏间距"等渲染细节单点收口。
+/// 所有 preview body(image / file / url / text)统一走它,把"是否在滚动""底部渐隐多高"
+/// "与底栏间距"等渲染细节单点收口。
 ///
-/// 心智:外面只关心"给我一坨可滚动的内容 + footer 数据",fade/spacing 都由容器决定。
-/// 旧实现 ImagePreviewBody 内联 VStack + mask,FilePreviewBody/URLPreviewView 走外层
-/// safeAreaInset,导致仅图片有渐隐,其它没有——与"统一视觉语言"决策违背。
+/// 心智:外面只关心"给我一坨内容 + footer 数据",fade/spacing 都由容器决定。
+/// `scrollStrategy` 决定滚动归属:
+/// - `.managed`(默认):内容是普通 SwiftUI view,容器自带 ScrollView 包裹 + 高度追踪 +
+///   按内容溢出动态切 fade(image / file / url 路径)
+/// - `.external`:内容自管滚动(如 NSScrollView / SelectableTextPreview),容器只负责
+///   fade mask + 底栏布局,fade 写死 true——内容不溢出时 mask 覆盖空白区视觉无差异(text 路径)
 struct PreviewFadeFooterContainer<Content: View>: View {
+    enum ScrollStrategy {
+        case managed   // 容器自带 ScrollView
+        case external  // 内容自管滚动
+    }
+
     let footerEntries: [PreviewPane.PreviewRailEntry]
+    let scrollStrategy: ScrollStrategy
     @ViewBuilder var content: () -> Content
 
+    init(
+        footerEntries: [PreviewPane.PreviewRailEntry],
+        scrollStrategy: ScrollStrategy = .managed,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.footerEntries = footerEntries
+        self.scrollStrategy = scrollStrategy
+        self.content = content
+    }
+
     /// 内容自然高度 vs 滚动视口高度的对比驱动"是否真正在滚动"——
-    /// 内容刚好放下时保持全黑遮罩,不会无谓淡掉末行。
+    /// 内容刚好放下时保持全黑遮罩,不会无谓淡掉末行。仅 `.managed` 模式生效。
     @State private var contentHeight: CGFloat = 0
     @State private var scrollViewHeight: CGFloat = 0
 
-    private var isScrolling: Bool { contentHeight > scrollViewHeight + 1 }
+    private var isScrolling: Bool {
+        switch scrollStrategy {
+        case .managed:  return contentHeight > scrollViewHeight + 1
+        case .external: return true  // 自管模式拿不到内容/视口对比,默认假定有滚动需求
+        }
+    }
 
     var body: some View {
         VStack(spacing: ClipinChrome.gap) {
-            ScrollView {
+            switch scrollStrategy {
+            case .managed:
+                ScrollView {
+                    content()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+                }
+                .frame(maxHeight: contentHeight > 0 ? contentHeight : nil)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { scrollViewHeight = $0 }
+                .mask(PreviewBottomFadeMask(isScrolling: isScrolling))
+            case .external:
+                // 内容自管 ScrollView(text 的 SelectableTextPreview),容器不再叠一层
+                // ScrollView 包裹——避免双层滚动。仍套 fade mask 维持视觉一致。
                 content()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .mask(PreviewBottomFadeMask(isScrolling: isScrolling))
             }
-            .frame(maxHeight: contentHeight > 0 ? contentHeight : nil)
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { scrollViewHeight = $0 }
-            .mask(PreviewBottomFadeMask(isScrolling: isScrolling))
 
             PreviewFooterRail(entries: footerEntries)
         }

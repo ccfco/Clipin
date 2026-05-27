@@ -91,31 +91,13 @@ struct PreviewPane: View {
     }
 
     private func contentStage(for item: ClipItem) -> some View {
+        // 所有 clip 类型统一走 PreviewFadeFooterContainer:image/file/url 走 `.managed`
+        // (容器自带 ScrollView),text 走 `.external`(SelectableTextPreview 自管 NSScrollView)。
+        // contentStage 不再需要按 clipType 分支套外层 safeAreaInset / mask——架构上 4 类
+        // preview body 同源,fade/footer 单点在容器内收口。
         contentStage {
-            // 所有 clip 类型统一走自带底栏的 preview body(image/file/url 都包在
-            // PreviewFadeFooterContainer 内,底栏 + 渐隐遮罩统一)。text 走 safeAreaInset
-            // 是因为 SelectableTextPreview 内嵌 NSScrollView,无法被外层 SwiftUI ScrollView
-            // 包裹;给它留一条独立路径,不强行套容器。
-            switch item.clipType {
-            case .text:
-                // text 路径 SelectableTextPreview 内嵌 NSScrollView,无法被外层 SwiftUI
-                // ScrollView 包裹,所以走 safeAreaInset。但仍要套 `PreviewBottomFadeMask`
-                // 让"底部渐隐"视觉与 image/file/url 一致——空内容时遮罩在透明区域无差异,
-                // 内容溢出时底部 32pt 自然淡化提示"下方还有"。
-                // .mask 必须挂在 safeAreaInset **之前**:否则 footer rail 也会被淡掉。
-                // SelectableTextPreview 自带 NSScrollView 没法上报 SwiftUI 端的滚动状态,
-                // isScrolling 写死 true——内容不溢出时遮罩覆盖空白区,视觉与无遮罩等价。
-                content(for: item)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .mask(PreviewBottomFadeMask(isScrolling: true))
-                    .safeAreaInset(edge: .bottom, spacing: 0) {
-                        previewFooter(for: item)
-                            .padding(.top, ClipinChrome.gap)
-                    }
-            case .image, .file, .url:
-                content(for: item)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            content(for: item)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
     }
 
@@ -132,32 +114,30 @@ struct PreviewPane: View {
             .padding(.bottom, ClipinChrome.floatingFooterBand)
     }
 
-    private func previewFooter(for item: ClipItem) -> some View {
-        let entries = footerEntries(for: item)
-        return PreviewFooterRail(
-            entries: entries
-        )
-        .opacity(sceneState.metadataOpacity)
-        .offset(y: sceneState.metadataLift)
-        .animation(ClipinMotion.focusShift, value: sceneState)
-    }
-
     @ViewBuilder
     private func content(for item: ClipItem) -> some View {
         switch item.clipType {
         case .text:
-            if let color = detectColorForPreview(in: item.content) {
-                ColorSwatchPreview(color: color, originalText: item.content)
-                    .frame(maxWidth: 480, alignment: .leading)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
-                TextPreviewBody(
-                    text: item.content,
-                    font: previewTextFont(),
-                    searchQuery: searchQuery
-                )
-                .environmentObject(vm)
-                .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
+            // text 与 image/file/url 同样走 PreviewFadeFooterContainer 主干,fade + footer
+            // 与其它三类一致。`.external` 模式因为 SelectableTextPreview 内嵌 NSScrollView
+            // 自管滚动,容器不再叠一层 ScrollView——避免双层滚动。
+            PreviewFadeFooterContainer(
+                footerEntries: footerEntries(for: item),
+                scrollStrategy: .external
+            ) {
+                if let color = detectColorForPreview(in: item.content) {
+                    ColorSwatchPreview(color: color, originalText: item.content)
+                        .frame(maxWidth: 480, alignment: .leading)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    TextPreviewBody(
+                        text: item.content,
+                        font: previewTextFont(),
+                        searchQuery: searchQuery
+                    )
+                    .environmentObject(vm)
+                    .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
 
         case .url:
