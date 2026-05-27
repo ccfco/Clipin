@@ -100,6 +100,13 @@ final class AutoBackupServiceTests: XCTestCase {
 
         print("[AutoBackupTest:DIAG] backupURL=\(backupURL.path)")
         print("[AutoBackupTest:DIAG] backupFile size=\(fileSize) bytes")
+        // 列出 backupFolder 内所有文件,捕获 ".previous" 或 ".tmp" 残留情况
+        let allFiles = (try? FileManager.default.contentsOfDirectory(atPath: backupFolder.path)) ?? []
+        for f in allFiles {
+            let path = backupFolder.appendingPathComponent(f).path
+            let s = (try? FileManager.default.attributesOfItem(atPath: path)).flatMap { $0[.size] as? Int64 } ?? -1
+            print("[AutoBackupTest:DIAG] folder[\(f)] size=\(s)")
+        }
         print("[AutoBackupTest:DIAG] sourceCore items count=\(sourceItems.count)")
         print("[AutoBackupTest:DIAG] sourceCore contents=\(sourceItems.prefix(5).map { String($0.content.prefix(40)) })")
         print("[AutoBackupTest:DIAG] exportArchiveSnapshot count=\(exportSnapshot.count)")
