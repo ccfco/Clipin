@@ -69,11 +69,27 @@ final class AutoBackupServiceTests: XCTestCase {
         let backupURL = backupFolder.appendingPathComponent(AutoBackupService.backupFilename)
         try await waitUntil { FileManager.default.fileExists(atPath: backupURL.path) }
 
+        // 诊断: CI flaky 排查——dump 备份文件状态 / source core 的可见 item 数。
+        // 本地 PASS 但 CI FAIL 时,这块日志告诉我们 root cause 在哪一层
+        // (① source core 没数据 ② 备份归档构造时丢失 ③ import 路径解析失败)。
+        // 修复后可删除。
+        let sourceItems = (try? core.getItems(limit: 50, offset: 0, typeFilter: nil)) ?? []
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: backupURL.path))
+            .flatMap { $0[.size] as? Int64 } ?? -1
+        print("[AutoBackupTest:DIAG] backupURL=\(backupURL.path)")
+        print("[AutoBackupTest:DIAG] backupFile size=\(fileSize) bytes")
+        print("[AutoBackupTest:DIAG] sourceCore items count=\(sourceItems.count)")
+        print("[AutoBackupTest:DIAG] sourceCore contents=\(sourceItems.prefix(5).map { String($0.content.prefix(40)) })")
+        print("[AutoBackupTest:DIAG] backupFilename=\(AutoBackupService.backupFilename)")
+        print("[AutoBackupTest:DIAG] settings.folderPath=\(SettingsStore.shared.autoBackupFolderPath ?? "nil")")
+
         let (verifyCore, verifyRoot) = try makeCore()
         _ = verifyRoot
         let result = try await ArchiveService.importArchive(from: backupURL, core: verifyCore)
+        print("[AutoBackupTest:DIAG] importResult imported=\(result.importedCount) skippedDup=\(result.skippedDuplicateCount) skippedMissingImg=\(result.skippedMissingImageCount) failedRep=\(result.failedRepresentationCount)")
         XCTAssertGreaterThanOrEqual(result.importedCount, 1)
         let items = try verifyCore.getItems(limit: 50, offset: 0, typeFilter: nil)
+        print("[AutoBackupTest:DIAG] verifyCore items count=\(items.count) contents=\(items.prefix(5).map { String($0.content.prefix(40)) })")
         XCTAssertTrue(items.contains { $0.content == "saved before init" })
     }
 
