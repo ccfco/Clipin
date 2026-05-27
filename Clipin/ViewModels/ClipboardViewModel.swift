@@ -65,10 +65,6 @@ final class ClipboardViewModel: ObservableObject {
     @Published private(set) var launcherNotice: LauncherNotice?
     @Published private(set) var isPreparingPreview = false
     @Published var fileAttachmentPreviewIndex = 0
-    /// 多文件叠放栈最近一次切换方向(+1=向后/→ -1=向前/←):驱动 SwiftUI
-    /// `.transition(.push(from:))` 的 edge 参数,让前景卡总是从用户预期的那一侧滑入。
-    /// 默认 +1 让"item 切到多文件 → 首次出现"不会产生反向 push 错觉。
-    @Published private(set) var lastStepDirection: Int = 1
     @Published private(set) var selectedRepresentationUTIs: [String] = []
     /// 非 nil 表示该 id 的列表行正处于 inline 改名编辑态。
     @Published var renamingItemID: String?
@@ -438,9 +434,6 @@ final class ClipboardViewModel: ObservableObject {
         // 必须 ((x % n) + n) % n 双取余才能把"向左从 0 翻到末尾"算对。
         let next = ((fileAttachmentPreviewIndex + delta) % count + count) % count
         guard next != fileAttachmentPreviewIndex else { return true }
-        // 先记方向再改 index:同一 runloop 内 @Published 变更合并到一次 view update,
-        // SwiftUI 评估 `.transition(.push(from:))` 时拿到的是"新 index + 新方向"配对。
-        lastStepDirection = delta >= 0 ? 1 : -1
         fileAttachmentPreviewIndex = next
         return true
     }
