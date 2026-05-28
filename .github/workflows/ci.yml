@@ -19,7 +19,7 @@ jobs:
     runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # 锁到 Xcode 26.4.1（与本地 macOS 26.4.1 同档），避免 runner 默认 26.2 漏掉
       # 26.3+ 引入的 AppKit 符号（NSGlassEffectView / .glass 在 26.0+，理论上 26.2
