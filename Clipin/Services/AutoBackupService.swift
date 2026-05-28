@@ -98,6 +98,9 @@ final class AutoBackupService: ObservableObject {
 
     private let core: ClipinCore
     private let settings: SettingsStore
+    /// lastBackup* 等状态的持久化后端。默认 `.standard`，单元测试注入独立 suite，
+    /// 让测试实例不污染本机 production app 的 autoBackup.* keys。
+    private let defaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
     private var timer: Timer?
     private var backupTask: Task<Void, Never>?
@@ -114,11 +117,12 @@ final class AutoBackupService: ObservableObject {
         static let lastBackupSkipped = "autoBackup.lastBackupSkipped"
     }
 
-    init(core: ClipinCore, settings: SettingsStore) {
+    init(core: ClipinCore, settings: SettingsStore, defaults: UserDefaults = .standard) {
         self.core = core
         self.settings = settings
+        self.defaults = defaults
 
-        let d = UserDefaults.standard
+        let d = defaults
         self.lastBackupAt = d.object(forKey: Keys.lastBackupAt) as? Date
         self.lastBackupSize = (d.object(forKey: Keys.lastBackupSize) as? NSNumber)?.int64Value ?? 0
         if let p = d.string(forKey: Keys.lastBackupURL) {
@@ -129,9 +133,9 @@ final class AutoBackupService: ObservableObject {
         self.lastBackupSkipped = d.integer(forKey: Keys.lastBackupSkipped)
 
         // 自愈：lastBackupURL 不在当前 settings.autoBackupFolderPath 下 → 视为 stale
-        // state（典型来源是 unit test 用 SettingsStore.shared 跑过后残留的 tmp 路径），
+        // state（典型来源是用户改了备份 folder，旧 folder 下的 lastBackupURL 已不相关），
         // 清掉所有 lastBackup* 相关 published state 和持久化值，避免设置页永久显示
-        // 一个指向不存在 tmp 路径的 "Last backup: ..." 假状态。
+        // 一个指向旧路径的 "Last backup: ..." 假状态。
         purgeStaleBackupStateIfNeeded()
 
         settings.$autoBackupEnabled
@@ -241,7 +245,7 @@ final class AutoBackupService: ObservableObject {
         lastBackupSkipped = skipped
         consecutiveFailures = 0
 
-        let d = UserDefaults.standard
+        let d = defaults
         d.set(date, forKey: Keys.lastBackupAt)
         d.set(url.path, forKey: Keys.lastBackupURL)
         d.set(NSNumber(value: size), forKey: Keys.lastBackupSize)
@@ -268,11 +272,11 @@ final class AutoBackupService: ObservableObject {
     }
 
     private func persist(paused: Bool) {
-        UserDefaults.standard.set(paused, forKey: Keys.paused)
+        defaults.set(paused, forKey: Keys.paused)
     }
 
     private func persist(failures: Int) {
-        UserDefaults.standard.set(failures, forKey: Keys.consecutiveFailures)
+        defaults.set(failures, forKey: Keys.consecutiveFailures)
     }
 
     // MARK: - 用户操作
@@ -293,9 +297,9 @@ final class AutoBackupService: ObservableObject {
     }
 
     /// init 自愈：检测 lastBackupURL 是否还在当前备份文件夹下。不在 → 清掉所有
-    /// lastBackup* 状态。这是 fail-healing 模式，专门解决两类污染：
-    /// ① 单元测试用 SettingsStore.shared + UserDefaults.standard 跑完留下的 tmp 路径
-    /// ② 用户改了 autoBackupFolderPath，旧 folder 下的 lastBackupURL 已不相关
+    /// lastBackup* 状态。这是 fail-healing 模式，解决「用户改了 autoBackupFolderPath，
+    /// 旧 folder 下的 lastBackupURL 已不相关」的污染，避免设置页永久显示指向旧路径的
+    /// 假"上次备份"状态。
     ///
     /// 设计权衡：用户「手动删了真备份文件」也会触发清理——但 lastBackup* 只是 UI
     /// 显示状态，清掉后下次备份会重新写入，没有数据丢失风险；而留着 stale state
@@ -321,7 +325,7 @@ final class AutoBackupService: ObservableObject {
         lastBackupSkipped = 0
         lastBackupError = nil
 
-        let d = UserDefaults.standard
+        let d = defaults
         d.removeObject(forKey: Keys.lastBackupAt)
         d.removeObject(forKey: Keys.lastBackupURL)
         d.removeObject(forKey: Keys.lastBackupSize)

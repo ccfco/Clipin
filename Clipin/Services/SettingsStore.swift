@@ -274,7 +274,7 @@ final class SettingsStore: ObservableObject {
     /// 只在第一次判定时计算一次，避免真正的新用户因为首启已创建本地存储而在下次启动被误判成老用户。
     private var onboardingCohort: OnboardingCohort?
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private let encoder = JSONEncoder()
 
     private enum Keys {
@@ -321,7 +321,11 @@ final class SettingsStore: ObservableObject {
         "autoBackup.lastBackupAt",
     ]
 
-    private init() {
+    /// `defaults` 默认 `.standard`，production 的 `shared` 走这条。单元测试可注入独立
+    /// suite，让测试实例与 production `shared` 读写不同 UserDefaults domain——避免测试
+    /// 改全局备份设置唤醒 app-hosted 进程里 production 的 `AutoBackupService.shared` sink。
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         let decoder = JSONDecoder()
         let storedRetention = defaults.object(forKey: Keys.retentionDays) as? Int ?? 30
         let storedMaxItems = defaults.object(forKey: Keys.maxHistoryItems) as? Int ?? 500
