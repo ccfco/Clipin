@@ -714,8 +714,14 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     /// Tab 键循环：全部 ↔ 📌 ↔ 文本 ↔ 图片 ↔ 文件 ↔ 链接
+    /// 搜索态剔除 .pinned：搜索时 pinned 被 LauncherSearchScope 降级显示为 .all
+    /// （搜索是全局召回，pinned 只是浏览视图），若仍留在循环里会出现「all→pinned」
+    /// 视觉零变化的空转一档，用户感知为「按了 Tab 没反应」。
     func cycleBrowseMode(reverse: Bool = false) {
-        let modes: [LauncherBrowseMode] = [.all, .pinned, .text, .image, .file, .url]
+        let isSearching = !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let modes: [LauncherBrowseMode] = isSearching
+            ? [.all, .text, .image, .file, .url]
+            : [.all, .pinned, .text, .image, .file, .url]
         guard let currentIndex = modes.firstIndex(of: browseMode) else {
             browseMode = .all
             return

@@ -470,6 +470,9 @@ private struct ItemListView: View {
                 // groupGap 单独表达,避免「列表内距 + header 顶距」再次双层叠加。
                 .padding(.bottom, ClipinChrome.gap)
             }
+            // launcher 心智:列表是无 chrome 的纯内容流,与动作面板/引导页/预览滚动区
+            // 一致隐藏滚动指示器(否则「始终显示滚动条」系统设置或鼠标用户下会常驻出现)。
+            .scrollIndicators(.never)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Color.clear.frame(height: ClipinChrome.floatingFooterBand)
             }
