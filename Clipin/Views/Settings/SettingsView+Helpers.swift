@@ -195,6 +195,9 @@ extension SettingsView {
         }
     }
 
+    /// 分节 = contentArea 这块 surface 内的留白区隔，自身不再叠加 surface 背景。
+    /// contentArea 已是面板 surface（与 sidebar 对称），分节若再各自上 surface 就成
+    /// 同色同半径的「卡片套卡片」——内层永远不可见且破坏同心，故只保留 padding 做区隔。
     func contentGroup<Content: View>(
         padding: CGFloat = ClipinChrome.groupGap,
         @ViewBuilder content: () -> Content
@@ -202,9 +205,6 @@ extension SettingsView {
         content()
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(padding)
-            .background(
-                ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
-            )
     }
 
     // MARK: - Utilities

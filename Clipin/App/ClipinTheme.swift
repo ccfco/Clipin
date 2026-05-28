@@ -36,7 +36,9 @@ enum ClipinChrome {
     /// 分组间隔：仅用于「相邻信息块之间」需要看出分界的留白（预览段落、设置分节）。
     static var groupGap: CGFloat { edge * 2 }
 
-    // MARK: 圆角（四档，均为 edge 的整数倍；每向内嵌套一层 −edge，保持同心）
+    // MARK: 圆角（四档，均为 edge 的整数倍）
+    // 同心仅在「内层比外层正好内缩一个 gap」时成立（如 shell⊃surface 内缩 gap → 32−8=24）。
+    // 用 groupGap 内缩或非贴边嵌套（列表中部的行）不满足该前提，不能假定自动同心。
 
     /// 小图标块、徽标、缩略图占位。
     static var cornerTile: CGFloat { edge }
