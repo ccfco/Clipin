@@ -1,6 +1,7 @@
 name: Clipin
 options:
   bundleIdPrefix: com.ccfco
+  developmentLanguage: en
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
@@ -55,6 +56,10 @@ targets:
       - name: Check Spacing Tokens
         script: |
           "${SRCROOT}/scripts/check-spacing-tokens.sh"
+        basedOnDependencyAnalysis: false
+      - name: Check Localization
+        script: |
+          "${SRCROOT}/scripts/check-localization.sh"
         basedOnDependencyAnalysis: false
       - name: Build Rust Core
         script: |

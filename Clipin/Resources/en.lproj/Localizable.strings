@@ -25,13 +25,10 @@
 "Mixed with recent items" = "Mixed with recent items";
 "Separate pinned section" = "Separate pinned section";
 "Only in pinned view" = "Only in pinned view";
-"General" = "General";
-"Privacy" = "Privacy";
 "Sensitive content is always excluded" = "Sensitive content is always excluded";
 "When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off." = "When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off.";
 "Filter out drag-and-drop and app-generated clipboard writes" = "Filter out drag-and-drop and app-generated clipboard writes";
 "Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history." = "Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history.";
-"Retention" = "Retention";
 "Keep unpinned history for" = "Keep unpinned history for";
 "Pinned items are always preserved." = "Pinned items are always preserved.";
 "Max unpinned items" = "Max unpinned items";
@@ -123,7 +120,6 @@
 
 /* PreviewPane - info values */
 "Unknown" = "Unknown";
-"Pinned" = "Pinned";
 
 /* PreviewPane / ClipItemRow / SearchBar - type labels */
 "Text" = "Text";
@@ -194,8 +190,6 @@
 "A calmer home for everything you copy." = "A calmer home for everything you copy.";
 "Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus." = "Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus.";
 "Open Launcher" = "Open Launcher";
-"Paste" = "Paste";
-"Actions" = "Actions";
 "Keyboard-first" = "Keyboard-first";
 "Open, filter, act, and paste without leaving the home row." = "Open, filter, act, and paste without leaving the home row.";
 "Search images too" = "Search images too";
@@ -263,14 +257,12 @@
 "%d chars" = "%d chars";
 "%d words" = "%d words";
 "%d items" = "%d items";
-"File" = "File";
 "1 file" = "1 file";
 "%d files" = "%d files";
 "%@ + %d more" = "%@ + %d more";
 "Return" = "Return";
 "Tab" = "Tab";
 "Space" = "Space";
-"Delete" = "Delete";
 "Forward Delete" = "Forward Delete";
 "Left" = "Left";
 "Right" = "Right";
@@ -281,7 +273,6 @@
 "Page Up" = "Page Up";
 "Page Down" = "Page Down";
 "Key %d" = "Key %d";
-"English" = "English";
 "Fine-tune keyboard behavior, launch defaults, and how Clipin looks." = "Fine-tune keyboard behavior, launch defaults, and how Clipin looks.";
 "Control which clipboard writes are ignored so sensitive or noisy content stays out." = "Control which clipboard writes are ignored so sensitive or noisy content stays out.";
 "Set how long history stays around and when unpinned items should be trimmed." = "Set how long history stays around and when unpinned items should be trimmed.";
@@ -396,8 +387,6 @@
 "notice.pastedWithFormats" = "Pasted with %d formats — formatting preserved";
 "action.pasteAsHTML" = "Paste as HTML";
 "action.pasteAsRTF" = "Paste as RTF";
-"Paste as HTML" = "Paste as HTML";
-"Paste as RTF" = "Paste as RTF";
 
 /* SearchBar / PreviewPane —— Codex review 指出的缺失 key */
 "Search clipboard history…" = "Search clipboard history…";
@@ -434,3 +423,11 @@
 "Use Default Folder" = "Use Default Folder";
 "Default: %@" = "Default: %@";
 "Default: iCloud Drive · %@" = "Default: iCloud Drive · %@";
+
+/* Settings backup / privacy / about — static UI strings */
+"iCloud Drive is not enabled" = "iCloud Drive is not enabled";
+"Backups will be saved locally. Enable iCloud Drive in System Settings to sync across Macs." = "Backups will be saved locally. Enable iCloud Drive in System Settings to sync across Macs.";
+"Open System Settings…" = "Open System Settings…";
+"Includes sensitive content from password managers and transient app writes." = "Includes sensitive content from password managers and transient app writes.";
+"Browse the repository, all shipped releases, or report a bug—everything on GitHub." = "Browse the repository, all shipped releases, or report a bug—everything on GitHub.";
+"Clean copy" = "Clean copy";

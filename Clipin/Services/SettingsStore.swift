@@ -10,7 +10,8 @@ enum AppLanguage: String, CaseIterable {
     var displayName: String {
         switch self {
         case .system:       return NSLocalizedString("System Default", comment: "")
-        case .english:      return NSLocalizedString("English", comment: "")
+        // 语言名固定用母语名（endonym），不随界面语言翻译——与 macOS 系统设置语言列表一致。
+        case .english:      return "English"
         case .simplifiedCN: return "简体中文"
         }
     }

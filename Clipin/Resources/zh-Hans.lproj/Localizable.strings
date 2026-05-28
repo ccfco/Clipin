@@ -25,13 +25,10 @@
 "Mixed with recent items" = "与最近项目混排";
 "Separate pinned section" = "单独固定分组";
 "Only in pinned view" = "仅在固定视图显示";
-"General" = "通用";
-"Privacy" = "隐私";
 "Sensitive content is always excluded" = "始终排除敏感内容";
 "When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off." = "当 1Password、Bitwarden 等应用将内容标记为敏感时，Clipin 永远不会记录。此功能不可关闭。";
 "Filter out drag-and-drop and app-generated clipboard writes" = "过滤拖拽和应用自动写入的剪贴板内容";
 "Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history." = "跳过非用户主动复制触发的剪贴板条目。如果历史记录中频繁出现意外内容，请开启此选项。";
-"Retention" = "保留策略";
 "Keep unpinned history for" = "未固定记录保留时长";
 "Pinned items are always preserved." = "固定的条目永久保留。";
 "Max unpinned items" = "最多未固定条目数";
@@ -123,7 +120,6 @@
 
 /* PreviewPane - info values */
 "Unknown" = "未知";
-"Pinned" = "已固定";
 
 /* PreviewPane / ClipItemRow / SearchBar - type labels */
 "Text" = "文本";
@@ -194,8 +190,6 @@
 "A calmer home for everything you copy." = "给每一次复制，一个从容归处。";
 "Clipin stays quietly in your menu bar, keeps copied text, images, links, and files searchable, and lets you paste without breaking focus." = "Clipin 安静地待在菜单栏，把你复制过的文本、图片、链接和文件都收进可搜索的短期记忆里，让粘贴不再打断节奏。";
 "Open Launcher" = "呼出面板";
-"Paste" = "粘贴";
-"Actions" = "动作";
 "Keyboard-first" = "键盘优先";
 "Open, filter, act, and paste without leaving the home row." = "呼出、筛选、执行和粘贴，都不需要离开键盘主区。";
 "Search images too" = "图片也能搜";
@@ -263,14 +257,12 @@
 "%d chars" = "%d 字符";
 "%d words" = "%d 词";
 "%d items" = "%d 项";
-"File" = "文件";
 "1 file" = "1 个文件";
 "%d files" = "%d 个文件";
 "%@ + %d more" = "%@ + 另外 %d 项";
 "Return" = "回车";
 "Tab" = "Tab";
 "Space" = "空格";
-"Delete" = "删除";
 "Forward Delete" = "向前删除";
 "Left" = "左方向键";
 "Right" = "右方向键";
@@ -281,7 +273,6 @@
 "Page Up" = "Page Up";
 "Page Down" = "Page Down";
 "Key %d" = "按键 %d";
-"English" = "English";
 "Fine-tune keyboard behavior, launch defaults, and how Clipin looks." = "微调键盘行为、启动默认入口，以及 Clipin 的整体观感。";
 "Control which clipboard writes are ignored so sensitive or noisy content stays out." = "控制哪些剪贴板写入会被忽略，让敏感或噪音内容留在历史之外。";
 "Set how long history stays around and when unpinned items should be trimmed." = "设置历史记录保留多久，以及未固定条目何时开始清理。";
@@ -396,8 +387,6 @@
 "notice.pastedWithFormats" = "已粘贴 %d 种格式 — 格式已保留";
 "action.pasteAsHTML" = "粘贴为 HTML";
 "action.pasteAsRTF" = "粘贴为 RTF";
-"Paste as HTML" = "粘贴为 HTML";
-"Paste as RTF" = "粘贴为 RTF";
 
 /* SearchBar / PreviewPane —— Codex review 指出的缺失 key */
 "Search clipboard history…" = "搜索剪贴板历史…";
@@ -434,3 +423,11 @@
 "Use Default Folder" = "使用默认文件夹";
 "Default: %@" = "默认：%@";
 "Default: iCloud Drive · %@" = "默认：iCloud Drive · %@";
+
+/* 设置页备份 / 隐私 / 关于 —— 静态界面文案 */
+"iCloud Drive is not enabled" = "未启用 iCloud Drive";
+"Backups will be saved locally. Enable iCloud Drive in System Settings to sync across Macs." = "备份将保存在本地。在系统设置中启用 iCloud Drive 即可在多台 Mac 之间同步。";
+"Open System Settings…" = "打开系统设置…";
+"Includes sensitive content from password managers and transient app writes." = "包括来自密码管理器和应用临时写入的敏感内容。";
+"Browse the repository, all shipped releases, or report a bug—everything on GitHub." = "浏览仓库、查看所有已发布版本，或反馈问题——全都在 GitHub 上。";
+"Clean copy" = "复制净化链接";
