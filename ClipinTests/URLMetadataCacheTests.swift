@@ -50,9 +50,49 @@ final class URLMetadataCacheTests: XCTestCase {
         XCTAssertEqual(imageURL, "https://example.com/legacy/share.png")
     }
 
-    func testAutoFetchPolicySkipsPrivateHosts() throws {
+    func testAutoFetchPolicyAllowsLocalHosts() throws {
         let url = try XCTUnwrap(URL(string: "http://localhost:8810/report.html"))
 
-        XCTAssertFalse(URLMetadataCache.shouldAutoFetchMetadata(for: url))
+        XCTAssertTrue(URLMetadataCache.shouldAutoFetchMetadata(for: url))
+    }
+
+    func testAutoFetchPolicyAllowsPrivateLANHosts() throws {
+        let url = try XCTUnwrap(URL(string: "http://192.168.1.20:9210/login"))
+
+        XCTAssertTrue(URLMetadataCache.shouldAutoFetchMetadata(for: url))
+    }
+
+    func testAutoFetchPolicySkipsTokenAndWebhookURLs() throws {
+        let magicLink = try XCTUnwrap(URL(string: "https://example.com/login?token=one-shot"))
+        let webhook = try XCTUnwrap(URL(string: "https://example.com/api/webhook/build"))
+
+        XCTAssertFalse(URLMetadataCache.shouldAutoFetchMetadata(for: magicLink))
+        XCTAssertFalse(URLMetadataCache.shouldAutoFetchMetadata(for: webhook))
+    }
+
+    func testExtractOGImageAllowsLocalURL() throws {
+        let html = """
+        <html><head>
+        <meta property="og:image" content="http://localhost:8810/share-card.png">
+        </head><body></body></html>
+        """
+        let baseURL = try XCTUnwrap(URL(string: "http://localhost:8810/report.html"))
+
+        let imageURL = URLMetadataCache.extractOGImageURL(in: html, baseURL: baseURL)
+
+        XCTAssertEqual(imageURL, "http://localhost:8810/share-card.png")
+    }
+
+    func testExtractOGImageSkipsWebhookURL() throws {
+        let html = """
+        <html><head>
+        <meta property="og:image" content="https://example.com/webhook/share-card.png">
+        </head><body></body></html>
+        """
+        let baseURL = try XCTUnwrap(URL(string: "https://example.com/report.html"))
+
+        let imageURL = URLMetadataCache.extractOGImageURL(in: html, baseURL: baseURL)
+
+        XCTAssertNil(imageURL)
     }
 }

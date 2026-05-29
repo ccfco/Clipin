@@ -86,37 +86,6 @@ actor URLMetadataCache {
         return items.contains { sensitiveQueryKeys.contains($0.name.lowercased()) }
     }
 
-    /// host 是否是私网/回环地址。剪贴板里出现 10.x / 172.16-31.x / 192.168.x / 127.x / ::1 /
-    /// fe80::/10 这些 host 时，"选中即 GET" 大概率落到用户内网管理后台（路由器、NAS、
-    /// 容器面板等），可能直接触发管理动作。一律不自动抓 title。
-    private nonisolated static func hasPrivateHost(_ url: URL) -> Bool {
-        guard let host = url.host?.lowercased() else { return false }
-        if host == "localhost" || host == "::1" || host.hasPrefix("[::1]") { return true }
-        if host.hasPrefix("fe80:") || host.hasPrefix("[fe80:") { return true }
-        let parts = host.split(separator: ".")
-        guard parts.count == 4,
-              let a = Int(parts[0]),
-              let b = Int(parts[1]),
-              parts[2].allSatisfy({ $0.isNumber }),
-              parts[3].allSatisfy({ $0.isNumber })
-        else { return false }
-        // 0.0.0.0/8 any-cast / "this network"
-        if a == 0 { return true }
-        // 10.0.0.0/8
-        if a == 10 { return true }
-        // 100.64.0.0/10 carrier-grade NAT（运营商内网，常见于移动网络/家用宽带后段）
-        if a == 100, (64...127).contains(b) { return true }
-        // 127.0.0.0/8 loopback
-        if a == 127 { return true }
-        // 169.254.0.0/16 link-local
-        if a == 169, b == 254 { return true }
-        // 172.16.0.0/12
-        if a == 172, (16...31).contains(b) { return true }
-        // 192.168.0.0/16
-        if a == 192, b == 168 { return true }
-        return false
-    }
-
     /// URL path 是否带 webhook/callback 风格片段。这些路径几乎都是「GET 即触发动作」，
     /// 命中一律不自动抓 title。
     private nonisolated static func hasWebhookPath(_ url: URL) -> Bool {
@@ -129,13 +98,13 @@ actor URLMetadataCache {
     }
 
     nonisolated static func shouldAutoFetchMetadata(for url: URL) -> Bool {
-        !hasSensitiveToken(url) && !hasPrivateHost(url) && !hasWebhookPath(url)
+        !hasSensitiveToken(url) && !hasWebhookPath(url)
     }
 
     private nonisolated static func fetch(urlString: String) async -> Snapshot {
         guard let url = URL(string: urlString) else { return Snapshot(title: nil, ogImageURL: nil) }
-        // 三道硬性黑名单：token query / 私网 host / webhook 路径。这三类无论用户开关如何
-        // 都不自动 GET——预览侧不能默默触发用户路由器/Webhook/审计敏感的远端动作。
+        // 硬性黑名单只挡「选中即 GET」可能消费凭证或触发动作的 URL。
+        // localhost / 内网链接是开发和自托管场景的常见剪贴板内容，不能按 host 误伤。
         guard shouldAutoFetchMetadata(for: url) else { return Snapshot(title: nil, ogImageURL: nil) }
         let request = makeHTMLPrefixRequest(for: url)
         // HTML metadata 只需要页面前缀；大页面 Content-Length 超限不应导致 title/OG 全部失败。
@@ -173,10 +142,10 @@ actor URLMetadataCache {
     /// 相对路径以 baseURL 为锚转绝对路径——CDN 拼接 src 时 src 可能是 /og/foo.png。
     /// 校验 absoluteURL.host 非空避免 javascript: / data: 等非 HTTP scheme 漏进来。
     ///
-    /// 安全防护：用户复制的原 URL 经过 sensitiveToken/privateHost/webhook 黑名单，
+    /// 安全防护：用户复制的原 URL 经过 sensitiveToken/webhook 黑名单，
     /// 但 og:image URL 是页面注入的、独立 URL——恶意 producer 可能把 og:image 写成
-    /// `http://192.168.1.1/admin` 让 Clipin 预览时自动 GET 私网。在这里额外过 host
-    /// 黑名单（私网 + webhook 路径），否则拉 og:image 等于绕开第一层防护。
+    /// webhook/callback 让 Clipin 预览时自动 GET。在这里额外过 webhook 路径黑名单；
+    /// 不按 host 屏蔽，否则会误伤 localhost 开发页和自托管服务的分享图。
     nonisolated static func extractOGImageURL(in scope: String, baseURL: URL) -> String? {
         let candidate = extractMetaContent(in: scope, property: "og:image")
             ?? extractMetaContent(in: scope, property: "og:image:url")
@@ -198,8 +167,8 @@ actor URLMetadataCache {
               let host = url.host, !host.isEmpty else {
             return nil
         }
-        // 二次安全过滤：og:image URL 自身也不允许私网 / webhook
-        if hasPrivateHost(url) || hasWebhookPath(url) { return nil }
+        // 二次安全过滤：og:image URL 自身也不允许 webhook/callback。
+        if hasWebhookPath(url) { return nil }
         return url.absoluteString
     }
 

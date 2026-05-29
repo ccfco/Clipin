@@ -63,8 +63,7 @@ final class ClipboardViewModel: ObservableObject {
     @Published var isShortcutHintVisible: Bool = false
     @Published private(set) var launcherNotice: LauncherNotice?
     @Published private(set) var isPreparingPreview = false
-    @Published private(set) var isLoadingSelectedPayload = false
-    @Published private(set) var isPreviewNetworkLoading = false
+    @Published private(set) var isLauncherLoading = false
     @Published var fileAttachmentPreviewIndex = 0
     @Published private(set) var selectedRepresentationUTIs: [String] = []
     /// 非 nil 表示该 id 的列表行正处于 inline 改名编辑态。
@@ -205,7 +204,7 @@ final class ClipboardViewModel: ObservableObject {
     private var ocrSubscription: AnyCancellable?
     private var settingsSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
-    private var previewNetworkLoadingKey: String?
+    private var launcherLoadingSources: Set<LauncherLoadingSource> = []
     private var skipNextDebouncedLoad = false
     private var sessionBaseBrowseMode: LauncherBrowseMode
     private var noticeTask: Task<Void, Never>?
@@ -234,8 +233,10 @@ final class ClipboardViewModel: ObservableObject {
     var onCloseRequested: (() -> Void)?
     var onOpenSettingsRequested: (() -> Void)?
 
-    var isLauncherLoading: Bool {
-        isLoadingSelectedPayload || isPreparingPreview || isPreviewNetworkLoading
+    private enum LauncherLoadingSource: Hashable {
+        case selectedPayload
+        case quickLookPreparation
+        case previewNetwork(String)
     }
 
     init(core: ClipinCore, settings: SettingsStore = .shared) {
@@ -353,9 +354,7 @@ final class ClipboardViewModel: ObservableObject {
         previewTask?.cancel()
         previewTask = nil
         isPreparingPreview = false
-        isLoadingSelectedPayload = false
-        previewNetworkLoadingKey = nil
-        isPreviewNetworkLoading = false
+        clearLauncherLoading()
         fileAttachmentPreviewIndex = 0
         selectedItemID = id
         reloadRepresentationsForSelected()
@@ -368,14 +367,14 @@ final class ClipboardViewModel: ObservableObject {
         // 用户连按 Return/⌘O 重复 toast，根本不知道是 DB 故障。失败时显式 notice。
         let core = self.core
         let capturedId = id
-        isLoadingSelectedPayload = true
+        setLauncherLoading(true, source: .selectedPayload)
         loadItemTask = Task {
             let result: Result<ClipItem, Error> = await Task.detached(priority: .userInitiated) {
                 do { return .success(try core.getItem(id: capturedId)) }
                 catch { return .failure(error) }
             }.value
             guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
-            self.isLoadingSelectedPayload = false
+            self.setLauncherLoading(false, source: .selectedPayload)
             switch result {
             case .success(let item):
                 self.selectedItem = item
@@ -388,14 +387,26 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func setPreviewNetworkLoading(_ isLoading: Bool, key: String) {
+        setLauncherLoading(isLoading, source: .previewNetwork(key))
+    }
+
+    private func setLauncherLoading(_ isLoading: Bool, source: LauncherLoadingSource) {
         if isLoading {
-            previewNetworkLoadingKey = key
-            isPreviewNetworkLoading = true
-            return
+            launcherLoadingSources.insert(source)
+        } else {
+            launcherLoadingSources.remove(source)
         }
-        guard previewNetworkLoadingKey == key else { return }
-        previewNetworkLoadingKey = nil
-        isPreviewNetworkLoading = false
+        let nextValue = !launcherLoadingSources.isEmpty
+        if isLauncherLoading != nextValue {
+            isLauncherLoading = nextValue
+        }
+    }
+
+    private func clearLauncherLoading() {
+        launcherLoadingSources.removeAll()
+        if isLauncherLoading {
+            isLauncherLoading = false
+        }
     }
 
     func reloadRepresentationsForSelected() {
@@ -675,6 +686,7 @@ final class ClipboardViewModel: ObservableObject {
         let core = self.core
         let neighborItemLimit = Self.previewNeighborItemLimit
         isPreparingPreview = true
+        setLauncherLoading(true, source: .quickLookPreparation)
         previewTask = Task { @MainActor [weak self] in
             // 旧实现用 Task.detached 切断了结构化 cancellation 链——外层 previewTask.cancel()
             // 只会让 wrapper 抛 CancellationError，detached 内的 resolveSession 仍然继续扫
@@ -707,6 +719,7 @@ final class ClipboardViewModel: ObservableObject {
             guard !Task.isCancelled, let self, self.selectedItemID == selectedItemID else { return }
             self.previewTask = nil
             self.isPreparingPreview = false
+            self.setLauncherLoading(false, source: .quickLookPreparation)
             guard let session else {
                 self.showNotice(NSLocalizedString("Could not preview this item.", comment: ""), style: .error)
                 return
@@ -720,6 +733,7 @@ final class ClipboardViewModel: ObservableObject {
         previewTask?.cancel()
         previewTask = nil
         isPreparingPreview = false
+        setLauncherLoading(false, source: .quickLookPreparation)
     }
 
     func close() { onCloseRequested?() }
