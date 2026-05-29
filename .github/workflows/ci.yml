@@ -10,6 +10,20 @@ on:
       - '**'
 
 jobs:
+  # Rust 依赖供应链审计。独立 job：advisory 库随时更新，新漏洞会让无关 PR 变红——
+  # 拆开后它给独立信号，不污染"代码能否编译/测试通过"的主信号，又不架空门禁。
+  # 跑在 ubuntu 上（纯 cargo 审计，无需 macOS runner，更省更快）。
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Run cargo audit
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: rust
+
   test:
     # macos-latest 当前仍指向 macOS 15，不带 macOS 26 SDK——而 Clipin 用到
     # NSGlassEffectView / .glass buttonStyle 等 Tahoe (macOS 26) 新 API，
@@ -40,16 +54,26 @@ jobs:
         run: |
           RUSTC="$(rustup which rustc)" rustup run stable cargo test --manifest-path rust/Cargo.toml --lib
 
+      # 预提交守卫只挂在 Xcode preBuildScripts 上，绕过 Xcode 的 PR 路径（脚本/CI-only
+      # 改动）不会被校验。CI 显式跑一遍，间距/本地化回归在合并前必中。
+      - name: Spacing & localization guards
+        run: |
+          bash scripts/check-spacing-tokens.sh
+          bash scripts/check-localization.sh
+
       - name: Generate Xcode project
         run: xcodegen generate
 
       - name: macOS arm64 build
+        # 必须显式 arch=arm64：generic/platform=macOS 会让链接阶段隐式带上 x86_64，
+        # 而 build-rust.sh 只产 aarch64-apple-darwin 静态库，x86_64 链接缺 UniFFI 符号。
+        # （CLAUDE.md「只发 Apple Silicon / arm64」红线；test 步骤也用同款 destination）
         run: |
           xcodebuild \
             -project Clipin.xcodeproj \
             -scheme Clipin \
             -configuration Debug \
-            -destination 'generic/platform=macOS' \
+            -destination 'platform=macOS,arch=arm64' \
             CODE_SIGNING_ALLOWED=NO \
             build
 
