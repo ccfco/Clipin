@@ -634,6 +634,56 @@ mod tests {
     }
 
     #[test]
+    fn test_search_sort_priority_full_chain() {
+        // 覆盖搜索排序完整优先级链 is_pinned > paste_count > copy_count > created_at。
+        // 用 2 字符查询走 LIKE 路径（raw_rank=None），把"相关度"这一级摘掉后，剩下四级
+        // 可用纯数据差异逐级隔离验证 SQL ORDER BY 与 compare_search_hits 的层级一致。
+        // 补 keeps_hot_item_first / ranks_candidates_before_limit 未覆盖的两段：顶层
+        // is_pinned 压制 paste_count、以及 copy_count 压制 created_at。
+        let core = setup_core();
+
+        // ① 已固定但零粘贴：is_pinned 必须压过下面 paste_count=5 的高频项
+        let pinned = core
+            .save_item("zq pinned".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.toggle_pin(pinned.id.clone()).unwrap();
+
+        // ② 未固定 + paste_count=5：压过 copy_count / created_at
+        let hot_paste = core
+            .save_item("zq hot paste".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        for _ in 0..5 {
+            core.increment_paste_count(hot_paste.id.clone()).unwrap();
+        }
+
+        // ③ 未固定 + copy_count=4（同内容重复保存触发 dedup 累加），created_at 较旧：
+        //    必须靠 copy_count 压过下面 created_at 更新的 ④
+        for _ in 0..4 {
+            core.save_item("zq hot copy".into(), ClipType::Text, None, None, None)
+                .unwrap();
+        }
+
+        // ④ 未固定、copy=1、paste=0，但 created_at 最新：应排末位（输给 ③ 的 copy_count）
+        core.save_item("zq newest".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        let expected = [
+            "zq pinned",    // is_pinned 最高优先
+            "zq hot paste", // paste_count > copy_count / created_at
+            "zq hot copy",  // copy_count > created_at
+            "zq newest",    // 末位
+        ];
+
+        let results = core.search("zq".into(), None).unwrap();
+        let order: Vec<&str> = results.iter().map(|i| i.content.as_str()).collect();
+        assert_eq!(order, expected, "full ClipItem 搜索排序优先级链不符");
+
+        let list_results = core.search_list_items("zq".into(), None).unwrap();
+        let list_order: Vec<&str> = list_results.iter().map(|i| i.preview.as_str()).collect();
+        assert_eq!(list_order, expected, "ClipListItem 搜索排序优先级链不符");
+    }
+
+    #[test]
     fn test_export_archive_snapshot_returns_stable_full_order() {
         let core = setup_core();
         let base = 1_700_000_000_000;

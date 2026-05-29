@@ -708,7 +708,9 @@ impl Storage {
                 Ok(PreservedItemState {
                     first_copied_at: row.get(0)?,
                     copy_count: row.get(1)?,
-                    paste_count: row.get(2).unwrap_or(0),
+                    // paste_count 是 NOT NULL DEFAULT 0，不可能为 NULL。用 ? 让解码
+                    // 错误/列错位响亮失败，而非 unwrap_or(0) 静默吞成 0（CLAUDE.md「不兜底」）。
+                    paste_count: row.get(2)?,
                     is_pinned: row.get(3)?,
                     alias: row.get(4)?,
                 })
@@ -2174,8 +2176,10 @@ impl Storage {
     #[cfg(test)]
     pub fn schema_version(&self) -> i32 {
         let conn = self.conn();
+        // PRAGMA user_version 必返回一行整数；查询失败说明 DB 句柄异常，测试里应响亮
+        // 失败而非 unwrap_or(0) 伪装成"版本 0"误导 migration 断言。
         conn.query_row("PRAGMA user_version", [], |r| r.get(0))
-            .unwrap_or(0)
+            .expect("PRAGMA user_version query failed")
     }
 
     fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<ClipItem> {
@@ -2193,7 +2197,8 @@ impl Storage {
             copy_count: row.get(9)?,
             first_copied_at: row.get(10)?,
             ocr_text: row.get(11)?,
-            paste_count: row.get(12).unwrap_or(0),
+            // NOT NULL DEFAULT 0，用 ? 而非 unwrap_or(0)：列错位时立刻报错不静默兜底。
+            paste_count: row.get(12)?,
             alias: row.get(13)?,
             attachment_paths: row.get(14)?,
         })
@@ -2227,8 +2232,10 @@ impl Storage {
             created_at: row.get(6)?,
             image_path: row.get(7)?,
             char_count: row.get(8)?,
-            paste_count: row.get(9).unwrap_or(0),
-            copy_count: row.get(10).unwrap_or(1),
+            // paste_count/copy_count 均 NOT NULL（DEFAULT 0 / 1），用 ? 让列错位响亮失败，
+            // 不用 unwrap_or 静默兜底——否则解码到错误字段会被伪装成合法的 0/1（CLAUDE.md「不兜底」）。
+            paste_count: row.get(9)?,
+            copy_count: row.get(10)?,
             image_width: row.get(11)?,
             image_height: row.get(12)?,
             alias: row.get(13)?,
