@@ -506,8 +506,6 @@ struct URLPreviewView: View {
     /// 「已确认页面有 og:image、图片字节还在下载」的窗口。仅此窗口显示骨架占位——
     /// 没有 og:image 的页面（很多）从不进入此态，不会先闪一下占位再消失。
     @State private var ogImageLoading = false
-    /// URL metadata / OG image 任一网络请求仍在进行时，右侧预览顶部显示轻量流光。
-    @State private var previewLoading = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var url: URL? { URL(string: urlString) }
@@ -520,10 +518,6 @@ struct URLPreviewView: View {
     var body: some View {
         PreviewFadeFooterContainer(footerEntries: footerEntries) {
             VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                if previewLoading {
-                    previewLoadingGlow
-                        .transition(.opacity)
-                }
                 if let ogImage {
                     ogImageHero(ogImage)
                         .transition(.opacity)
@@ -543,46 +537,38 @@ struct URLPreviewView: View {
             pageTitle = nil
             ogImage = nil
             ogImageLoading = false
-            previewLoading = false
             // 用户关闭自动抓取后预览只显示 URL 本身——硬性黑名单（私网/webhook/token query）
             // 仍在 actor 内执行，这里只跳过用户偏好层
             guard SettingsStore.shared.urlPreviewAutoFetch else { return }
             guard let url, URLMetadataCache.shouldAutoFetchMetadata(for: url) else { return }
             let requested = urlString
-            withAnimation(ClipinMotion.feedback) { previewLoading = true }
+            vm.setPreviewNetworkLoading(true, key: requested)
             let snapshot = await URLMetadataCache.shared.metadata(for: requested)
             // 快速切条目时旧 URL 的响应可能晚到 → guard 当前仍在显示同一 URL
-            guard !Task.isCancelled, requested == urlString else { return }
+            guard !Task.isCancelled, requested == urlString else {
+                vm.setPreviewNetworkLoading(false, key: requested)
+                return
+            }
             pageTitle = snapshot.title
             // OG image 下载是独立网络请求，独立检查 task 状态——拉的同时用户可能已切走条目。
             // 拿到 og:image 链接即进入 loading 态显示骨架，避免「先空白、图突然插进来」的跳动。
             guard let ogURL = snapshot.ogImageURL else {
-                withAnimation(ClipinMotion.feedback) { previewLoading = false }
+                vm.setPreviewNetworkLoading(false, key: requested)
                 return
             }
             withAnimation(ClipinMotion.feedback) { ogImageLoading = true }
             let img = await OGImageCache.shared.image(for: ogURL)
-            guard !Task.isCancelled, requested == urlString else { return }
+            guard !Task.isCancelled, requested == urlString else {
+                vm.setPreviewNetworkLoading(false, key: requested)
+                return
+            }
             // img 可能为 nil（下载失败）→ 两个分支都不显示，占位淡出，退化到无图布局
             withAnimation(ClipinMotion.feedback) {
                 ogImage = img
                 ogImageLoading = false
-                previewLoading = false
             }
+            vm.setPreviewNetworkLoading(false, key: requested)
         }
-    }
-
-    private var previewLoadingGlow: some View {
-        Capsule(style: .continuous)
-            .fill(Color.primary.opacity(0.045))
-            .frame(height: 3)
-            .overlay {
-                if !reduceMotion {
-                    ShimmerSweep()
-                        .opacity(0.75)
-                }
-            }
-            .clipShape(Capsule(style: .continuous))
     }
 
     /// OG image 顶部大渲染：方角（与列表行图片缩略图 / FilePreviewBody 大缩略图同款视觉语言）。

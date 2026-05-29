@@ -193,6 +193,22 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.hasMore)
     }
 
+    func testLauncherLoadingTracksCurrentPreviewNetworkRequest() throws {
+        let viewModel = ClipboardViewModel(core: try makeCore())
+
+        XCTAssertFalse(viewModel.isLauncherLoading)
+
+        viewModel.setPreviewNetworkLoading(true, key: "old-url")
+        XCTAssertTrue(viewModel.isLauncherLoading)
+
+        viewModel.setPreviewNetworkLoading(true, key: "new-url")
+        viewModel.setPreviewNetworkLoading(false, key: "old-url")
+        XCTAssertTrue(viewModel.isLauncherLoading, "A stale URL task must not clear the current loading indicator")
+
+        viewModel.setPreviewNetworkLoading(false, key: "new-url")
+        XCTAssertFalse(viewModel.isLauncherLoading)
+    }
+
     private func makeCore() throws -> ClipinCore {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinViewModelTests-\(UUID().uuidString)", isDirectory: true)

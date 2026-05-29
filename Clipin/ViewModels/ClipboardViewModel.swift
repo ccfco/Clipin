@@ -63,6 +63,8 @@ final class ClipboardViewModel: ObservableObject {
     @Published var isShortcutHintVisible: Bool = false
     @Published private(set) var launcherNotice: LauncherNotice?
     @Published private(set) var isPreparingPreview = false
+    @Published private(set) var isLoadingSelectedPayload = false
+    @Published private(set) var isPreviewNetworkLoading = false
     @Published var fileAttachmentPreviewIndex = 0
     @Published private(set) var selectedRepresentationUTIs: [String] = []
     /// 非 nil 表示该 id 的列表行正处于 inline 改名编辑态。
@@ -203,6 +205,7 @@ final class ClipboardViewModel: ObservableObject {
     private var ocrSubscription: AnyCancellable?
     private var settingsSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
+    private var previewNetworkLoadingKey: String?
     private var skipNextDebouncedLoad = false
     private var sessionBaseBrowseMode: LauncherBrowseMode
     private var noticeTask: Task<Void, Never>?
@@ -230,6 +233,10 @@ final class ClipboardViewModel: ObservableObject {
     var onCopyRequested: ((ClipItem) -> Void)?
     var onCloseRequested: (() -> Void)?
     var onOpenSettingsRequested: (() -> Void)?
+
+    var isLauncherLoading: Bool {
+        isLoadingSelectedPayload || isPreparingPreview || isPreviewNetworkLoading
+    }
 
     init(core: ClipinCore, settings: SettingsStore = .shared) {
         self.core = core
@@ -346,6 +353,9 @@ final class ClipboardViewModel: ObservableObject {
         previewTask?.cancel()
         previewTask = nil
         isPreparingPreview = false
+        isLoadingSelectedPayload = false
+        previewNetworkLoadingKey = nil
+        isPreviewNetworkLoading = false
         fileAttachmentPreviewIndex = 0
         selectedItemID = id
         reloadRepresentationsForSelected()
@@ -358,12 +368,14 @@ final class ClipboardViewModel: ObservableObject {
         // 用户连按 Return/⌘O 重复 toast，根本不知道是 DB 故障。失败时显式 notice。
         let core = self.core
         let capturedId = id
+        isLoadingSelectedPayload = true
         loadItemTask = Task {
             let result: Result<ClipItem, Error> = await Task.detached(priority: .userInitiated) {
                 do { return .success(try core.getItem(id: capturedId)) }
                 catch { return .failure(error) }
             }.value
             guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
+            self.isLoadingSelectedPayload = false
             switch result {
             case .success(let item):
                 self.selectedItem = item
@@ -373,6 +385,17 @@ final class ClipboardViewModel: ObservableObject {
                 self.showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
             }
         }
+    }
+
+    func setPreviewNetworkLoading(_ isLoading: Bool, key: String) {
+        if isLoading {
+            previewNetworkLoadingKey = key
+            isPreviewNetworkLoading = true
+            return
+        }
+        guard previewNetworkLoadingKey == key else { return }
+        previewNetworkLoadingKey = nil
+        isPreviewNetworkLoading = false
     }
 
     func reloadRepresentationsForSelected() {

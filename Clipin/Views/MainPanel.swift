@@ -54,15 +54,22 @@ struct MainPanel: View {
         }
         .frame(width: 800, height: 540)
         .overlay(alignment: .top) {
-            if viewModel.isContinuousPasteEnabled {
-                LinearGradient(
-                    colors: [Color.accentColor, Color.accentColor.opacity(0.4)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(height: 2)
-                .transition(.opacity)
+            ZStack(alignment: .top) {
+                if viewModel.isLauncherLoading {
+                    LauncherLoadingGlow()
+                        .transition(.opacity)
+                }
+                if viewModel.isContinuousPasteEnabled {
+                    LinearGradient(
+                        colors: [Color.accentColor, Color.accentColor.opacity(0.4)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(height: 2)
+                    .transition(.opacity)
+                }
             }
+            .allowsHitTesting(false)
         }
         .overlay(alignment: .bottom) {
             bottomBar
@@ -111,6 +118,7 @@ struct MainPanel: View {
             }
         }
         .animation(ClipinMotion.panel, value: viewModel.isContinuousPasteEnabled)
+        .animation(ClipinMotion.feedback, value: viewModel.isLauncherLoading)
         .animation(ClipinMotion.commandReveal, value: viewModel.launcherNotice?.id)
         .overlay(alignment: .bottomTrailing) {
             if viewModel.isShowingActions {
@@ -416,6 +424,53 @@ struct MainPanel: View {
         case .warning: return .orange
         case .error: return .red
         }
+    }
+}
+
+private struct LauncherLoadingGlow: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = max(geo.size.width, 1)
+            let band = max(width * 0.34, 180)
+            ZStack(alignment: .topLeading) {
+                Capsule(style: .continuous)
+                    .fill(Color.primary.opacity(0.10))
+                    .frame(width: band, height: 3)
+                    .blur(radius: 9)
+                    .offset(x: reduceMotion ? (width - band) / 2 : phase * (width + band) - band)
+
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.32))
+                    .frame(width: band * 0.32, height: 1.4)
+                    .blur(radius: 3)
+                    .offset(x: reduceMotion ? width * 0.5 : phase * (width + band) - band * 0.52)
+            }
+            .frame(width: width, height: 12, alignment: .topLeading)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black, location: 0.10),
+                        .init(color: .black, location: 0.90),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .onAppear {
+                guard !reduceMotion else { return }
+                phase = 0
+                withAnimation(.easeInOut(duration: 1.45).repeatForever(autoreverses: true)) {
+                    phase = 1
+                }
+            }
+        }
+        .frame(height: 12)
+        .offset(y: 1)
     }
 }
 
