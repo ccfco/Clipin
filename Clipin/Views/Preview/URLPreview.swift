@@ -128,13 +128,15 @@ actor URLMetadataCache {
             || path.contains("/oauth/callback")
     }
 
+    nonisolated static func shouldAutoFetchMetadata(for url: URL) -> Bool {
+        !hasSensitiveToken(url) && !hasPrivateHost(url) && !hasWebhookPath(url)
+    }
+
     private nonisolated static func fetch(urlString: String) async -> Snapshot {
         guard let url = URL(string: urlString) else { return Snapshot(title: nil, ogImageURL: nil) }
         // 三道硬性黑名单：token query / 私网 host / webhook 路径。这三类无论用户开关如何
         // 都不自动 GET——预览侧不能默默触发用户路由器/Webhook/审计敏感的远端动作。
-        if hasSensitiveToken(url) { return Snapshot(title: nil, ogImageURL: nil) }
-        if hasPrivateHost(url) { return Snapshot(title: nil, ogImageURL: nil) }
-        if hasWebhookPath(url) { return Snapshot(title: nil, ogImageURL: nil) }
+        guard shouldAutoFetchMetadata(for: url) else { return Snapshot(title: nil, ogImageURL: nil) }
         let request = makeHTMLPrefixRequest(for: url)
         // HTML metadata 只需要页面前缀；大页面 Content-Length 超限不应导致 title/OG 全部失败。
         guard let data = await FaviconCache.downloadHTMLPrefixWithLimit(request, maxBytes: maxHTMLBytes) else {
@@ -179,8 +181,12 @@ actor URLMetadataCache {
         let candidate = extractMetaContent(in: scope, property: "og:image")
             ?? extractMetaContent(in: scope, property: "og:image:url")
             ?? extractMetaContent(in: scope, property: "og:image:secure_url")
+            ?? extractMetaContent(in: scope, property: "twitter:image")
             ?? extractMetaContent(in: scope, name: "twitter:image")
             ?? extractMetaContent(in: scope, name: "twitter:image:src")
+            ?? extractMetaContent(in: scope, name: "thumbnail")
+            ?? extractMetaContent(in: scope, itemprop: "image")
+            ?? extractLinkHref(in: scope, rel: "image_src")
         guard let raw = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
             return nil
         }
@@ -246,7 +252,12 @@ actor URLMetadataCache {
 
     /// 匹配 `<meta property="og:title" content="...">` 或 `<meta name="..." content="...">`，
     /// 也允许 property/content 颠倒顺序。
-    private nonisolated static func extractMetaContent(in html: String, property: String? = nil, name: String? = nil) -> String? {
+    private nonisolated static func extractMetaContent(
+        in html: String,
+        property: String? = nil,
+        name: String? = nil,
+        itemprop: String? = nil
+    ) -> String? {
         let attrName: String
         let attrValue: String
         if let property {
@@ -255,6 +266,9 @@ actor URLMetadataCache {
         } else if let name {
             attrName = "name"
             attrValue = name
+        } else if let itemprop {
+            attrName = "itemprop"
+            attrValue = itemprop
         } else { return nil }
 
         // 两种 attr 顺序都要匹配：property 在前 content 在后，或反之
@@ -271,6 +285,35 @@ actor URLMetadataCache {
             }
         }
         return nil
+    }
+
+    private nonisolated static func extractLinkHref(in html: String, rel: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: "<link[^>]*>",
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else { return nil }
+        let nsHTML = html as NSString
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: nsHTML.length))
+        for match in matches {
+            let tag = nsHTML.substring(with: match.range)
+            guard let foundRel = extractAttribute("rel", in: tag)?.lowercased(),
+                  foundRel.split(whereSeparator: { $0.isWhitespace }).contains(where: { $0 == rel }),
+                  let href = extractAttribute("href", in: tag),
+                  !href.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            return href
+        }
+        return nil
+    }
+
+    private nonisolated static func extractAttribute(_ name: String, in tag: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: "\\b\(name)\\s*=\\s*[\"']([^\"']*)[\"']",
+            options: .caseInsensitive
+        ) else { return nil }
+        let nsTag = tag as NSString
+        guard let match = regex.firstMatch(in: tag, range: NSRange(location: 0, length: nsTag.length)),
+              match.numberOfRanges >= 2 else { return nil }
+        return nsTag.substring(with: match.range(at: 1))
     }
 
     /// 把常见 HTML 实体（&amp; &lt; &gt; &quot; &#39; &nbsp;）还原。
@@ -460,14 +503,33 @@ struct URLPreviewView: View {
     /// OG image：参考 Raycast 把页面分享图放在预览顶部大渲染。
     /// nil = 页面无 og:image / 拉取失败 / 用户关闭自动抓取——预览退化到仅 favicon 布局。
     @State private var ogImage: NSImage?
+    /// 「已确认页面有 og:image、图片字节还在下载」的窗口。仅此窗口显示骨架占位——
+    /// 没有 og:image 的页面（很多）从不进入此态，不会先闪一下占位再消失。
+    @State private var ogImageLoading = false
+    /// URL metadata / OG image 任一网络请求仍在进行时，右侧预览顶部显示轻量流光。
+    @State private var previewLoading = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var url: URL? { URL(string: urlString) }
+
+    /// og:image 顶部大图高度上限。骨架占位与成图共用同一上限 —— 主流 og:image 是 1.91:1，
+    /// 在 maxWidth 560 下渲染高度（≈293）会被这个上限钳住，于是占位与成图几乎等高，
+    /// 图片下完原地淡入替换、不发生布局跳动。
+    private static let ogImageMaxHeight: CGFloat = 220
 
     var body: some View {
         PreviewFadeFooterContainer(footerEntries: footerEntries) {
             VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+                if previewLoading {
+                    previewLoadingGlow
+                        .transition(.opacity)
+                }
                 if let ogImage {
                     ogImageHero(ogImage)
+                        .transition(.opacity)
+                } else if ogImageLoading {
+                    ogImagePlaceholder
+                        .transition(.opacity)
                 }
                 header
                 fullURLBlock
@@ -480,30 +542,72 @@ struct URLPreviewView: View {
         .task(id: urlString) {
             pageTitle = nil
             ogImage = nil
+            ogImageLoading = false
+            previewLoading = false
             // 用户关闭自动抓取后预览只显示 URL 本身——硬性黑名单（私网/webhook/token query）
             // 仍在 actor 内执行，这里只跳过用户偏好层
             guard SettingsStore.shared.urlPreviewAutoFetch else { return }
+            guard let url, URLMetadataCache.shouldAutoFetchMetadata(for: url) else { return }
             let requested = urlString
+            withAnimation(ClipinMotion.feedback) { previewLoading = true }
             let snapshot = await URLMetadataCache.shared.metadata(for: requested)
             // 快速切条目时旧 URL 的响应可能晚到 → guard 当前仍在显示同一 URL
             guard !Task.isCancelled, requested == urlString else { return }
             pageTitle = snapshot.title
-            // OG image 下载是独立网络请求，独立检查 task 状态——拉的同时用户可能已切走条目
-            if let ogURL = snapshot.ogImageURL {
-                let img = await OGImageCache.shared.image(for: ogURL)
-                guard !Task.isCancelled, requested == urlString else { return }
+            // OG image 下载是独立网络请求，独立检查 task 状态——拉的同时用户可能已切走条目。
+            // 拿到 og:image 链接即进入 loading 态显示骨架，避免「先空白、图突然插进来」的跳动。
+            guard let ogURL = snapshot.ogImageURL else {
+                withAnimation(ClipinMotion.feedback) { previewLoading = false }
+                return
+            }
+            withAnimation(ClipinMotion.feedback) { ogImageLoading = true }
+            let img = await OGImageCache.shared.image(for: ogURL)
+            guard !Task.isCancelled, requested == urlString else { return }
+            // img 可能为 nil（下载失败）→ 两个分支都不显示，占位淡出，退化到无图布局
+            withAnimation(ClipinMotion.feedback) {
                 ogImage = img
+                ogImageLoading = false
+                previewLoading = false
             }
         }
     }
 
+    private var previewLoadingGlow: some View {
+        Capsule(style: .continuous)
+            .fill(Color.primary.opacity(0.045))
+            .frame(height: 3)
+            .overlay {
+                if !reduceMotion {
+                    ShimmerSweep()
+                        .opacity(0.75)
+                }
+            }
+            .clipShape(Capsule(style: .continuous))
+    }
+
     /// OG image 顶部大渲染：方角（与列表行图片缩略图 / FilePreviewBody 大缩略图同款视觉语言）。
-    /// 高度上限 220 让图片不会无限挤压下方 metadata；contentMode .fit 不裁切让品牌图完整呈现。
+    /// 高度上限让图片不会无限挤压下方 metadata；contentMode .fit 不裁切让品牌图完整呈现。
     private func ogImageHero(_ image: NSImage) -> some View {
         Image(nsImage: image)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .frame(maxWidth: .infinity, maxHeight: 220, alignment: .center)
+            .frame(maxWidth: .infinity, maxHeight: Self.ogImageMaxHeight, alignment: .center)
+    }
+
+    /// og:image 下载期间的骨架占位：中性底板 + 一道左右流动的微光（参考 Raycast 预览顶部）。
+    /// 高度锚定 ogImageHero 同一上限，让真图淡入时不发生布局跳动。
+    /// reduce-motion 下只保留静态底板、不流动——尊重系统无障碍偏好。
+    private var ogImagePlaceholder: some View {
+        RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
+            .fill(Color.primary.opacity(0.06))
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.ogImageMaxHeight)
+            .overlay {
+                if !reduceMotion {
+                    ShimmerSweep()
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
     }
 
     private var header: some View {
@@ -670,5 +774,40 @@ struct URLPreviewView: View {
         }
         .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// 加载骨架的「流光」：一道柔和的高光带从左扫到右、无限循环，给"内容正在来"的反馈。
+/// 用 primary.opacity 而非纯白，让明暗两种外观下都读作"一道更实的影流过"——
+/// 亮色模式不会因高光融进白底而消失。仅在父视图确认非 reduce-motion 时才挂载。
+private struct ShimmerSweep: View {
+    @State private var sweeping = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            // 高光带宽取半幅：太窄像细线、太宽失去"扫过"的方向感。
+            let band = max(width * 0.5, 40)
+            LinearGradient(
+                colors: [
+                    Color.primary.opacity(0),
+                    Color.primary.opacity(0.10),
+                    Color.primary.opacity(0),
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .frame(width: band, height: geo.size.height)
+            .blur(radius: 6)
+            // 起点：整条带在左侧画布外（右缘贴左边）；终点：整条带移出右侧画布外。
+            .offset(x: sweeping ? width : -band)
+            .onAppear {
+                // 1.25s 单向循环：节奏与 ClipinMotion 体系的"慢呼吸"同档，不抢注意力。
+                withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: false)) {
+                    sweeping = true
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }
