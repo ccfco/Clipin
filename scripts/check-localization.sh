@@ -8,9 +8,17 @@
 #      （key 不对齐 = 某语言静默漏翻；重复 key = Xcode 警告 + 改一处漏一处）
 #
 #   ② 代码字面量缺 key：扫描 Swift 里 Text("…")/Button("…")/Label("…")/
-#      LocalizedStringKey("…") 的字符串字面量——SwiftUI 会把它当 key 查表，
-#      若 Localizable.strings 没有对应 key，中文界面就会 fallback 显示英文。
+#      LocalizedStringKey("…")/.help("…") 的字符串字面量——SwiftUI 会把它当 key
+#      查表，若 Localizable.strings 没有对应 key，中文界面就会 fallback 显示英文。
 #      这正是「改了文案忘了同步 key」漏翻的根因，在构建期挡住。
+#
+#      扫三种文案位置（缺一就会漏翻）：
+#        · 首参字面量    Text("Hi") / .help("Copy")
+#        · 三元两分支    Text(cond ? "Show raw" : "Pretty")   ← 两分支都是字面量才认
+#      扫之前先抹掉非文案参数槽：systemImage:/systemName:（SF Symbol 名）、comment:
+#      （NSLocalizedString 注释）——它们不是用户可见文案，扫到会误判漏翻。只认
+#      「? "A" : "B"」这种两分支皆字面量的三元，故 Text(fmt(x,"yyyy")) 这类格式串
+#      不会被误判成文案。
 #
 # 也可手动运行：./scripts/check-localization.sh
 #
@@ -63,13 +71,29 @@ zh_keys_file=$(mktemp) || { echo "error: 无法创建临时文件（mktemp 失�
 trap 'rm -f "$zh_keys_file"' EXIT
 grep -oE '^[[:space:]]*"([^"\\]|\\.)*"' "$zh" | sed -E 's/^[[:space:]]*"//; s/"$//' > "$zh_keys_file"
 
+# 文案载体：这些调用里的字符串字面量应是可翻译文案。.help 单独带前导点。
+call_re='(Text|Button|Label|LocalizedStringKey)\(|\.help\('
+
 while IFS= read -r file; do
     while IFS=: read -r lineno rawtext; do
         [ -z "${lineno:-}" ] && continue
         case "$rawtext" in *l10n-exempt*) continue ;; esac
-        lits=$(printf '%s\n' "$rawtext" \
-            | grep -oE '(Text|Button|Label|LocalizedStringKey)\(\s*"([^"\\]|\\.)*"' \
-            | sed -E 's/^[A-Za-z]+\(\s*"//; s/"$//')
+        # 先抹掉非文案参数槽（SF Symbol 名 / NSLocalizedString 注释），其值可能是
+        # 字面量或三元，统一吃到行尾的 , 或 ) 之前，避免被当成漏翻文案。
+        cleaned=$(printf '%s' "$rawtext" \
+            | sed -E 's/(systemImage|systemName|image|comment)[[:space:]]*:[[:space:]]*("([^"\]|\\.)*"|[^,)]*)//g')
+        # 该行没有文案载体就跳过（抹槽后再判，防 systemImage 行误入）
+        printf '%s' "$cleaned" | grep -qE "$call_re" || continue
+        # 首参字面量：紧跟 Text(/Button(/Label(/LocalizedStringKey(/.help( 的引号串
+        lits_head=$(printf '%s\n' "$cleaned" \
+            | grep -oE "(${call_re})[[:space:]]*\"([^\"\\]|\\.)*\"" \
+            | sed -E 's/^[^"]*"//; s/"$//')
+        # 三元两分支：? "A" : "B"，两分支都是字面量才提取（已抹掉非文案槽）
+        lits_ternary=$(printf '%s\n' "$cleaned" \
+            | grep -oE '\?[[:space:]]*"([^"\]|\\.)*"[[:space:]]*:[[:space:]]*"([^"\]|\\.)*"' \
+            | grep -oE '"([^"\]|\\.)*"' \
+            | sed -E 's/^"//; s/"$//')
+        lits=$(printf '%s\n%s' "$lits_head" "$lits_ternary")
         [ -z "$lits" ] && continue
         while IFS= read -r lit; do
             [ -z "$lit" ] && continue
@@ -84,7 +108,7 @@ while IFS= read -r file; do
                 errors=$((errors + 1))
             }
         done <<< "$lits"
-    done < <(grep -nE '(Text|Button|Label|LocalizedStringKey)\(\s*"' "$file" 2>/dev/null || true)
+    done < <(grep -nE "$call_re" "$file" 2>/dev/null || true)
 done < <(find "$src_dir" -name '*.swift' -type f -not -path '*/Generated/*')
 
 if [ "$errors" -gt 0 ]; then

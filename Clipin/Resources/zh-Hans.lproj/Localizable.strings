@@ -431,3 +431,12 @@
 "Includes sensitive content from password managers and transient app writes." = "包括来自密码管理器和应用临时写入的敏感内容。";
 "Browse the repository, all shipped releases, or report a bug—everything on GitHub." = "浏览仓库、查看所有已发布版本，或反馈问题——全都在 GitHub 上。";
 "Clean copy" = "复制净化链接";
+
+/* Preview - JSON 美化/原始切换 + tooltip + 复制动作（守卫加扫三元/.help 后补齐）*/
+"Show raw" = "显示原始";
+"Pretty" = "美化";
+"Show original compact JSON" = "显示紧凑的原始 JSON";
+"Pretty-print JSON" = "格式化显示 JSON";
+"Copy URL without tracking parameters (utm_*, fbclid, gclid, mc_*)" = "复制去除跟踪参数后的链接（utm_*、fbclid、gclid、mc_*）";
+"Copy all OCR text" = "复制全部识别文字";
+"Copy %@" = "复制 %@";

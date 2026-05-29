@@ -80,7 +80,8 @@ struct ColorSwatchPreview: View {
             }
             .buttonStyle(.plain)
             .opacity(hoveredRow == label ? 1 : 0)
-            .help("Copy \(label)")
+            // 守卫扫不到插值字面量，这里用 NSLocalizedString + format 显式本地化
+            .help(String(format: NSLocalizedString("Copy %@", comment: "Tooltip: copy a color value, %@ = label like HEX/RGB"), label))
         }
         .contentShape(Rectangle())
         .onHover { hovering in

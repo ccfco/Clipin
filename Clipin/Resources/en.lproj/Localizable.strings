@@ -431,3 +431,12 @@
 "Includes sensitive content from password managers and transient app writes." = "Includes sensitive content from password managers and transient app writes.";
 "Browse the repository, all shipped releases, or report a bug—everything on GitHub." = "Browse the repository, all shipped releases, or report a bug—everything on GitHub.";
 "Clean copy" = "Clean copy";
+
+/* Preview - JSON pretty/raw toggle + tooltips + copy actions（守卫加扫三元/.help 后补齐）*/
+"Show raw" = "Show raw";
+"Pretty" = "Pretty";
+"Show original compact JSON" = "Show original compact JSON";
+"Pretty-print JSON" = "Pretty-print JSON";
+"Copy URL without tracking parameters (utm_*, fbclid, gclid, mc_*)" = "Copy URL without tracking parameters (utm_*, fbclid, gclid, mc_*)";
+"Copy all OCR text" = "Copy all OCR text";
+"Copy %@" = "Copy %@";
