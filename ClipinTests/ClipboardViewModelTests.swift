@@ -193,7 +193,7 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.hasMore)
     }
 
-    func testLauncherLoadingTracksCurrentPreviewNetworkRequest() throws {
+    func testLauncherLoadingTracksCurrentPreviewNetworkRequest() async throws {
         let viewModel = ClipboardViewModel(core: try makeCore())
 
         XCTAssertFalse(viewModel.isLauncherLoading)
@@ -206,6 +206,9 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.isLauncherLoading, "A stale URL task must not clear the current loading indicator")
 
         viewModel.setPreviewNetworkLoading(false, key: "new-url")
+        XCTAssertTrue(viewModel.isLauncherLoading, "The loading indicator should stay visible long enough to be perceived")
+
+        try await Task.sleep(nanoseconds: 800_000_000)
         XCTAssertFalse(viewModel.isLauncherLoading)
     }
 

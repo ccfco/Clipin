@@ -429,47 +429,52 @@ struct MainPanel: View {
 
 private struct LauncherLoadingGlow: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var phase: CGFloat = 0
+    private let cycleDuration: TimeInterval = 1.35
 
     var body: some View {
-        GeometryReader { geo in
-            let width = max(geo.size.width, 1)
-            let band = max(width * 0.34, 180)
-            ZStack(alignment: .topLeading) {
-                Capsule(style: .continuous)
-                    .fill(Color.primary.opacity(0.10))
-                    .frame(width: band, height: 3)
-                    .blur(radius: 9)
-                    .offset(x: reduceMotion ? (width - band) / 2 : phase * (width + band) - band)
+        TimelineView(.animation) { timeline in
+            GeometryReader { geo in
+                let width = max(geo.size.width, 1)
+                let band = max(width * 0.42, 220)
+                let rawPhase = timeline.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: cycleDuration) / cycleDuration
+                let phase = reduceMotion ? 0.5 : rawPhase
+                let x = phase * (width + band) - band
 
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.32))
-                    .frame(width: band * 0.32, height: 1.4)
-                    .blur(radius: 3)
-                    .offset(x: reduceMotion ? width * 0.5 : phase * (width + band) - band * 0.52)
-            }
-            .frame(width: width, height: 12, alignment: .topLeading)
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .black, location: 0.10),
-                        .init(color: .black, location: 0.90),
-                        .init(color: .clear, location: 1),
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .onAppear {
-                guard !reduceMotion else { return }
-                phase = 0
-                withAnimation(.easeInOut(duration: 1.45).repeatForever(autoreverses: true)) {
-                    phase = 1
+                ZStack(alignment: .topLeading) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.22))
+                        .frame(width: width, height: 1)
+
+                    Capsule(style: .continuous)
+                        .fill(Color.accentColor.opacity(0.28))
+                        .frame(width: band, height: 4)
+                        .blur(radius: 10)
+                        .offset(x: x)
+
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(0.62))
+                        .frame(width: band * 0.34, height: 1.8)
+                        .blur(radius: 3)
+                        .offset(x: x + band * 0.22)
                 }
+                .frame(width: width, height: 18, alignment: .topLeading)
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.08),
+                            .init(color: .black, location: 0.92),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .blendMode(.plusLighter)
             }
         }
-        .frame(height: 12)
+        .frame(height: 18)
         .offset(y: 1)
     }
 }

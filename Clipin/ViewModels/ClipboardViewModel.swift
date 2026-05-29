@@ -205,6 +205,8 @@ final class ClipboardViewModel: ObservableObject {
     private var settingsSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
     private var launcherLoadingSources: Set<LauncherLoadingSource> = []
+    private var launcherLoadingBecameVisibleAt: Date?
+    private var launcherLoadingHideTask: Task<Void, Never>?
     private var skipNextDebouncedLoad = false
     private var sessionBaseBrowseMode: LauncherBrowseMode
     private var noticeTask: Task<Void, Never>?
@@ -221,6 +223,7 @@ final class ClipboardViewModel: ObservableObject {
     // MARK: - Pagination
     private static let pageSize = 50
     private static let previewNeighborItemLimit = 80
+    private static let launcherLoadingMinimumVisibleSeconds: TimeInterval = 0.65
     /// 当前已从 DB 加载的条目总数（用于 offset 计算）
     private var totalLoadedFromDB = 0
     /// 是否还有更多可加载的条目（非 pinned 浏览模式、非搜索时有效）
@@ -396,16 +399,42 @@ final class ClipboardViewModel: ObservableObject {
         } else {
             launcherLoadingSources.remove(source)
         }
-        let nextValue = !launcherLoadingSources.isEmpty
-        if isLauncherLoading != nextValue {
-            isLauncherLoading = nextValue
+        if launcherLoadingSources.isEmpty {
+            scheduleLauncherLoadingHide()
+        } else {
+            launcherLoadingHideTask?.cancel()
+            launcherLoadingHideTask = nil
+            if !isLauncherLoading {
+                launcherLoadingBecameVisibleAt = Date()
+                isLauncherLoading = true
+            }
         }
     }
 
     private func clearLauncherLoading() {
+        launcherLoadingHideTask?.cancel()
+        launcherLoadingHideTask = nil
         launcherLoadingSources.removeAll()
         if isLauncherLoading {
             isLauncherLoading = false
+        }
+        launcherLoadingBecameVisibleAt = nil
+    }
+
+    private func scheduleLauncherLoadingHide() {
+        guard isLauncherLoading else { return }
+        let visibleAt = launcherLoadingBecameVisibleAt ?? Date()
+        let elapsed = Date().timeIntervalSince(visibleAt)
+        let remaining = max(0, Self.launcherLoadingMinimumVisibleSeconds - elapsed)
+        launcherLoadingHideTask?.cancel()
+        launcherLoadingHideTask = Task { @MainActor [weak self] in
+            if remaining > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+            }
+            guard let self, !Task.isCancelled, self.launcherLoadingSources.isEmpty else { return }
+            self.isLauncherLoading = false
+            self.launcherLoadingBecameVisibleAt = nil
+            self.launcherLoadingHideTask = nil
         }
     }
 
