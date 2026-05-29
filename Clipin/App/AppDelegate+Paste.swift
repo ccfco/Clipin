@@ -19,6 +19,19 @@ extension AppDelegate {
         }
     }
 
+    /// paste_count 自增必须 fire-and-forget：DB 写不能挡在粘贴主路径上
+    /// （CLAUDE.md「paste_count 必须 fire-and-forget 不阻塞粘贴」）。ClipinCore 内部
+    /// 用 Mutex 保证线程安全（@unchecked Sendable），可在后台线程调用。失败只影响
+    /// "最近使用"排序权重，不影响粘贴本身——记日志暴露但绝不打断/兜底粘贴流程。
+    /// 用 Task.detached 而非 Task{}：后者会继承 @MainActor，写盘仍排在主线程队列上。
+    func incrementPasteCountAsync(_ id: String) {
+        let core = appState.core
+        Task.detached(priority: .utility) {
+            do { try core.incrementPasteCount(id: id) }
+            catch { ClipinLog.paste.error("Failed to increment paste count id=\(id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
+        }
+    }
+
     func performPaste(_ item: ClipItem) {
         monitor?.pause()
 
@@ -43,7 +56,7 @@ extension AppDelegate {
             viewModel?.showNotice(NSLocalizedString(Self.pasteFailureMessageKey(for: item), comment: ""), style: .error)
             return
         }
-        do { try appState.core.incrementPasteCount(id: item.id) } catch { ClipinLog.paste.error("Failed to increment paste count id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
+        incrementPasteCountAsync(item.id)
 
         // 富文本首次粘贴的教育提示：告诉用户额外格式被保留。
         // 仅在连续粘贴模式触发——普通模式 executePasteFlow 会立即 hidePanel，
@@ -72,7 +85,7 @@ extension AppDelegate {
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
         }
-        do { try appState.core.incrementPasteCount(id: item.id) } catch { ClipinLog.paste.error("Failed to increment paste count id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
+        incrementPasteCountAsync(item.id)
         executePasteFlow(isImage: false)
     }
 
@@ -95,7 +108,7 @@ extension AppDelegate {
             viewModel?.showNotice(NSLocalizedString("Could not write this item to the clipboard.", comment: ""), style: .error)
             return
         }
-        do { try appState.core.incrementPasteCount(id: item.id) } catch { ClipinLog.paste.error("Failed to increment paste count id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
+        incrementPasteCountAsync(item.id)
         executePasteFlow(isImage: false)
     }
 
