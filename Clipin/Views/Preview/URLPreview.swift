@@ -135,17 +135,9 @@ actor URLMetadataCache {
         if hasSensitiveToken(url) { return Snapshot(title: nil, ogImageURL: nil) }
         if hasPrivateHost(url) { return Snapshot(title: nil, ogImageURL: nil) }
         if hasWebhookPath(url) { return Snapshot(title: nil, ogImageURL: nil) }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 4
-        // 限制下载量：HTML head 在前 64KB 内的概率 >95%，部分 CDN 忽略 Range 也有 4s 兜底
-        request.setValue("bytes=0-65535", forHTTPHeaderField: "Range")
-        // 部分站点按 UA 切版本（移动版 vs PC 版），用通用 Safari UA 保证拿到完整 meta
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
-            forHTTPHeaderField: "User-Agent"
-        )
-        // 经 FaviconCache.downloadWithLimit 限制响应大小，防服务器忽略 Range 返回超大页面
-        guard let data = await FaviconCache.downloadWithLimit(request, maxBytes: maxHTMLBytes) else {
+        let request = makeHTMLPrefixRequest(for: url)
+        // HTML metadata 只需要页面前缀；大页面 Content-Length 超限不应导致 title/OG 全部失败。
+        guard let data = await FaviconCache.downloadHTMLPrefixWithLimit(request, maxBytes: maxHTMLBytes) else {
             return Snapshot(title: nil, ogImageURL: nil)
         }
         guard let html = String(data: data, encoding: .utf8)
@@ -159,6 +151,21 @@ actor URLMetadataCache {
         )
     }
 
+    nonisolated static func makeHTMLPrefixRequest(for url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 4
+        // 限制下载量：HTML head 在前 64KB 内的概率 >95%，部分 CDN 忽略 Range 也有 4s 兜底
+        request.setValue("bytes=0-65535", forHTTPHeaderField: "Range")
+        // Range + gzip 容易拿到不可解的压缩分片；metadata 解析需要未压缩 HTML 前缀。
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        // 部分站点按 UA 切版本（移动版 vs PC 版），用通用 Safari UA 保证拿到完整 meta
+        request.setValue(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
+            forHTTPHeaderField: "User-Agent"
+        )
+        return request
+    }
+
     /// 从 HTML 中提取 og:image / twitter:image 的绝对 URL。
     /// 优先级 og:image > twitter:image（与 title 同款 OpenGraph > Twitter Cards 顺序）。
     /// 相对路径以 baseURL 为锚转绝对路径——CDN 拼接 src 时 src 可能是 /og/foo.png。
@@ -168,9 +175,10 @@ actor URLMetadataCache {
     /// 但 og:image URL 是页面注入的、独立 URL——恶意 producer 可能把 og:image 写成
     /// `http://192.168.1.1/admin` 让 Clipin 预览时自动 GET 私网。在这里额外过 host
     /// 黑名单（私网 + webhook 路径），否则拉 og:image 等于绕开第一层防护。
-    private nonisolated static func extractOGImageURL(in scope: String, baseURL: URL) -> String? {
+    nonisolated static func extractOGImageURL(in scope: String, baseURL: URL) -> String? {
         let candidate = extractMetaContent(in: scope, property: "og:image")
             ?? extractMetaContent(in: scope, property: "og:image:url")
+            ?? extractMetaContent(in: scope, property: "og:image:secure_url")
             ?? extractMetaContent(in: scope, name: "twitter:image")
             ?? extractMetaContent(in: scope, name: "twitter:image:src")
         guard let raw = candidate?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {

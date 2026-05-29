@@ -241,6 +241,30 @@ actor FaviconCache {
         }
     }
 
+    /// HTML metadata/favicon 候选只需要页面前缀，不要求整个响应小于 maxBytes。
+    ///
+    /// 与图片下载的 `downloadWithLimit` 不同：很多现代页面完整 HTML 远超 256KB，
+    /// 但 `<head>` 的 title/meta/link 通常在前缀里。这里读到 maxBytes 即返回，既避免
+    /// 大页面被 Content-Length 预检误杀，也不会把超大响应完整吃进内存。
+    nonisolated static func downloadHTMLPrefixWithLimit(_ request: URLRequest, maxBytes: Int) async -> Data? {
+        do {
+            let (asyncBytes, response) = try await URLSession.shared.bytes(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                return nil
+            }
+            var data = Data()
+            let hint = Int(response.expectedContentLength)
+            if hint > 0 { data.reserveCapacity(min(hint, maxBytes)) }
+            for try await byte in asyncBytes {
+                data.append(byte)
+                if data.count >= maxBytes { return data }
+            }
+            return data
+        } catch {
+            return nil
+        }
+    }
+
     /// 拉 `<origin>/` 的 HTML head 64KB，解析所有 `<link rel="...icon...">` 候选。
     /// 失败（网络错 / 非 2xx / 解析失败）返回空数组——不抛错，让上层用其它候选 fallback。
     ///
@@ -253,12 +277,14 @@ actor FaviconCache {
         // Range 64KB：绝大多数站点 head 在前 64KB 内，避免下载完整页面浪费带宽。
         // 部分 CDN 忽略 Range 返回完整 HTML —— 4s 超时是兜底安全网。
         request.setValue("bytes=0-65535", forHTTPHeaderField: "Range")
+        // Range + gzip 在部分服务器上会返回不可解的压缩分片；HTML 前缀抓取要求未压缩字节。
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         // Safari UA：部分站点按 UA 切版本（移动版 vs PC 版），通用 UA 拿到完整 head
         request.setValue(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
             forHTTPHeaderField: "User-Agent"
         )
-        guard let data = await downloadWithLimit(request, maxBytes: maxHTMLBytes) else { return [] }
+        guard let data = await downloadHTMLPrefixWithLimit(request, maxBytes: maxHTMLBytes) else { return [] }
         guard let html = String(data: data, encoding: .utf8)
               ?? String(data: data, encoding: .isoLatin1) else { return [] }
         return parseIconLinks(in: html, baseURL: url)
