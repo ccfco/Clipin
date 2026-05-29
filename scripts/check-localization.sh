@@ -31,6 +31,13 @@
 #
 set -uo pipefail
 
+# 钉死字节级 locale：grep -oE 提取 / sort / uniq 必须跨环境字节确定，否则在 UTF-8
+# locale 下 BSD grep 处理含 . / … 后缀的多字节 key 会异常，把 "Open System Settings."
+# / "Open System Settings" / "Open System Settings…" 误判成同一 key（CI runner 默认
+# en_US.UTF-8 时 dup 检测假阳性，本地 C locale 却放过——曾导致 CI 长期红）。
+# 唯一需要"理解字符"的中文检测在下方那行内联覆盖回 UTF-8。
+export LC_ALL=C
+
 repo_root="${SRCROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 src_dir="$repo_root/Clipin"
 zh="$src_dir/Resources/zh-Hans.lproj/Localizable.strings"
