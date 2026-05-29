@@ -382,6 +382,10 @@ struct ClipItemRow: View {
                 : ClipinMotion.feedback,
             value: showsShortcutHint
         )
+        // 把整行收成一个 VoiceOver 元素读「类型, 标题」，不再碎成缩略图/标题/徽标多段。
+        // 编辑态用 .contain 保留 RenameField 的可聚焦性，浏览态用 .ignore 给干净单条朗读。
+        .accessibilityElement(children: isRenaming ? .contain : .ignore)
+        .accessibilityLabel(item.accessibilityDescription)
     }
 
     /// 类型指示器：图片显示缩略图，颜色值显示色块，其他显示单色图标

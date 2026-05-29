@@ -348,7 +348,7 @@ final class ClipboardMonitor: ObservableObject {
                     bytes: pngData
                 )
             } catch {
-                ClipinLog.monitor.error("Failed to cache image file attachment \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                ClipinLog.monitor.error("Failed to cache image file attachment \(url.path, privacy: .private): \(error.localizedDescription, privacy: .public)")
             }
             if Task.isCancelled { return }  // defer 会清理本次已写的 PNG
         }
@@ -373,24 +373,6 @@ final class ClipboardMonitor: ObservableObject {
             representations: coreReps
         )
         dbSaved = true  // DB 写入成功，defer 不再清理
-        await self.notifyNewItem()
-    }
-
-    nonisolated private func persistFileFallback(
-        url: URL,
-        sourceApp: String?,
-        sourceName: String?,
-        core: ClipinCore
-    ) async throws {
-        let content = FileClipboardContent.encodedContent(from: [url.path])
-        _ = try core.saveItemWithRepresentations(
-            content: content,
-            clipType: .file,
-            sourceApp: sourceApp,
-            sourceName: sourceName,
-            imagePath: nil,
-            representations: []
-        )
         await self.notifyNewItem()
     }
 

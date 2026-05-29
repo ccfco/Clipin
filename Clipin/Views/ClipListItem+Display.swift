@@ -30,6 +30,22 @@ extension ClipListItem {
         }
     }
 
+    /// 类型的本地化名（VoiceOver / 可访问性用，与 SearchBar 类型标签同口径）。
+    var localizedTypeName: String {
+        switch clipType {
+        case .text:  return NSLocalizedString("Text", comment: "")
+        case .image: return NSLocalizedString("Image", comment: "")
+        case .file:  return NSLocalizedString("File", comment: "")
+        case .url:   return NSLocalizedString("Link", comment: "")
+        }
+    }
+
+    /// VoiceOver 可访问性标签：「类型名, 标题」。让屏幕阅读器把整行读成一个语义元素
+    /// （如"文本, 会议纪要"），而非拼接的缩略图/标题/时间/徽标碎片。
+    var accessibilityDescription: String {
+        "\(localizedTypeName), \(displayTitle)"
+    }
+
     /// 类型对应的通用 SF Symbol 名（与主列表 row 的类型图标一致）。
     var typeIconName: String {
         switch clipType {
