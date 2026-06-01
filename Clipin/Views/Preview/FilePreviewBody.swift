@@ -59,14 +59,18 @@ struct FilePreviewBody: View {
                     let currentPath = allPaths[clampedIndex]
                     let currentURL = URL(fileURLWithPath: currentPath)
                     multiFileStack(paths: allPaths, currentIndex: clampedIndex)
-                    multiFileTextHeader(currentPath: currentPath, currentURL: currentURL, paths: allPaths)
+                    fileTextHeader(currentPath: currentPath, currentURL: currentURL, paths: allPaths)
                     multiFileList(paths: allPaths, currentIndex: clampedIndex)
                 } else {
-                    // 单文件:沿用原 header + 大图/路径回退布局
-                    header(primaryPath: primaryPath, primaryURL: primaryURL, paths: allPaths)
+                    // 单文件:能渲染图片大图时(如 QQ/微信截图以 file-url 落库、隔空复制图片),
+                    // header 退化为纯文本——大图已是视觉主角,再顶一个 72×72 文件图标方块冗余;
+                    // 且原始文件被清理后 icon() 会退化成无意义的通用类型图标(那张丑的 PNG 占位)。
+                    // 非图片文件走 pathFallback,图标 header 是唯一视觉锚点,保留。
                     if let imgPath = imagePathForPreview(originalPath: primaryPath, originalIndex: 0) {
+                        fileTextHeader(currentPath: primaryPath, currentURL: primaryURL, paths: allPaths)
                         imagePreview(path: imgPath)
                     } else {
+                        header(primaryPath: primaryPath, primaryURL: primaryURL, paths: allPaths)
                         pathFallback(allPaths: allPaths)
                     }
                 }
@@ -244,10 +248,11 @@ struct FilePreviewBody: View {
         }
     }
 
-    /// 多文件场景的 header:纯文本(name + count + path),不再画小 icon——叠放卡已承担视觉权重。
-    /// 标题显示**当前栈顶选中**文件的名,而非永远第一个——和 multiFileStack 视觉同步。
+    /// 纯文本 header(name + path,不画 icon),服务两处:多文件场景由叠放卡承担视觉权重,
+    /// 单文件可预览图片场景由大图承担。多文件时标题显示**当前栈顶选中**文件名(随 ←→ 同步),
+    /// 单文件时即主文件本身。
     @ViewBuilder
-    private func multiFileTextHeader(currentPath: String, currentURL: URL, paths: [String]) -> some View {
+    private func fileTextHeader(currentPath: String, currentURL: URL, paths: [String]) -> some View {
         VStack(alignment: .leading, spacing: ClipinChrome.gap) {
             Text(FileClipboardContent.displayName(for: currentPath))
                 .font(.system(size: 17, weight: .semibold))

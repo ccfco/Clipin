@@ -99,18 +99,25 @@ final class ClipboardMonitor: ObservableObject {
         let sourceName = source.appName
 
         // 判定顺序：image → file → url → text
-        // image 必须优先于 file：iPhone 隔空剪贴板复制图片时，pasteboard 同时挂载
-        // file-url（指向 useractivityd 临时文件，会被系统清理）+ image bytes。
-        // 让 file 抢走会让"翻历史回放"在临时文件清理后死掉。Clipin 是历史型应用，
-        // 语义上"翻历史的图"应该是图片数据而不是磁盘文件引用；损失"Finder 间复制
-        // 图片文件经 Clipin 回放为文件粘贴"的边角场景，换主流图片场景可靠。
-        if Self.hasImageData(in: pasteboard) {
+        // image flavor ≠「用户复制的是图片」：Finder 复制 zip/文件夹/文档时，系统会在
+        // pasteboard 上附带该文件的图标/缩略图(image flavor) + file-url。旧逻辑「有 image
+        // flavor 就当图片」把这些文件误判成 image，列表显示成「图片·访达 (1024×1024)」。
+        // 现在的不变量：手里有 image bytes 就倾向存 image（bytes 在 pasteboard 上不会失效），
+        // 仅当 file-url 里出现「确定的非图片文件」(图标场景的证据) 时才降级给 file 分支。
+        // 这样压缩包/文件夹/文档(单个或与图片混选)都按 file 收（保留完整集合）；而 iPhone 隔空
+        // 复制图片即便 temp 文件已被系统清理(无法判定→不算非图片)，仍按 image 收以保可回放。
+        let imageData = Self.hasImageData(in: pasteboard)
+        let fileURLs = (pasteboard.readObjects(forClasses: [NSURL.self], options: [
+            .urlReadingFileURLsOnly: true
+        ]) as? [URL]) ?? []
+        // isNonImageFileURL 含 fileExists/属性探测，只在确有 image flavor 时才需要——短路省掉无图场景的 IO
+        let hasNonImageFileURL = imageData && fileURLs.contains(where: Self.isNonImageFileURL)
+
+        if Self.shouldTreatAsImage(hasImageData: imageData, hasNonImageFileURL: hasNonImageFileURL) {
             // 不在这里同步读数据：types 探测廉价，timer 立即返回；data 由后台任务通过
             // MainActor.run 拉，主线程读取还在但不再占用 timer 触发那一帧
             persist(.imageLazy(changeCount: currentCount, sourceApp: sourceApp, sourceName: sourceName))
-        } else if let fileURLs = pasteboard.readObjects(forClasses: [NSURL.self], options: [
-            .urlReadingFileURLsOnly: true
-        ]) as? [URL], !fileURLs.isEmpty {
+        } else if !fileURLs.isEmpty {
             let paths = fileURLs.map(\.path)
             // file 类型不能把 image bytes 塞进 clip_representations.data；图片文件的可回放缓存
             // 统一走 attachment_paths -> imageDir PNG。其他非 image UTI 仍可作为辅助表达保留。
@@ -290,6 +297,34 @@ final class ClipboardMonitor: ObservableObject {
     nonisolated private static func hasImageData(in pasteboard: NSPasteboard) -> Bool {
         guard let types = pasteboard.types else { return false }
         return types.contains(where: { Self.isImageContentType($0) })
+    }
+
+    /// 「image vs file」主类型纯决策：pasteboard 含 image flavor 时，区分它是「真图片内容」
+    /// 还是「Finder 给文件附带的图标/缩略图」。只要有 image bytes 就倾向存 image（bytes 在
+    /// pasteboard 上不会像磁盘文件那样失效）；仅当 file-url 里有「确定的非图片文件」
+    /// (见 isNonImageFileURL) 时才降级 file。覆盖：
+    /// - 纯截图(无 file-url) / 隔空复制图片(file-url 指向图片或 temp 已清理) → image
+    /// - Finder 复制 zip/文件夹/文档(单个或与图片混选) → 含非图片文件 → file（保留完整集合）
+    /// 决策与 IO 分离便于单测，调用见 checkClipboard。
+    nonisolated static func shouldTreatAsImage(hasImageData: Bool, hasNonImageFileURL: Bool) -> Bool {
+        guard hasImageData else { return false }
+        return !hasNonImageFileURL
+    }
+
+    /// 判定 file-url 是否指向「确定的非图片文件」——image 分类降级到 file 的唯一证据。
+    /// 必须是已存在的本地文件/文件夹，且扩展名无法识别为图片(含文件夹、无扩展名、zip/doc/html 等)。
+    /// 与 isImageFileURL 刻意不互补：路径不存在时两者都 false——此时无法判定文件类型，分类上
+    /// 保守存 image（手里已有 image bytes，不该因 iPhone Handoff temp 文件被清理而降级成失效的
+    /// file 引用）。不设 size 上限：非图片文件多大都是非图片，size 只在 isImageFileURL 决定
+    /// 要不要缓存图片附件时才相关。
+    nonisolated static func isNonImageFileURL(_ url: URL) -> Bool {
+        guard url.isFileURL else { return false }
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        guard let utType = UTType(filenameExtension: url.pathExtension),
+              utType.conforms(to: .image) else {
+            return true
+        }
+        return false
     }
 
     /// 从 pasteboard 读出任意 image UTI 的原始 bytes。
