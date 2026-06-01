@@ -684,6 +684,107 @@ mod tests {
     }
 
     #[test]
+    fn test_list_item_decodes_adjacent_columns_without_transposition() {
+        // 钉死 CLAUDE.md 头号红线「ClipListItem 按列序号解码，错位会静默解码到错误字段」。
+        // paste_count(9)/copy_count(10)/image_width(11)/image_height(12) 是四个相邻同型列
+        // （Option<i32>/i32），现有测试只单独验过其中某一个，从未在同一条 list item 上用
+        // 互不相同的值同时断言。这里取四个不同值：任意相邻两列在 SELECT 或 row_to_list_item
+        // 里被对调，都会让下面至少一条断言失败。
+        let (core, img_dir) = setup_core_with_image_dir();
+        let png = write_image(&img_dir, "adjacent.png", b"adjacent-columns-png");
+
+        // copy_count=3：同一图片按内容 hash 去重，三次保存累加 copy_count。
+        // 注意 dedup 是 DELETE+重插新 uuid（storage.rs save_item），每次保存 id 都会变，
+        // 故不能复用首次返回的 id——保存完再从 list 取当前存活条目的真实 id。
+        core.save_item("image".into(), ClipType::Image, None, None, Some(png.clone()))
+            .unwrap();
+        core.save_item("image".into(), ClipType::Image, None, None, Some(png.clone()))
+            .unwrap();
+        core.save_item("image".into(), ClipType::Image, None, None, Some(png))
+            .unwrap();
+        let id = core.get_list_items(10, 0, None).unwrap()[0].id.clone();
+
+        // paste_count=7
+        for _ in 0..7 {
+            core.increment_paste_count(id.clone()).unwrap();
+        }
+        // image_width=1920 / image_height=1080
+        core.update_image_dimensions(id, 1920, 1080).unwrap();
+
+        let list = core.get_list_items(10, 0, None).unwrap();
+        assert_eq!(list.len(), 1);
+        let row = &list[0];
+        assert_eq!(row.paste_count, 7, "paste_count(列9) 解码错位");
+        assert_eq!(row.copy_count, 3, "copy_count(列10) 解码错位");
+        assert_eq!(row.image_width, Some(1920), "image_width(列11) 解码错位");
+        assert_eq!(row.image_height, Some(1080), "image_height(列12) 解码错位");
+    }
+
+    #[test]
+    fn test_fts_path_relevance_outranks_copy_count() {
+        // FTS(≥3字)路径的 ORDER BY 链是 is_pinned > paste_count > rank > copy_count > created_at。
+        // test_search_sort_priority_full_chain 刻意用 2 字符 LIKE 路径（raw_rank=None）摘掉了 rank，
+        // ranks_candidates_before_limit 只验到 paste_count 这一级——rank 与 copy_count 的相对次序
+        // （相关度压过被复制次数）在 FTS 路径上从未被钉死。这里构造高相关度低 copy_count vs
+        // 低相关度高 copy_count，断言相关度胜出，证明 rank 确实排在 copy_count 之前。
+        let core = setup_core();
+
+        // 高相关度：短文档，查询词占满全文 → bm25 更优；copy_count=1
+        core.save_item("alpha beta gamma".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        // 低相关度：长文档稀释查询词 → bm25 更差；重复保存把 copy_count 抬到 5
+        let padded = "alpha beta gamma plus lots of unrelated filler words here now";
+        for _ in 0..5 {
+            core.save_item(padded.into(), ClipType::Text, None, None, None)
+                .unwrap();
+        }
+
+        // 查询 >3 字符走 FTS 路径
+        let results = core.search("alpha beta gamma".into(), None).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(
+            results[0].content, "alpha beta gamma",
+            "相关度更高的短文档必须排在 copy_count 更高的长文档之前（rank > copy_count）"
+        );
+        assert_eq!(results[0].copy_count, 1);
+        assert_eq!(results[1].copy_count, 5);
+
+        // ClipListItem 路径同款语义
+        let list = core
+            .search_list_items("alpha beta gamma".into(), None)
+            .unwrap();
+        assert_eq!(list[0].preview, "alpha beta gamma");
+        assert_eq!(list[0].copy_count, 1);
+    }
+
+    #[test]
+    fn test_search_dedups_item_matching_both_raw_and_pinyin_fts() {
+        // merge_search_hits 对同时命中 raw FTS（内容/别名/OCR）与 pinyin FTS（拼音）两路的
+        // 同一条目，必须按 id 去重为一条。该 index_by_id 去重分支此前零覆盖，回归会让搜索结果
+        // 出现重复条目或顺序抖动。（raw 路径先于 pinyin 入链且 ≥3 字 rank 已是 Some，故这里
+        // 走的是 continue 去重分支，不触发 None→Some 升格——升格分支留待其能被触发时再补。）
+        let core = setup_core();
+
+        // 内容同时含 ascii "nihao" 与中文「你好」：
+        // - raw FTS 命中 content 列里的字面量 "nihao"
+        // - pinyin FTS 命中「你好」的全拼 pinyin_flat = "nihao"
+        // 同一条目被两路召回，merge 必须去重。
+        core.save_item("nihao 你好".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        let results = core.search("nihao".into(), None).unwrap();
+        assert_eq!(
+            results.len(),
+            1,
+            "同时命中 raw 与 pinyin 两路的条目必须去重为一条"
+        );
+
+        let list = core.search_list_items("nihao".into(), None).unwrap();
+        assert_eq!(list.len(), 1, "ClipListItem 路径同样必须去重");
+    }
+
+    #[test]
     fn test_export_archive_snapshot_returns_stable_full_order() {
         let core = setup_core();
         let base = 1_700_000_000_000;
