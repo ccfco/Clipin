@@ -90,7 +90,7 @@ final class WebScreenshotCache {
         // 先用拿到的有效图（取消晚到也不浪费一张好图），否则按是否被取消区分 failed / cancelled。
         let task = Task<RenderOutcome, Never> {
             let image = await Self.renderOffscreen(urlString)
-            if let image, Self.isMeaningful(image), let png = Self.pngData(from: image) {
+            if let image, let png = Self.qualifiedPNG(from: image) {
                 return .image(png)
             }
             return Task.isCancelled ? .cancelled : .failed
@@ -135,35 +135,54 @@ final class WebScreenshotCache {
         }
     }
 
-    /// NSImage → 不可变 PNG Data。在渲染 task 内（MainActor）一次性转换，转完即丢弃源 NSImage，
-    /// 保证交给缓存/UI/磁盘的全是 Data，杜绝共享可变实例。
-    private nonisolated static func pngData(from image: NSImage) -> Data? {
-        guard let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff) else { return nil }
-        return rep.representation(using: .png, properties: [:])
+    /// 质量闸阈值：纯色≈0，含文字/图的页面通常 >15，8 给登录墙/骨架留余量又能挡纯色。
+    private nonisolated static let qualityStdThreshold: Double = 8
+
+    /// 质量闸 + PNG 编码合一：从**单个 CGImage** 同时算方差与编码 PNG，避免成功路径双重栅格化
+    /// （旧实现 isMeaningful 把图 draw 到 32×32 测方差，pngData 又独立 tiff→bitmap→png）。
+    /// 返回非 nil = 过质量闸的不可变 PNG；nil = 纯色/空白被拒（→ .failed）。
+    /// cgImage 提取失败是环境故障（非纯色）→ 退回 tiff 编码并放行，不因测不出方差而拉黑真截图。
+    private nonisolated static func qualifiedPNG(from image: NSImage) -> Data? {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return pngDataViaTIFF(image)  // 测不出方差 → 放行，tiff 兜底编码
+        }
+        // 能测到方差且低于阈值 → 纯色拒；测不出（standardDeviation 返回 nil）→ 放行。
+        if let sd = standardDeviation(of: cg), sd < qualityStdThreshold { return nil }
+        let rep = NSBitmapImageRep(cgImage: cg)
+        return rep.representation(using: .png, properties: [:]) ?? pngDataViaTIFF(image)
     }
 
-    /// 截图质量闸：把图下采样到 32×32 灰度，算亮度标准差。
-    /// 纯色/空白页（加载中骨架、登录墙纯色底、cookie 全屏遮罩）标准差极低 → 判无意义丢弃，
-    /// 宁可退回无图布局也不把"看起来 broken 的图"surface 给用户。
-    /// 阈值 8 是经验值：纯色≈0，含文字/图的页面通常 >15，8 给登录墙/骨架留余量又能挡纯色。
-    nonisolated static func isMeaningful(_ image: NSImage) -> Bool {
-        // 测不出方差（cgImage 提取 / CGContext 创建失败）是环境故障，不是「页面纯色无意义」——
-        // 此时给通过（return true）而非拒绝：拒绝会让一张真截图被误判失败并永久 sticky 进 failed。
-        // 真正的纯色判定只在能测到方差时进行（见末尾 sqrt(variance) 闸）。
-        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return true }
+    /// CGImage 下采样到 32×32 灰度，算亮度标准差。CGContext 创建失败（环境故障）返回 nil → 调用方放行。
+    private nonisolated static func standardDeviation(of cg: CGImage) -> Double? {
         let side = 32
         var pixels = [UInt8](repeating: 0, count: side * side)
         let gray = CGColorSpaceCreateDeviceGray()
         guard let ctx = CGContext(
             data: &pixels, width: side, height: side, bitsPerComponent: 8,
             bytesPerRow: side, space: gray, bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ) else { return true }
+        ) else { return nil }
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: side, height: side))
         let count = Double(pixels.count)
         let mean = pixels.reduce(0.0) { $0 + Double($1) } / count
         let variance = pixels.reduce(0.0) { $0 + pow(Double($1) - mean, 2) } / count
-        return sqrt(variance) >= 8
+        return sqrt(variance)
+    }
+
+    /// NSImage → 不可变 PNG Data（tiff 路径）。cgImage 提取失败时的兜底编码。
+    private nonisolated static func pngDataViaTIFF(_ image: NSImage) -> Data? {
+        guard let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    /// 截图质量闸（测试入口）：纯色/空白页（加载中骨架、登录墙纯色底、cookie 全屏遮罩）方差极低
+    /// → 判无意义丢弃，宁可退回无图布局也不把"看起来 broken 的图"surface 给用户。
+    /// 测不出方差（cgImage/CGContext 失败）是环境故障 → 放行（return true），不误判真截图为失败。
+    /// 与 qualifiedPNG 共享 standardDeviation，闸语义单一来源。
+    nonisolated static func isMeaningful(_ image: NSImage) -> Bool {
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let sd = standardDeviation(of: cg) else { return true }
+        return sd >= qualityStdThreshold
     }
 
     private func store(_ key: String, _ data: Data) {
