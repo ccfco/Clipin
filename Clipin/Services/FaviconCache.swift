@@ -37,8 +37,14 @@ actor FaviconCache {
     private var pending: [String: Task<Data?, Never>] = [:]
     private let maxEntries = 500
 
-    /// 7 天 TTL：favicon 改动频率远低于此，但也不至于让旧文件永远滞留。
-    private static let diskTTL: TimeInterval = 7 * 24 * 3600
+    /// per-origin 磁盘缓存，7 天 TTL（favicon 改动频率远低于此，但也不至于让旧文件永远滞留）。
+    /// 文件名按 origin sanitize（origin 已是 normalize 后的短串，sanitize 即可读又稳定）。
+    /// 与历史文件名一致，旧缓存继续命中。
+    private static let disk = DiskBlobCache(
+        subdir: "Clipin/favicons",
+        ttl: 7 * 24 * 3600,
+        nameFor: { diskName(for: $0) }
+    )
 
     /// 本进程是否已跑过磁盘过期清理。每个 session 跑一次足够，避免每次 icon 调用都遍历目录。
     private var hasPrunedDisk = false
@@ -80,21 +86,13 @@ actor FaviconCache {
         }
     }
 
-    private static let diskDir: URL = {
-        let fm = FileManager.default
-        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = support.appendingPathComponent("Clipin/favicons", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }()
-
     func icon(for url: URL) async -> NSImage? {
         // 进程内首次 icon 调用时启动一次磁盘过期清理（detached 后台跑，不阻塞当前请求）。
         // 旧实现 readDisk 命中 TTL 外只是返回 nil 重新下载，**旧文件本身从不删除**——
         // 长期使用 favicon 目录会随访问过的不同站点无界增长。
         if !hasPrunedDisk {
             hasPrunedDisk = true
-            Self.pruneExpiredDiskFilesAsync()
+            Self.disk.pruneExpired()
         }
         guard let origin = Self.origin(of: url) else { return nil }
 
@@ -107,7 +105,7 @@ actor FaviconCache {
         }
 
         // 磁盘命中：填充 in-memory 后返回
-        if let data = readDisk(origin: origin) {
+        if let data = await Self.disk.read(origin) {
             store(origin, data: data)
             return NSImage(data: data)
         }
@@ -121,7 +119,7 @@ actor FaviconCache {
         if let data = result {
             store(origin, data: data)
             // 写磁盘只需 Data，不再共享 NSImage 实例
-            writeDisk(origin: origin, data: data)
+            Self.disk.write(origin, data: data)
             return NSImage(data: data)
         }
         return nil
@@ -427,7 +425,12 @@ actor FaviconCache {
     /// `[]` 在文件名里虽合法但易引发 shell/glob 歧义，统一替换为 `_`。
     /// 例：`http://112.44.253.74:9210` → `http___112.44.253.74_9210.png`
     ///     `http://[::1]:8080` → `http____::1__8080.png`（`[` `]` `:` 都转 `_`）
-    private static func diskName(for origin: String) -> String {
+    /// origin → 磁盘文件名 sanitize（DiskBlobCache 的 nameFor）。
+    /// origin 含 `://`、可能的 `:port` 和 IPv6 的 `[]`，FileManager 会把 `/` 当路径分隔符，
+    /// `[]` 在文件名里虽合法但易引发 shell/glob 歧义，统一替换为 `_`。
+    /// 例：`http://112.44.253.74:9210` → `http___112.44.253.74_9210.png`
+    ///     `http://[::1]:8080` → `http____::1__8080.png`（`[` `]` `:` 都转 `_`）
+    private nonisolated static func diskName(for origin: String) -> String {
         var safe = origin
         safe = safe.replacingOccurrences(of: "://", with: "___")
         safe = safe.replacingOccurrences(of: ":", with: "_")
@@ -435,53 +438,5 @@ actor FaviconCache {
         safe = safe.replacingOccurrences(of: "[", with: "_")
         safe = safe.replacingOccurrences(of: "]", with: "_")
         return safe
-    }
-
-    private func diskFile(for origin: String) -> URL {
-        Self.diskDir.appendingPathComponent(Self.diskName(for: origin)).appendingPathExtension("png")
-    }
-
-    private func readDisk(origin: String) -> Data? {
-        let file = diskFile(for: origin)
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: file.path),
-              let attrs = try? fm.attributesOfItem(atPath: file.path),
-              let modDate = attrs[.modificationDate] as? Date,
-              Date().timeIntervalSince(modDate) < Self.diskTTL,
-              let data = try? Data(contentsOf: file) else {
-            return nil
-        }
-        return data
-    }
-
-    private nonisolated func writeDisk(origin: String, data: Data) {
-        // 写磁盘走 detached：避免阻塞 actor 队列。Data 是值类型 Sendable，跨线程安全。
-        let file = Self.diskDir
-            .appendingPathComponent(Self.diskName(for: origin))
-            .appendingPathExtension("png")
-        Task.detached(priority: .utility) {
-            try? data.write(to: file)
-        }
-    }
-
-    /// 删除磁盘上已超 TTL 的 favicon 文件。每个 session 跑一次。
-    /// detached + .utility 优先级：纯文件 IO，不抢主队列。
-    private static func pruneExpiredDiskFilesAsync() {
-        Task.detached(priority: .utility) {
-            let fm = FileManager.default
-            guard let entries = try? fm.contentsOfDirectory(
-                at: Self.diskDir,
-                includingPropertiesForKeys: [.contentModificationDateKey],
-                options: [.skipsHiddenFiles]
-            ) else { return }
-            let now = Date()
-            for file in entries {
-                guard let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
-                      let modDate = attrs.contentModificationDate else { continue }
-                if now.timeIntervalSince(modDate) > Self.diskTTL {
-                    try? fm.removeItem(at: file)
-                }
-            }
-        }
     }
 }

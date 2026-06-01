@@ -39,7 +39,6 @@ final class WebScreenshotCache {
     private let maxFailed = 200
     private var hasPrunedDisk = false
 
-    private nonisolated static let diskTTL: TimeInterval = 7 * 24 * 3600
     /// 渲染视口 16:9 宽图，贴近预览 hero 的横向构图；截到的是页面顶部首屏。
     private nonisolated static let viewportSize = CGSize(width: 1200, height: 675)
     /// 整个渲染（加载 + JS 首屏 + 截图）超时上限。超过即放弃，预览退化到无图。
@@ -47,13 +46,13 @@ final class WebScreenshotCache {
     /// didFinish 后等 JS 渲染首屏的静置延迟——SPA 在 didFinish 时 DOM 常还没填充。
     private nonisolated static let settleDelay: TimeInterval = 0.7
 
-    private nonisolated static let diskDir: URL = {
-        let fm = FileManager.default
-        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = support.appendingPathComponent("Clipin/screenshots", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
-    }()
+    /// per-URL 磁盘缓存，7 天 TTL。文件名用 FNV hex（截图 key 是含 query/长 path 的完整 URL，
+    /// hash 比 sanitize 更安全）。与历史文件名一致，旧缓存继续命中。
+    private nonisolated static let disk = DiskBlobCache(
+        subdir: "Clipin/screenshots",
+        ttl: 7 * 24 * 3600,
+        nameFor: { String(format: "%016llx", $0.fnv1aHash()) }
+    )
 
     /// 一次离屏渲染的产物三态。**blacklist 决策必须随产物走、不能靠 caller 的 `Task.isCancelled`**：
     /// pending dedup 让多个 caller 可能共享同一 render，把「失败 vs 取消」编码进产物，
@@ -69,7 +68,7 @@ final class WebScreenshotCache {
     func screenshot(for urlString: String) async -> NSImage? {
         if !hasPrunedDisk {
             hasPrunedDisk = true
-            Self.pruneExpiredDiskFilesAsync()
+            Self.disk.pruneExpired()
         }
         if failed.contains(urlString) { return nil }
         if let data = memory.get(urlString) { return NSImage(data: data) }
@@ -80,7 +79,7 @@ final class WebScreenshotCache {
         }
 
         // 磁盘命中的都是写盘前已过质量闸的 PNG，直接构造新实例。
-        if let data = await Self.readDiskAsync(urlString) {
+        if let data = await Self.disk.read(urlString) {
             store(urlString, data)
             return NSImage(data: data)
         }
@@ -101,7 +100,7 @@ final class WebScreenshotCache {
         switch outcome {
         case .image(let data):
             store(urlString, data)
-            Self.writeDiskAsync(urlString, data: data)
+            Self.disk.write(urlString, data: data)
             return NSImage(data: data)
         case .failed:
             markFailed(urlString)  // 纯色/空白/真失败 → 记下不重截
@@ -193,57 +192,6 @@ final class WebScreenshotCache {
         guard let url = URL(string: urlString) else { return nil }
         let renderer = ScreenshotRenderer(viewport: viewportSize, settleDelay: settleDelay)
         return await renderer.capture(url: url, timeout: renderTimeout)
-    }
-
-    // MARK: - Disk (off-MainActor IO)
-
-    /// urlString → 稳定文件名。用 FNV-1a hash（跨启动一致，不像 Hasher 每进程换种子），
-    /// 截图 per-URL 且路径含 query/长 path，hash 比 sanitize 更安全。
-    private nonisolated static func diskName(for urlString: String) -> String {
-        String(format: "%016llx", urlString.fnv1aHash())
-    }
-
-    private nonisolated static func diskFile(for urlString: String) -> URL {
-        diskDir.appendingPathComponent(diskName(for: urlString)).appendingPathExtension("png")
-    }
-
-    private nonisolated static func readDiskAsync(_ urlString: String) async -> Data? {
-        await Task.detached(priority: .userInitiated) {
-            let file = diskFile(for: urlString)
-            let fm = FileManager.default
-            guard fm.fileExists(atPath: file.path),
-                  let attrs = try? fm.attributesOfItem(atPath: file.path),
-                  let modDate = attrs[.modificationDate] as? Date,
-                  Date().timeIntervalSince(modDate) < diskTTL,
-                  let data = try? Data(contentsOf: file) else { return nil }
-            return data
-        }.value
-    }
-
-    private nonisolated static func writeDiskAsync(_ urlString: String, data: Data) {
-        // data 是不可变 PNG（Sendable），detached 直接写盘，无 NSImage 跨线程问题。
-        Task.detached(priority: .utility) {
-            try? data.write(to: diskFile(for: urlString))
-        }
-    }
-
-    private nonisolated static func pruneExpiredDiskFilesAsync() {
-        Task.detached(priority: .utility) {
-            let fm = FileManager.default
-            guard let entries = try? fm.contentsOfDirectory(
-                at: diskDir,
-                includingPropertiesForKeys: [.contentModificationDateKey],
-                options: [.skipsHiddenFiles]
-            ) else { return }
-            let now = Date()
-            for file in entries {
-                guard let attrs = try? file.resourceValues(forKeys: [.contentModificationDateKey]),
-                      let modDate = attrs.contentModificationDate else { continue }
-                if now.timeIntervalSince(modDate) > diskTTL {
-                    try? fm.removeItem(at: file)
-                }
-            }
-        }
     }
 }
 
