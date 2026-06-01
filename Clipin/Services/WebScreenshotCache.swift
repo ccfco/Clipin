@@ -25,9 +25,8 @@ final class WebScreenshotCache {
     /// 缓存持有不可变 PNG `Data`，每次 caller 都 NSImage(data:) 构造独立实例——
     /// 与 FaviconCache 同款规避：绝不让 UI 渲染和后台磁盘写共享同一个可变 NSImage 实例
     /// （NSImage representation 惰性可变，并发读 tiffRepresentation + draw 会触发 AppKit race）。
-    private var memory: [String: Data] = [:]
+    private var memory = LRUStore<String, Data>()
     private var pending: [String: Task<RenderOutcome, Never>] = [:]
-    private var lru: [String] = []
     /// 截图比 favicon 大得多，内存上限保守些（80 张约覆盖最近浏览的几屏 URL）。
     private let maxEntries = 80
     /// 已知截图失败/无意义（纯色空白：加载中骨架、登录墙、cookie 遮罩）的 URL。
@@ -73,7 +72,7 @@ final class WebScreenshotCache {
             Self.pruneExpiredDiskFilesAsync()
         }
         if failed.contains(urlString) { return nil }
-        if let data = memory[urlString] { touch(urlString); return NSImage(data: data) }
+        if let data = memory.get(urlString) { return NSImage(data: data) }
         if let task = pending[urlString] {
             // 复用进行中的渲染：等其产物即可，失败判定由发起方负责，这里不重复记 failed。
             if case .image(let data) = await awaitOutcome(task) { return NSImage(data: data) }
@@ -186,17 +185,7 @@ final class WebScreenshotCache {
     }
 
     private func store(_ key: String, _ data: Data) {
-        memory[key] = data
-        touch(key)
-        while memory.count > maxEntries, let evict = lru.first {
-            memory.removeValue(forKey: evict)
-            lru.removeFirst()
-        }
-    }
-
-    private func touch(_ key: String) {
-        lru.removeAll { $0 == key }
-        lru.append(key)
+        memory.set(key, data, maxEntries: maxEntries)
     }
 
     /// 用一次性离屏 renderer 渲染并截图。renderer 用完即弃，连带释放 .nonPersistent() data store。

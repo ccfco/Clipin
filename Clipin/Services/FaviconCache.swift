@@ -31,12 +31,10 @@ actor FaviconCache {
 
     /// PNG-encoded immutable data。每次 caller 调用都构造新的 NSImage，避免共享可变实例。
     /// key 是 normalize 后的 origin 字符串。
-    private var cache: [String: Data] = [:]
-    private var pending: [String: Task<Data?, Never>] = [:]
-
-    /// in-memory LRU：避免长 session 里用户复制大量不同站点 URL 导致 cache 无界增长。
+    /// in-memory LRU（LRUStore）：避免长 session 里用户复制大量不同站点 URL 导致 cache 无界增长。
     /// 命中/写入时 touch，超 maxEntries 时淘汰最久未访问的。磁盘文件不受影响（仍由 7 天 TTL 管）。
-    private var lru: [String] = []
+    private var cache = LRUStore<String, Data>()
+    private var pending: [String: Task<Data?, Never>] = [:]
     private let maxEntries = 500
 
     /// 7 天 TTL：favicon 改动频率远低于此，但也不至于让旧文件永远滞留。
@@ -100,8 +98,7 @@ actor FaviconCache {
         }
         guard let origin = Self.origin(of: url) else { return nil }
 
-        if let data = cache[origin] {
-            touch(origin)
+        if let data = cache.get(origin) {
             return NSImage(data: data)
         }
         if let task = pending[origin] {
@@ -132,18 +129,7 @@ actor FaviconCache {
 
     /// 写入 cache 并维护 LRU：超 maxEntries 时淘汰最久未访问条目。
     private func store(_ origin: String, data: Data) {
-        cache[origin] = data
-        touch(origin)
-        while cache.count > maxEntries, let evict = lru.first {
-            cache.removeValue(forKey: evict)
-            lru.removeFirst()
-        }
-    }
-
-    /// 把 origin 标记为最近访问：从 lru 序列里移到末尾。
-    private func touch(_ origin: String) {
-        lru.removeAll { $0 == origin }
-        lru.append(origin)
+        cache.set(origin, data, maxEntries: maxEntries)
     }
 
     /// 把 URL normalize 成 origin 字符串：scheme + host + 非默认 port。

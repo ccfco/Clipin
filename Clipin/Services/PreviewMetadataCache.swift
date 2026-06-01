@@ -162,30 +162,6 @@ final class PreviewMetadataCache: @unchecked Sendable {
     }
 }
 
-/// 简易 LRU：dict + 顺序数组，O(1) 查询、O(n) 触达。
-/// 容量上限 ≤200，touch 的 removeAll/append 成本可忽略。
-private struct LRUStore<Key: Hashable, Value> {
-    private var map: [Key: Value] = [:]
-    private var order: [Key] = []
-
-    mutating func get(_ key: Key) -> Value? {
-        guard let value = map[key] else { return nil }
-        order.removeAll { $0 == key }
-        order.append(key)
-        return value
-    }
-
-    mutating func set(_ key: Key, _ value: Value, maxEntries: Int) {
-        if map[key] == nil, map.count >= maxEntries, let lru = order.first {
-            map.removeValue(forKey: lru)
-            order.removeFirst()
-        }
-        map[key] = value
-        order.removeAll { $0 == key }
-        order.append(key)
-    }
-}
-
 /// 让 NSImage 安全跨越 Task.detached → main actor 边界的最小 wrapper。
 /// NSImage 没有 Sendable conformance（内部 representations 可变），
 /// 但 cache 写入后即只读，跨线程传递一次后由 actor 串行化访问，安全。

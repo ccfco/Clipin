@@ -23,17 +23,13 @@ actor URLMetadataCache {
     static let empty = Snapshot(title: nil, ogImageURL: nil)
     static let shared = URLMetadataCache()
 
-    private var cache: [String: Snapshot] = [:]
-    private var pending: [String: Task<Snapshot, Never>] = [:]
     /// in-memory 上限：launcher 列表分页 50 条，预留 4× 给最近浏览路径
+    private var cache = LRUStore<String, Snapshot>()
+    private var pending: [String: Task<Snapshot, Never>] = [:]
     private let maxEntries = 200
-    private var lru: [String] = []
 
     func metadata(for urlString: String) async -> Snapshot {
-        if let cached = cache[urlString] {
-            touch(urlString)
-            return cached
-        }
+        if let cached = cache.get(urlString) { return cached }
         if let task = pending[urlString] { return await task.value }
 
         let task = Task<Snapshot, Never> {
@@ -42,22 +38,8 @@ actor URLMetadataCache {
         pending[urlString] = task
         let result = await task.value
         pending[urlString] = nil
-        store(urlString, snapshot: result)
+        cache.set(urlString, result, maxEntries: maxEntries)
         return result
-    }
-
-    private func store(_ key: String, snapshot: Snapshot) {
-        if cache[key] == nil, cache.count >= maxEntries, let evict = lru.first {
-            cache.removeValue(forKey: evict)
-            lru.removeFirst()
-        }
-        cache[key] = snapshot
-        touch(key)
-    }
-
-    private func touch(_ key: String) {
-        lru.removeAll { $0 == key }
-        lru.append(key)
     }
 
     /// HTML head 下载大小上限 256KB：与 FaviconCache 同款防护，streaming 读到上限即停，防超大页面吃满内存。
@@ -419,9 +401,8 @@ struct FaviconLetterMark: View {
 /// 借用 FaviconCache.downloadWithLimit 复用 4s timeout + Safari UA + Range + size cap 防护栈。
 actor OGImageCache {
     static let shared = OGImageCache()
-    private var cache: [String: NSImage] = [:]
+    private var cache = LRUStore<String, NSImage>()
     private var pending: [String: Task<NSImage?, Never>] = [:]
-    private var lru: [String] = []
     private let maxEntries = 200
     /// 单张 OG image 上限 5MB（同 FaviconCache.maxImageBytes）。OG image 通常 100-500KB，
     /// 5MB 兜底防恶意 image bomb（与 favicon 同款防护）。
@@ -431,33 +412,16 @@ actor OGImageCache {
     /// 带上源页面 referer 模拟"浏览器从该页加载分享图"，绕过基础防盗链。
     /// referer 不进 cache key——同一图片 URL 不论来自哪页都是同一张图。
     func image(for urlString: String, referer: String? = nil) async -> NSImage? {
-        if let cached = cache[urlString] {
-            touch(urlString)
-            return cached
-        }
+        if let cached = cache.get(urlString) { return cached }
         if let task = pending[urlString] { return await task.value }
         let task = Task<NSImage?, Never> { await Self.download(urlString, referer: referer) }
         pending[urlString] = task
         let result = await task.value
         pending[urlString] = nil
         if let result {
-            store(urlString, image: result)
+            cache.set(urlString, result, maxEntries: maxEntries)
         }
         return result
-    }
-
-    private func store(_ key: String, image: NSImage) {
-        if cache[key] == nil, cache.count >= maxEntries, let evict = lru.first {
-            cache.removeValue(forKey: evict)
-            lru.removeFirst()
-        }
-        cache[key] = image
-        touch(key)
-    }
-
-    private func touch(_ key: String) {
-        lru.removeAll { $0 == key }
-        lru.append(key)
     }
 
     private nonisolated static func download(_ urlString: String, referer: String?) async -> NSImage? {
