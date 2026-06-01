@@ -331,7 +331,12 @@ struct MainPanel: View {
             })
         }
         if viewModel.canPreviewSelectedItem {
-            pills.append(FooterDerivedPill(label: viewModel.isPreparingPreview ? "Preparing…" : "Preview", shortcut: "Space") {
+            pills.append(FooterDerivedPill(
+                label: viewModel.isPreparingPreview ? "Preparing…" : "Preview",
+                shortcut: "Space",
+                // Quick Look 内能用方向键在可见列表里翻上/下一条是隐形能力,tooltip surface 给鼠标用户。
+                help: "Space to preview · arrow keys flip through items in the preview"
+            ) {
                 _ = viewModel.previewSelected()
             })
         }

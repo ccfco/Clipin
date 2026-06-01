@@ -444,3 +444,6 @@
 "Copy URL without tracking parameters (utm_*, fbclid, gclid, mc_*)" = "复制去除跟踪参数后的链接（utm_*、fbclid、gclid、mc_*）";
 "Copy all OCR text" = "复制全部识别文字";
 "Copy %@" = "复制 %@";
+"This item has no HTML formatting." = "该条目没有 HTML 格式。";
+"This item has no RTF formatting." = "该条目没有 RTF 格式。";
+"Space to preview · arrow keys flip through items in the preview" = "空格预览 · 预览中可用方向键翻看上下条";

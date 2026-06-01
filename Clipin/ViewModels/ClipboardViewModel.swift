@@ -493,6 +493,33 @@ final class ClipboardViewModel: ObservableObject {
         selectItem(id: flatOrder[max(idx - 1, 0)].id)
     }
 
+    /// Home：跳到当前已加载列表的首条（最新）。
+    func selectFirst() {
+        guard !flatOrder.isEmpty else { return }
+        selectItem(id: flatOrder.first?.id)
+    }
+
+    /// End：跳到当前已加载列表的末条。受分页约束，到的是「已加载」末条而非 DB 绝对末条，
+    /// 与 loadMoreItems 的分页语义一致——继续 End/↓ 触底会拉下一页。
+    func selectLast() {
+        guard !flatOrder.isEmpty else { return }
+        selectItem(id: flatOrder.last?.id)
+    }
+
+    /// PageUp/PageDown：按整页步进跳选，介于单行 ↑↓ 与 Home/End 跳首尾之间。
+    /// 无选中时 delta>0 落到首条、delta<0 落到末条（与 selectNext/selectPrev 的兜底方向一致）。
+    func selectByPage(_ delta: Int) {
+        guard !flatOrder.isEmpty else { return }
+        let pageStep = 10
+        guard let currentID = selectedItemID,
+              let idx = flatOrder.firstIndex(where: { $0.id == currentID }) else {
+            selectItem(id: (delta > 0 ? flatOrder.first : flatOrder.last)?.id)
+            return
+        }
+        let target = min(max(idx + delta * pageStep, 0), flatOrder.count - 1)
+        selectItem(id: flatOrder[target].id)
+    }
+
     @discardableResult
     func stepFileAttachmentPreview(delta: Int) -> Bool {
         guard let item = displayedItem, item.clipType == .file else { return false }

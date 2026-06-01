@@ -444,3 +444,6 @@
 "Copy URL without tracking parameters (utm_*, fbclid, gclid, mc_*)" = "Copy URL without tracking parameters (utm_*, fbclid, gclid, mc_*)";
 "Copy all OCR text" = "Copy all OCR text";
 "Copy %@" = "Copy %@";
+"This item has no HTML formatting." = "This item has no HTML formatting.";
+"This item has no RTF formatting." = "This item has no RTF formatting.";
+"Space to preview · arrow keys flip through items in the preview" = "Space to preview · arrow keys flip through items in the preview";

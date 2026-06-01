@@ -11,6 +11,9 @@ import SwiftUI
 struct FooterDerivedPill: Identifiable {
     let label: String
     let shortcut: String
+    /// 可选 tooltip(本地化 key):鼠标悬停时显示。用来把隐形能力(如 Quick Look 内方向键翻页)
+    /// surface 给鼠标用户。默认 nil=无 tooltip。必须排在 action 前,保留尾随闭包调用语法。
+    var help: String? = nil
     let action: () -> Void
     /// 稳定 id(label+shortcut):hoverPills() 每次 body 重算会新建数组,
     /// 用 UUID 会让 ForEach 把同一动作当全新元素→hover/过渡整组重建闪动。
@@ -37,6 +40,7 @@ struct FooterHoverDerivedPills: View {
                         }
                     }
                     .buttonStyle(ClipinFooterGlassButtonStyle())
+                    .help(LocalizedStringKey(pill.help ?? ""))
                 }
             }
         }

@@ -449,7 +449,9 @@ extension AppDelegate {
         if isIMEComposingInPanel() {
             switch event.keyCode {
             case KeyCode.tab, KeyCode.arrowUp, KeyCode.arrowDown,
-                 KeyCode.returnKey, KeyCode.space, KeyCode.escape:
+                 KeyCode.returnKey, KeyCode.space, KeyCode.escape,
+                 // Home/End/PageUp/PageDown 组词期间交还输入法——PageUp/PageDown 正是翻候选页的键。
+                 KeyCode.home, KeyCode.end, KeyCode.pageUp, KeyCode.pageDown:
                 return event
             default:
                 break
@@ -468,6 +470,18 @@ extension AppDelegate {
             return nil
         case KeyCode.arrowDown:
             vm.selectNext()
+            return nil
+        case KeyCode.home:
+            vm.selectFirst()
+            return nil
+        case KeyCode.end:
+            vm.selectLast()
+            return nil
+        case KeyCode.pageUp:
+            vm.selectByPage(-1)
+            return nil
+        case KeyCode.pageDown:
+            vm.selectByPage(1)
             return nil
         case KeyCode.arrowLeft:
             // 双向兼容:搜索框有文本时 ← 留给光标移动(避免用户打字时被吞);
@@ -538,13 +552,19 @@ extension AppDelegate {
             vm.toggleContinuousPaste()
             return nil
         case KeyCode.letterH where flags == .option:
+            // 无 HTML 格式时不静默吞键：弹 info notice 说明，与 ⌘E 在非文本类型上的反馈一致
+            // （本面板不粘贴=不关闭，notice 可见）。
             if vm.selectedRepresentationUTIs.contains("public.html") {
                 vm.pasteRepresentationSelected(uti: "public.html")
+            } else {
+                vm.showNotice(NSLocalizedString("This item has no HTML formatting.", comment: ""), style: .info)
             }
             return nil
         case KeyCode.letterR where flags == .option:
             if vm.selectedRepresentationUTIs.contains("public.rtf") {
                 vm.pasteRepresentationSelected(uti: "public.rtf")
+            } else {
+                vm.showNotice(NSLocalizedString("This item has no RTF formatting.", comment: ""), style: .info)
             }
             return nil
         default:

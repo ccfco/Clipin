@@ -12,6 +12,13 @@ enum KeyCode {
     static let tab: UInt16 = 0x30
     static let delete: UInt16 = 0x33
 
+    // Home / End / PageUp / PageDown：笔记本上是 fn+方向键，产生同样的 keyCode。
+    // 与 arrowUp/Down 一样不按 flags 收窄（这些键自带 .function flag）。
+    static let home: UInt16 = 0x73
+    static let end: UInt16 = 0x77
+    static let pageUp: UInt16 = 0x74
+    static let pageDown: UInt16 = 0x79
+
     static let letterH: UInt16 = 0x04
     static let letterC: UInt16 = 0x08
     static let letterE: UInt16 = 0x0E
