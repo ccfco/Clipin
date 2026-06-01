@@ -26,13 +26,18 @@ final class WebScreenshotCache {
     /// 与 FaviconCache 同款规避：绝不让 UI 渲染和后台磁盘写共享同一个可变 NSImage 实例
     /// （NSImage representation 惰性可变，并发读 tiffRepresentation + draw 会触发 AppKit race）。
     private var memory: [String: Data] = [:]
-    private var pending: [String: Task<Data?, Never>] = [:]
+    private var pending: [String: Task<RenderOutcome, Never>] = [:]
     private var lru: [String] = []
     /// 截图比 favicon 大得多，内存上限保守些（80 张约覆盖最近浏览的几屏 URL）。
     private let maxEntries = 80
     /// 已知截图失败/无意义（纯色空白：加载中骨架、登录墙、cookie 遮罩）的 URL。
     /// 记下来避免每次选中都重跑一个 6s WebContent 进程去截同一张必败页面。
+    /// FIFO 上限（配 failedOrder 维护插入序）：不像 memory/磁盘有 LRU/TTL 淘汰，长 session
+    /// 浏览大量失败 URL 会让裸 Set 单调增长；溢出淘汰最旧的，顺带给老失败页（如已登录的登录墙）
+    /// 一次重试机会。**只有真失败/质量闸拒绝才进这里，「被取消」绝不入**（见 markFailed 调用点）。
     private var failed: Set<String> = []
+    private var failedOrder: [String] = []
+    private let maxFailed = 200
     private var hasPrunedDisk = false
 
     private nonisolated static let diskTTL: TimeInterval = 7 * 24 * 3600
@@ -51,8 +56,17 @@ final class WebScreenshotCache {
         return dir
     }()
 
+    /// 一次离屏渲染的产物三态。**blacklist 决策必须随产物走、不能靠 caller 的 `Task.isCancelled`**：
+    /// pending dedup 让多个 caller 可能共享同一 render，把「失败 vs 取消」编码进产物，
+    /// 才能保证任一 caller 取消时所有 awaiter 都拿到 `.cancelled`、谁都不会把这个 URL 误拉黑。
+    private enum RenderOutcome {
+        case image(Data)  // 过质量闸的不可变 PNG
+        case failed       // 加载失败 / 超时 / 质量闸判纯色 → 记入 failed 不重试
+        case cancelled    // 用户切走条目 → 不记入 failed，下次重试
+    }
+
     /// 取 urlString 的页面截图：内存 → 磁盘 → 实时渲染，三级穿透。
-    /// 返回 nil 表示渲染失败/超时——调用方退化到无图布局。
+    /// 返回 nil 表示渲染失败/超时/被取消——调用方退化到无图布局。
     func screenshot(for urlString: String) async -> NSImage? {
         if !hasPrunedDisk {
             hasPrunedDisk = true
@@ -60,7 +74,11 @@ final class WebScreenshotCache {
         }
         if failed.contains(urlString) { return nil }
         if let data = memory[urlString] { touch(urlString); return NSImage(data: data) }
-        if let task = pending[urlString] { return await task.value.flatMap(NSImage.init(data:)) }
+        if let task = pending[urlString] {
+            // 复用进行中的渲染：等其产物即可，失败判定由发起方负责，这里不重复记 failed。
+            if case .image(let data) = await awaitOutcome(task) { return NSImage(data: data) }
+            return nil
+        }
 
         // 磁盘命中的都是写盘前已过质量闸的 PNG，直接构造新实例。
         if let data = await Self.readDiskAsync(urlString) {
@@ -69,23 +87,52 @@ final class WebScreenshotCache {
         }
 
         // 渲染 + 质量闸 + 转不可变 PNG 全在 task 内完成；逃逸出来的只有 Data，NSImage 不外泄。
-        let task = Task<Data?, Never> {
-            guard let image = await Self.renderOffscreen(urlString),
-                  Self.isMeaningful(image),
-                  let png = Self.pngData(from: image) else { return nil }
-            return png
+        // 先用拿到的有效图（取消晚到也不浪费一张好图），否则按是否被取消区分 failed / cancelled。
+        let task = Task<RenderOutcome, Never> {
+            let image = await Self.renderOffscreen(urlString)
+            if let image, Self.isMeaningful(image), let png = Self.pngData(from: image) {
+                return .image(png)
+            }
+            return Task.isCancelled ? .cancelled : .failed
         }
         pending[urlString] = task
-        let result = await task.value
+        let outcome = await awaitOutcome(task)
         pending[urlString] = nil
-        // 质量闸通过的才缓存+显示；纯色/空白/失败记入 failed 不重截。
-        if let result {
-            store(urlString, result)
-            Self.writeDiskAsync(urlString, data: result)
-            return NSImage(data: result)
+
+        switch outcome {
+        case .image(let data):
+            store(urlString, data)
+            Self.writeDiskAsync(urlString, data: data)
+            return NSImage(data: data)
+        case .failed:
+            markFailed(urlString)  // 纯色/空白/真失败 → 记下不重截
+            return nil
+        case .cancelled:
+            return nil             // 用户切走 → 不拉黑，下次重试
         }
-        failed.insert(urlString)
-        return nil
+    }
+
+    /// 等待一个 render task 的产物，并把**当前 caller 的取消**桥接进去：
+    /// caller（SwiftUI `.task(id:)`）被取消时，`onCancel` 触发 `task.cancel()`，
+    /// 经 ScreenshotRenderer 的取消处理终止离屏 WKWebView（停止其执行页面第三方 JS/tracker）。
+    /// 共享 dedup 取 best-effort：单 caller 取消会 best-effort 终止共享 render，但产物为 `.cancelled`，
+    /// 所有 awaiter 都不会误拉黑，下次重新触发即重试——单 preview 面板下并发同 URL 极罕见，可接受。
+    private func awaitOutcome(_ task: Task<RenderOutcome, Never>) async -> RenderOutcome {
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    /// 把 URL 记入失败集合，维护 FIFO 上限：溢出淘汰最旧条目，避免无界增长。
+    private func markFailed(_ key: String) {
+        guard failed.insert(key).inserted else { return }
+        failedOrder.append(key)
+        while failed.count > maxFailed, let evict = failedOrder.first {
+            failed.remove(evict)
+            failedOrder.removeFirst()
+        }
     }
 
     /// NSImage → 不可变 PNG Data。在渲染 task 内（MainActor）一次性转换，转完即丢弃源 NSImage，
@@ -101,14 +148,17 @@ final class WebScreenshotCache {
     /// 宁可退回无图布局也不把"看起来 broken 的图"surface 给用户。
     /// 阈值 8 是经验值：纯色≈0，含文字/图的页面通常 >15，8 给登录墙/骨架留余量又能挡纯色。
     nonisolated static func isMeaningful(_ image: NSImage) -> Bool {
-        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return false }
+        // 测不出方差（cgImage 提取 / CGContext 创建失败）是环境故障，不是「页面纯色无意义」——
+        // 此时给通过（return true）而非拒绝：拒绝会让一张真截图被误判失败并永久 sticky 进 failed。
+        // 真正的纯色判定只在能测到方差时进行（见末尾 sqrt(variance) 闸）。
+        guard let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return true }
         let side = 32
         var pixels = [UInt8](repeating: 0, count: side * side)
         let gray = CGColorSpaceCreateDeviceGray()
         guard let ctx = CGContext(
             data: &pixels, width: side, height: side, bitsPerComponent: 8,
             bytesPerRow: side, space: gray, bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ) else { return false }
+        ) else { return true }
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: side, height: side))
         let count = Double(pixels.count)
         let mean = pixels.reduce(0.0) { $0 + Double($1) } / count
@@ -219,19 +269,32 @@ private final class ScreenshotRenderer: NSObject, WKNavigationDelegate {
     }
 
     func capture(url: URL, timeout: TimeInterval) async -> NSImage? {
-        await withCheckedContinuation { (cont: CheckedContinuation<NSImage?, Never>) in
-            continuation = cont
-            timeoutTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                guard !Task.isCancelled else { return }
-                finish(nil)
+        // 外层取消处理：caller（最终是 SwiftUI `.task(id:)`）取消时，立即 finish(nil) ——
+        // finish 内 stopLoading + 弃 navigationDelegate，停止离屏 WKWebView 继续执行页面第三方
+        // JS/tracker。这是「切走条目后还跑满 6s」隐私暴露面的真正堵点。
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<NSImage?, Never>) in
+                continuation = cont
+                // 装好 handler 前若已被取消（pre-cancel 竞态），这里直接收尾，否则仍会跑满 timeout。
+                if Task.isCancelled {
+                    finish(nil)
+                    return
+                }
+                timeoutTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
+                    finish(nil)
+                }
+                if url.isFileURL {
+                    // file:// 必须用 loadFileURL 并授读所在目录，普通 load 会被拒。
+                    webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+                } else {
+                    webView.load(URLRequest(url: url))
+                }
             }
-            if url.isFileURL {
-                // file:// 必须用 loadFileURL 并授读所在目录，普通 load 会被拒。
-                webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
-            } else {
-                webView.load(URLRequest(url: url))
-            }
+        } onCancel: {
+            // onCancel 在任意线程同步触发，跳回 MainActor 收尾；finish 的 resume-once 守卫保证幂等。
+            Task { @MainActor in self.finish(nil) }
         }
     }
 
