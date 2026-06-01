@@ -212,6 +212,28 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isLauncherLoading)
     }
 
+    // 选中条目走的是本地 SQLite getItem（瞬时），不该点亮给「真异步加载」（网络预览 / Quick Look
+    // 准备）用的顶部流光。否则 ↑↓ 连按时，每次选中都点亮流光 + 0.65s 最小可见时长把它钉成
+    // 持续 TimelineView(.animation) 每帧重绘，拖卡键盘导航。流光只能由真正慢的异步源驱动。
+    func testSelectingItemDoesNotShowLauncherLoadingForLocalRead() throws {
+        let core = try makeCore()
+        _ = try core.importItem(
+            content: "local",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 1_000,
+            alias: nil
+        )
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.loadItems(selectLatest: true)
+
+        XCTAssertNotNil(viewModel.selectedItemID, "loadItems(selectLatest:) 应已选中最新条目")
+        XCTAssertFalse(viewModel.isLauncherLoading, "本地读不该点亮顶部流光")
+    }
+
     private func makeCore() throws -> ClipinCore {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinViewModelTests-\(UUID().uuidString)", isDirectory: true)

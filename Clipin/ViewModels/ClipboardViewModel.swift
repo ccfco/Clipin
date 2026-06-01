@@ -239,8 +239,10 @@ final class ClipboardViewModel: ObservableObject {
     var onCloseRequested: (() -> Void)?
     var onOpenSettingsRequested: (() -> Void)?
 
+    // 顶部流光（isLauncherLoading）只跟随「真正慢的异步加载」。本地 SQLite getItem（选中条目）是
+    // 瞬时操作，绝不入此集合——否则 ↑↓ 连按每次选中都点亮流光，叠加 0.65s 最小可见时长会把它钉成
+    // 持续的 TimelineView(.animation) 每帧重绘，拖卡键盘导航。
     private enum LauncherLoadingSource: Hashable {
-        case selectedPayload
         case quickLookPreparation
         case previewNetwork(String)
     }
@@ -376,16 +378,15 @@ final class ClipboardViewModel: ObservableObject {
         // 主线程立即更新 ID（选中高亮即时响应），后台加载完整 item（避免 SQLite 阻塞主线程）。
         // 旧实现用 try? 把 getItem 失败伪装成 selectedItem = nil，预览区悄无声息——
         // 用户连按 Return/⌘O 重复 toast，根本不知道是 DB 故障。失败时显式 notice。
+        // 不点亮顶部流光：本地 getItem 是瞬时操作，流光只留给真异步源（见 LauncherLoadingSource）。
         let core = self.core
         let capturedId = id
-        setLauncherLoading(true, source: .selectedPayload)
         loadItemTask = Task {
             let result: Result<ClipItem, Error> = await Task.detached(priority: .userInitiated) {
                 do { return .success(try core.getItem(id: capturedId)) }
                 catch { return .failure(error) }
             }.value
             guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
-            self.setLauncherLoading(false, source: .selectedPayload)
             switch result {
             case .success(let item):
                 self.selectedItem = item
