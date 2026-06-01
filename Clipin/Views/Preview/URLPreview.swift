@@ -395,13 +395,8 @@ struct FaviconLetterMark: View {
     private var backgroundColor: Color {
         // host → 稳定 hash → HSL hue。
         // 不用 Hasher（Hasher 每次进程启动种子不同 → 同一 host 颜色会变），
-        // 改用 FNV-1a 的简化版本，保证跨启动一致。
-        var hash: UInt64 = 0xcbf29ce484222325
-        for byte in host.utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 0x100000001b3
-        }
-        let hue = Double(hash % 360) / 360.0
+        // 用 FNV-1a（String.fnv1aHash）保证跨启动一致。
+        let hue = Double(host.fnv1aHash() % 360) / 360.0
         // saturation 0.55 / brightness 0.62 是经验值：饱和度足以区分相邻 hue，
         // 又不至于刺眼；白字在上面对比度也够。
         return Color(hue: hue, saturation: 0.55, brightness: 0.62)

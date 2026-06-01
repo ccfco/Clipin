@@ -211,12 +211,7 @@ final class WebScreenshotCache {
     /// urlString → 稳定文件名。用 FNV-1a hash（跨启动一致，不像 Hasher 每进程换种子），
     /// 截图 per-URL 且路径含 query/长 path，hash 比 sanitize 更安全。
     private nonisolated static func diskName(for urlString: String) -> String {
-        var hash: UInt64 = 0xcbf29ce484222325
-        for byte in urlString.utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 0x100000001b3
-        }
-        return String(format: "%016llx", hash)
+        String(format: "%016llx", urlString.fnv1aHash())
     }
 
     private nonisolated static func diskFile(for urlString: String) -> URL {
