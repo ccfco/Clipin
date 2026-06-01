@@ -99,21 +99,29 @@ final class ClipboardMonitor: ObservableObject {
         let sourceName = source.appName
 
         // 判定顺序：image → file → url → text
-        // image flavor ≠「用户复制的是图片」：Finder 复制 zip/文件夹/文档时，系统会在
-        // pasteboard 上附带该文件的图标/缩略图(image flavor) + file-url。旧逻辑「有 image
-        // flavor 就当图片」把这些文件误判成 image，列表显示成「图片·访达 (1024×1024)」。
-        // 现在的不变量：手里有 image bytes 就倾向存 image（bytes 在 pasteboard 上不会失效），
-        // 仅当 file-url 里出现「确定的非图片文件」(图标场景的证据) 时才降级给 file 分支。
-        // 这样压缩包/文件夹/文档(单个或与图片混选)都按 file 收（保留完整集合）；而 iPhone 隔空
-        // 复制图片即便 temp 文件已被系统清理(无法判定→不算非图片)，仍按 image 收以保可回放。
-        let imageData = Self.hasImageData(in: pasteboard)
+        // image flavor ≠「用户复制的是图片」。读 per-item 结构(pasteboardItems)而非扁平
+        // pasteboard.types 来还原真相：Finder 复制文件/文件夹时，file-url 和它的图标
+        // (com.apple.icns) 在同一个 NSPasteboardItem 里——系统已明确标注「这图是这个文件的图标」，
+        // 不是独立图片内容；扁平 types 把它们拍平、还从 icns 合成幻影 public.tiff，旧逻辑「有
+        // image flavor 就当图片」因此把 zip/文件夹/文档误判成「图片·访达 (1024×1024)」。
+        // 不变量(全部 per-item 结构事实，零文件系统探测)：
+        // - 「无 file-url 但有真实图片(排除 icns 图标)」的 item = 纯图片内容(截图) → image
+        // - 恰好单个文件项且它自带真实图片 = 复制单个图片文件 / iPhone 隔空复制图片 → image(可回放)
+        // - 其余有 file-url 的情况(文件夹/zip/文档，单个或多选混图) → file(保留完整文件集合)
+        let items = pasteboard.pasteboardItems ?? []
+        let fileItems = items.filter(Self.itemHasFileURL)
+        let fileItemCount = fileItems.count
+        let singleFileItemIsImage = fileItemCount == 1 && Self.itemHasRealImage(fileItems[0])
+        let hasPureImageItem = items.contains { !Self.itemHasFileURL($0) && Self.itemHasRealImage($0) }
         let fileURLs = (pasteboard.readObjects(forClasses: [NSURL.self], options: [
             .urlReadingFileURLsOnly: true
         ]) as? [URL]) ?? []
-        // isNonImageFileURL 含 fileExists/属性探测，只在确有 image flavor 时才需要——短路省掉无图场景的 IO
-        let hasNonImageFileURL = imageData && fileURLs.contains(where: Self.isNonImageFileURL)
 
-        if Self.shouldTreatAsImage(hasImageData: imageData, hasNonImageFileURL: hasNonImageFileURL) {
+        if Self.shouldTreatAsImage(
+            fileItemCount: fileItemCount,
+            singleFileItemIsImage: singleFileItemIsImage,
+            hasPureImageItem: hasPureImageItem
+        ) {
             // 不在这里同步读数据：types 探测廉价，timer 立即返回；data 由后台任务通过
             // MainActor.run 拉，主线程读取还在但不再占用 timer 触发那一帧
             persist(.imageLazy(changeCount: currentCount, sourceApp: sourceApp, sourceName: sourceName))
@@ -201,7 +209,13 @@ final class ClipboardMonitor: ObservableObject {
                         let pb = NSPasteboard.general
                         // 用户已经又复制了别的内容，捕获到的快照已过期，丢弃
                         guard pb.changeCount == capturedChangeCount else { return nil }
-                        guard let imageData = Self.readImageData(from: pb) else { return nil }
+                        // 已按 per-item 结构判定为 image，却读不出任何真实图片 bytes：异常路径，
+                        // 不静默吞（CLAUDE.md 不兜底红线）。无 bytes 无法落库、也无 file-url 可降级，
+                        // 只能丢弃本条，但必须留痕便于排查（如 AirDrop promised data 延迟实体化）。
+                        guard let imageData = Self.readImageData(from: pb) else {
+                            ClipinLog.monitor.error("判定为 image 但 pasteboard 读不出图片 bytes，丢弃本条 (changeCount=\(capturedChangeCount, privacy: .public))")
+                            return nil
+                        }
                         let auxReps = ClipboardRepresentationExtractor.extractAuxiliary(from: pb, primaryClipType: .image)
                         return ImageSnapshot(data: imageData, reps: auxReps)
                     }
@@ -288,61 +302,63 @@ final class ClipboardMonitor: ObservableObject {
         return Self.httpURLString(in: text)
     }
 
-    /// 判定 pasteboard 是否含有"图片数据"。
-    /// 旧实现只白名单 .tiff / .png，漏掉 iPhone 隔空剪贴板复制 jpeg 时挂的 public.jpeg
-    /// （也漏 heic/heif/gif/webp/bmp 等所有非 PNG/TIFF 格式）。
-    /// 现改为 UTType conformance 动态判定：任何 conforms to public.image 的 UTI 都算图片。
-    /// 显式排除 public.file-url：它自身不 conforms to image，但保险起见排除，
-    /// 避免未来 macOS 给 file-url 加 image conformance 时让"file 复制"误入 image 分支。
-    nonisolated private static func hasImageData(in pasteboard: NSPasteboard) -> Bool {
-        guard let types = pasteboard.types else { return false }
-        return types.contains(where: { Self.isImageContentType($0) })
-    }
-
-    /// 「image vs file」主类型纯决策：pasteboard 含 image flavor 时，区分它是「真图片内容」
-    /// 还是「Finder 给文件附带的图标/缩略图」。只要有 image bytes 就倾向存 image（bytes 在
-    /// pasteboard 上不会像磁盘文件那样失效）；仅当 file-url 里有「确定的非图片文件」
-    /// (见 isNonImageFileURL) 时才降级 file。覆盖：
-    /// - 纯截图(无 file-url) / 隔空复制图片(file-url 指向图片或 temp 已清理) → image
-    /// - Finder 复制 zip/文件夹/文档(单个或与图片混选) → 含非图片文件 → file（保留完整集合）
-    /// 决策与 IO 分离便于单测，调用见 checkClipboard。
-    nonisolated static func shouldTreatAsImage(hasImageData: Bool, hasNonImageFileURL: Bool) -> Bool {
-        guard hasImageData else { return false }
-        return !hasNonImageFileURL
-    }
-
-    /// 判定 file-url 是否指向「确定的非图片文件」——image 分类降级到 file 的唯一证据。
-    /// 必须是已存在的本地文件/文件夹，且扩展名无法识别为图片(含文件夹、无扩展名、zip/doc/html 等)。
-    /// 与 isImageFileURL 刻意不互补：路径不存在时两者都 false——此时无法判定文件类型，分类上
-    /// 保守存 image（手里已有 image bytes，不该因 iPhone Handoff temp 文件被清理而降级成失效的
-    /// file 引用）。不设 size 上限：非图片文件多大都是非图片，size 只在 isImageFileURL 决定
-    /// 要不要缓存图片附件时才相关。
-    nonisolated static func isNonImageFileURL(_ url: URL) -> Bool {
-        guard url.isFileURL else { return false }
-        guard FileManager.default.fileExists(atPath: url.path) else { return false }
-        guard let utType = UTType(filenameExtension: url.pathExtension),
-              utType.conforms(to: .image) else {
-            return true
+    /// 「image vs file」主类型纯决策。入参由 checkClipboard 从 pasteboardItems 派生，全是
+    /// per-item 结构事实，无 IO，便于单测：
+    /// - fileItemCount        含 file-url 的 item 数（= 一次复制的文件集合大小）
+    /// - singleFileItemIsImage  恰好单个文件项 且 该 item 自带真实图片(隔空复制图片/复制图片文件)
+    /// - hasPureImageItem     存在「无 file-url 但有真实图片」的 item（纯截图）
+    ///
+    /// 文件集合语义优先：只要有 file-url，就按文件集合处理——仅当「恰好一个文件项且它就是图片」
+    /// 才升级 image(保 iPhone 隔空可回放)；多选(哪怕混入图片)一律 file，保留完整集合不丢文件。
+    /// 没有任何文件项时，纯图片项(截图)才是 image。
+    nonisolated static func shouldTreatAsImage(
+        fileItemCount: Int,
+        singleFileItemIsImage: Bool,
+        hasPureImageItem: Bool
+    ) -> Bool {
+        if fileItemCount >= 1 {
+            return fileItemCount == 1 && singleFileItemIsImage
         }
-        return false
+        return hasPureImageItem
     }
 
-    /// 从 pasteboard 读出任意 image UTI 的原始 bytes。
-    /// PNG/TIFF 优先（macOS 原生格式，无需重编码就能落地），其他格式（jpeg/heic/gif/webp 等）
-    /// 兜底——makePNGData 用 CGImageSource 统一转 PNG，所有 ImageIO 支持的格式都能跑。
+    /// 单个 pasteboard item 是否携带 file-url——判定它是「文件引用」而非独立内容的结构信号。
+    nonisolated private static func itemHasFileURL(_ item: NSPasteboardItem) -> Bool {
+        item.types.contains { $0.rawValue == "public.file-url" }
+    }
+
+    /// 单个 pasteboard item 是否携带「真实图片内容」representation（排除 icns 图标）。
+    nonisolated private static func itemHasRealImage(_ item: NSPasteboardItem) -> Bool {
+        item.types.contains(where: Self.isRealImageType)
+    }
+
+    /// 判定单个 UTI 是否「真实图片内容」。在 isImageContentType 基础上额外排除 com.apple.icns：
+    /// icns 是文件图标专用格式(conforms public.image 但不是用户复制的图片内容)，Finder 复制
+    /// 文件/文件夹时附带，正是把 zip/文件夹误判成图片的根因。用于「是不是图片」的分类与读 bytes。
+    nonisolated static func isRealImageType(_ type: NSPasteboard.PasteboardType) -> Bool {
+        guard type.rawValue != "com.apple.icns" else { return false }
+        return Self.isImageContentType(type)
+    }
+
+    /// 从 pasteboard 读出真实图片 bytes(排除 icns)。逐 item 读：含 file-url 的文件项只挂 icns 时
+    /// 读不出图，只有截图项 / 自带真实图片的图片文件项能命中。PNG/TIFF 优先(macOS 原生，无需
+    /// 重编码)，其余格式(jpeg/heic/gif/webp 等)由 makePNGData 用 CGImageSource 统一兜底转 PNG。
     nonisolated private static func readImageData(from pasteboard: NSPasteboard) -> Data? {
         let preferred: [NSPasteboard.PasteboardType] = [.png, .tiff]
-        let availableTypes = Set(pasteboard.types ?? [])
-        for type in preferred where availableTypes.contains(type) {
-            if let data = pasteboard.data(forType: type) { return data }
-        }
-        for type in pasteboard.types ?? [] where Self.isImageContentType(type) {
-            if let data = pasteboard.data(forType: type) { return data }
+        for item in pasteboard.pasteboardItems ?? [] {
+            for type in preferred where item.types.contains(type) && Self.isRealImageType(type) {
+                if let data = item.data(forType: type) { return data }
+            }
+            for type in item.types where Self.isRealImageType(type) {
+                if let data = item.data(forType: type) { return data }
+            }
         }
         return nil
     }
 
-    /// 判定单个 UTI 是否表示"图片内容"。public.file-url 显式排除（理由见 hasImageData 注释）。
+    /// 判定单个 UTI 是否表示"图片内容"。public.file-url 显式排除：它自身不 conforms to image，
+    /// 但保险起见排除，避免未来 macOS 给 file-url 加 image conformance 时让 file 复制误入图片分支。
+    /// 含 com.apple.icns(图标也 conforms image)：用于 file 分支把图标等图片类挡在 representations 外。
     nonisolated private static func isImageContentType(_ type: NSPasteboard.PasteboardType) -> Bool {
         guard type.rawValue != "public.file-url" else { return false }
         guard let utType = UTType(type.rawValue) else { return false }
