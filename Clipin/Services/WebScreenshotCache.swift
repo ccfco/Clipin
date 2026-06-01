@@ -84,6 +84,14 @@ final class WebScreenshotCache {
             return NSImage(data: data)
         }
 
+        // disk.read 是 await 挂起点：期间 @MainActor 可重入，另一个同 URL 请求可能已落缓存 / 起了渲染。
+        // 二次检查 memory/pending（此后到 pending 赋值再无 await，原子），否则并发同 URL 会重复跑 6s 离屏渲染。
+        if let data = memory.get(urlString) { return NSImage(data: data) }
+        if let task = pending[urlString] {
+            if case .image(let data) = await awaitOutcome(task) { return NSImage(data: data) }
+            return nil
+        }
+
         // 渲染 + 质量闸 + 转不可变 PNG 全在 task 内完成；逃逸出来的只有 Data，NSImage 不外泄。
         // 先用拿到的有效图（取消晚到也不浪费一张好图），否则按是否被取消区分 failed / cancelled。
         let task = Task<RenderOutcome, Never> {

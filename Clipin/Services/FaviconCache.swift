@@ -110,6 +110,15 @@ actor FaviconCache {
             return NSImage(data: data)
         }
 
+        // disk.read 是 await 挂起点：期间 actor 可重入，另一个同 origin 请求可能已落缓存 / 起了下载。
+        // 这里二次检查 cache/pending（此后到 pending 赋值再无 await，actor 单线程下原子），
+        // 否则并发同 origin 会各自越过最初的 pending 检查、重复 fetchRemote 下载同一 favicon。
+        if let data = cache.get(origin) { return NSImage(data: data) }
+        if let task = pending[origin] {
+            if let data = await task.value { return NSImage(data: data) }
+            return nil
+        }
+
         let task = Task<Data?, Never> {
             await Self.fetchRemote(url: url, origin: origin)
         }
