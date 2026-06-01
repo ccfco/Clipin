@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/Apple%20Silicon-arm64-blueviolet" alt="Apple Silicon arm64">
   <img src="https://img.shields.io/badge/Rust-stable-orange" alt="Rust stable">
   <img src="https://img.shields.io/badge/Swift-6.0-red" alt="Swift 6.0">
-  <img src="https://img.shields.io/badge/version-0.1.6-brightgreen" alt="v0.1.6">
+  <img src="https://img.shields.io/badge/version-0.1.11-brightgreen" alt="v0.1.11">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
 </p>
 
@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  图片 OCR 搜索 · 系统级玻璃质感 · 位置记忆 · 连续粘贴
+  图片 OCR 搜索 · 格式无损往返 · 系统级玻璃质感 · 连续粘贴
 </p>
 
 ## 为什么是 Clipin
@@ -50,7 +50,15 @@
 
 🎨 **Liquid Glass 主题** — 适配 macOS 26 风格设计，提供 Native/Mist/Graphite/Sunrise 四种精选主题
 
-🔍 **即时搜索** — 中英文全文检索（FTS5 trigram），输入即匹配，短查询自动回退 `LIKE`
+🔍 **即时搜索** — 中英文全文检索（FTS5 trigram），输入即匹配，短查询自动回退 `LIKE`；支持给条目起别名后按别名召回
+
+📋 **格式无损往返** — 复制时同步采集 `plain / html / rtf` 多种表示形态，回车粘贴整组原样回放，也可 `⌥H` / `⌥R` 指定以 HTML / RTF 粘贴
+
+✏️ **重命名与编辑** — `⇧⌘E` 给条目起易记别名（进入搜索），`⌘E` 直接编辑文本条目的真实内容
+
+📁 **文件集合语义** — Finder 多选复制按"一整组"保存，粘贴 / 打开 / 预览都保留完整集合，`⌘O` 整组在 Finder 中显示
+
+🔗 **链接预览大图** — URL 条目抓取 `og:image` / `favicon`，三层 fallback 到网页截图，SPA / 本地 / 内网链接也尽量有图；外发链接自动剥离 `ClearURLs` 社区数据覆盖的追踪参数
 
 ⌨️ **键盘优先** — 方向键导航、回车粘贴、`⌘1-9` 快速粘贴前 9 条
 
@@ -62,7 +70,9 @@
 
 🔒 **隐私优先** — 数据全部本地 SQLite 存储，自动跳过密码管理器等敏感内容
 
-☁️ **自动备份** — 可备份到 iCloud Drive 或任意文件夹，支持多种同步频率
+↩️ **可撤销删除** — 删除进入 7 秒撤销窗口，图片条目延后真正落盘删除，误删可挽回
+
+☁️ **自动备份** — 可备份到 iCloud Drive 或任意文件夹（`.clipin.zip` 内容寻址去重），支持日 / 周 / 月频率与失败自动暂停
 
 🔔 **更新提醒** — 内建 GitHub Releases 检查，可直接查看更新说明并跳转下载最新版
 
@@ -105,7 +115,9 @@ xcodegen generate
 | `⌘1`–`⌘9` | 快速粘贴前 9 条 |
 | `⌘C` | 复制到剪贴板（不粘贴） |
 | `⌘⇧P` | 固定/取消固定 |
-| `⌘⌫` | 删除条目 |
+| `⇧⌘E` | 重命名（起别名） |
+| `⌘E` | 编辑文本条目内容 |
+| `⌘⌫` | 删除条目（7 秒内可撤销） |
 | `⌘O` | 打开 URL / 在 Finder 中显示文件 |
 | `Space` | Quick Look 预览图片 / 文件 / 链接 |
 | Quick Look 中 `↑` `↓` `←` `→` | 切换上一条 / 下一条可预览项 |
@@ -119,19 +131,24 @@ xcodegen generate
 
 **计划中：**
 
-- [ ] 浮动便签/参考面板模式
-- [ ] iCloud 云同步
+- [ ] iCloud 云同步（跨设备同步历史）
 
 **已完成：**
 
 - [x] 拼音/首字母模糊搜索
 - [x] 图片 OCR 文字识别与搜索
+- [x] 多表示形态采集与格式无损往返（plain / html / rtf）
+- [x] 条目重命名（别名进搜索）与文本内容编辑
+- [x] 文件集合多路径语义（多选整组保存 / 粘贴 / 预览）
+- [x] URL 预览大图（og:image / favicon / 截图三层 fallback）
+- [x] URL 追踪参数剥离（ClearURLs 社区数据）
 - [x] Native Liquid Glass 主题系统
 - [x] 面板位置记忆 (持久化)
 - [x] 连续粘贴模式 (Continuous Paste)
 - [x] 空格键快速预览 (Quick Look)
-- [x] 自动备份到 iCloud Drive / 本地文件夹
-- [x] FTS5 全文搜索与动作面板
+- [x] 可撤销删除（7 秒撤销窗口）
+- [x] 自动备份到 iCloud Drive / 本地文件夹（.clipin.zip 内容寻址）
+- [x] FTS5 全文搜索与动作面板（含「粘贴为...」子面板）
 - [x] 隐私感知采集与多语言支持
 
 ## 架构
@@ -181,6 +198,10 @@ Clipin is a tiny, keyboard-first clipboard manager for macOS. It is built to lau
 **Why it stands out:**
 - Image OCR search: built-in text recognition for images (zh/en support)
 - Pinyin and initials search for Chinese text
+- Format-preserving paste: captures plain/html/rtf representations, replays them losslessly (or paste as HTML/RTF with `⌥H`/`⌥R`)
+- Rename & edit: alias an item with `⇧⌘E` (searchable), edit text content in place with `⌘E`
+- File collection semantics: multi-selected files stay grouped through paste, open, and preview
+- Link preview: fetches og:image/favicon with a screenshot fallback, strips tracking params via ClearURLs
 - Native Liquid Glass theme: modern macOS 26 style with 4 curated themes
 - Instant search: fast FTS5-based search for text and image content
 - Keyboard-first flow: arrow keys, Enter to paste, `⌘1-9` quick paste, `⌘K` palette
