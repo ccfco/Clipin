@@ -20,6 +20,9 @@ enum QAFlags {
     /// 强制底栏分段 hover 高亮态(同上:合成 hover run-to-run 不稳,
     /// 用此确定性自截图核对效果②内缩高亮的视觉/明暗;真机真鼠标走标准 .onHover)。
     static var forceSegmentHover: Bool { on("CLIPIN_QA_FORCE_HOVER") }
+    /// 强制点亮预览区顶边加载流光(真实加载源是 Quick Look 准备 / URL 预览抓取,
+    /// 瞬时且依赖联网,run-to-run 截不稳;用此确定性自截图核对流光位置/宽度/对齐)。
+    static var forceLauncherLoading: Bool { on("CLIPIN_QA_FORCE_LOADING") }
 }
 
 enum ClipinChrome {
@@ -157,13 +160,16 @@ struct ClipinSceneState: Equatable {
 struct ClipinKeycap: View {
     let key: String
     let foreground: Color
+    /// 唯一的 accent 焦点:仅 Paste 主操作的 ↵ 键帽点亮(CLAUDE.md 决策「accent 仅余 Paste
+    /// 主键帽」)。全 app 仅此一处彩色,是 launcher 核心动作「按回车粘贴」的视觉重心,克制不庸俗。
+    var accent: Bool = false
 
     var body: some View {
         // Raycast 式扁平键帽:低调中性圆角块,不上玻璃(窗面已是 Liquid Glass,
         // 键帽再上玻璃就成玻璃叠玻璃)。
         Text(key)
             .font(.system(size: 10.5, weight: .medium, design: .rounded))
-            .foregroundStyle(foreground)
+            .foregroundStyle(accent ? Color.accentColor : foreground)
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, ClipinChrome.keycapInsetH)
@@ -174,7 +180,7 @@ struct ClipinKeycap: View {
                 // 高度/2,会随键帽宽度变"圆度"(单字符像圆球、组合键像长药丸),反而是
                 // 整套统一体系里唯一圆角不统一的元件;固定 cornerTile 才真·统一。
                 RoundedRectangle(cornerRadius: ClipinChrome.cornerTile, style: .continuous)
-                    .fill(Color.primary.opacity(0.06))
+                    .fill(accent ? Color.accentColor.opacity(0.16) : Color.primary.opacity(0.06))
             )
     }
 }
@@ -342,15 +348,17 @@ struct ClipinFooterGlassButtonStyle: ButtonStyle {
             return configuration.label
                 .padding(.horizontal, ClipinChrome.groupGap)
                 .padding(.vertical, ClipinChrome.gap)
-                .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
+                // 圆角统一到 cornerControl(圆润,非方 cornerTile 也非 Capsule):与底栏命令 hover
+                // 底板同档,hover 时同屏出现的所有交互元素圆角一致且圆润(用户实测要求)。
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
                 .overlay(
-                    Capsule(style: .continuous)
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerControl - ClipinChrome.footerHoverRimInset, style: .continuous)
                         .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
-                        .padding(ClipinChrome.footerHoverRimInset) // 内缩一圈,露出外层玻璃 capsule 边
+                        .padding(ClipinChrome.footerHoverRimInset) // 内缩一圈,露出外层玻璃边
                         .allowsHitTesting(false) // 高亮层不抢 Button 的命中
                 )
                 .scaleEffect(pressed ? 0.97 : 1)
-                .contentShape(Capsule(style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
                 .onHover { hovering in
                     withAnimation(ClipinMotion.feedback) { isHovered = hovering }
                 }
@@ -386,12 +394,13 @@ struct ClipinFooterSegmentStyle: ButtonStyle {
                 .padding(.horizontal, ClipinChrome.groupGap)
                 .padding(.vertical, ClipinChrome.gap)
                 .background(
-                    Capsule(style: .continuous)
+                    // hover/press 底板 = cornerControl 圆角矩形,填满命中区(不再内缩)。cornerControl
+                    // 比 cornerTile 圆润(8 太方),与派生 pill 外形同档,hover 时同屏元素圆角完全一致。
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                         .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
-                        .padding(ClipinChrome.footerHoverRimInset) // 内缩一圈:高亮比按钮小一圈,露出外层连续玻璃
                 )
                 .scaleEffect(pressed ? 0.97 : 1)
-                .contentShape(Capsule(style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
                 .onHover { hovering in
                     withAnimation(ClipinMotion.feedback) { isHovered = hovering }
                 }

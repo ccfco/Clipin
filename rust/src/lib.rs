@@ -113,6 +113,12 @@ impl ClipinCore {
         self.storage.load_representations(&id)
     }
 
+    /// 只取 representation UTI 列表（不读 data）。供选中路径判断「有哪些可粘贴格式」用，
+    /// 避免高频选中时为拿格式名而读出图片几十 MB 的 BLOB（详见 storage 同名方法）。
+    pub fn get_representation_utis(&self, id: String) -> Result<Vec<String>, ClipinError> {
+        self.storage.load_representation_utis(&id)
+    }
+
     /// 导出专用快照，原子性见 `Storage::export_archive_snapshot`。
     pub fn export_archive_snapshot(&self) -> Result<Vec<ArchiveSnapshotItem>, ClipinError> {
         self.storage.export_archive_snapshot()

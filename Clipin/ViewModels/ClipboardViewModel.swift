@@ -34,18 +34,28 @@ struct LauncherNotice: Identifiable {
 @MainActor
 final class ClipboardViewModel: ObservableObject {
     /// `selectedItem` 是"异步加载的完整 payload"，与同步设值的 `selectedItemID` 形成双轨流。
-    /// 强制 private(set) 让外部只能通过 `selectItem(id:)` 改变选中状态，杜绝绕过 ID-match guard
-    /// 的可能；消费者一律走 `displayedItem` 读取，由编译器替注释把关。
-    @Published private(set) var selectedItem: ClipItem?
+    /// 强制 private(set) 让外部只能通过 `selectItem(id:)` 改变选中状态。
+    /// `selectItem` 的完成守卫（`self.selectedItemID == capturedId`）保证：selectedItem 只会被赋值为
+    /// 「赋值时仍是当前选中」的条目，绝不会错配成已被翻过的旧项——所以它要么是当前项、要么是上一个
+    /// 落定项（连按去抖窗口内），永远不是「左选 A 右显 B」的错配值。
+    @Published private(set) var selectedItem: ClipItem? {
+        // 每次 selectedItem 赋值即递增 revision。这是「被预览条目变了」的精确单调信号，
+        // 供 PreviewPane 的 EquatableView 判等用——避免比较 ClipItem 各字段（易漏字段 / UniFFI
+        // 加字段就腐烂）。导航连按时 selectedItem 被去抖压住不赋值 → revision 不变 → 预览整棵跳过重渲染；
+        // 落定 / OCR 刷新 / 任何 payload 更新都会赋值 → revision 变 → 预览刷新。
+        didSet { selectedItemRevision &+= 1 }
+    }
+    /// 见 selectedItem.didSet。仅作 PreviewPane 判等信号，不参与业务逻辑。
+    @Published private(set) var selectedItemRevision: Int = 0
     @Published var selectedItemID: String?
 
-    /// PreviewPane 等"右侧 payload 消费者"的唯一入口：仅在 ID 匹配时返回 selectedItem。
-    /// `selectItem(id:)` 同步切换 selectedItemID、异步加载完整 ClipItem，这中间存在时间窗口；
-    /// 直读 selectedItem 会在窗口内显示上一次选中项的数据（"左选 A、右显 B"）。
-    /// 该 guard 与异步回调里的 `self.selectedItemID == capturedId` 同源，把规则收口到消费侧。
+    /// PreviewPane 等"右侧 payload 消费者"的唯一入口。
+    /// 直接返回 selectedItem（不再按 id 严格 gate）：预览与导航解耦后，连按 ↑↓ 的去抖窗口内
+    /// selectedItem 刻意滞后停在上一落定项（Finder 式预览滞后），等导航停下再 snap 到落定项。
+    /// 此处若仍按 id-gate 返回 nil，窗口内预览会闪空窗 / 转圈圈——正是要消除的卡顿观感。
+    /// 错配安全性由 selectedItem 的赋值守卫保证（见上），不需要消费侧再 gate 一道。
     var displayedItem: ClipItem? {
-        guard let selectedItemID, selectedItem?.id == selectedItemID else { return nil }
-        return selectedItem
+        selectedItem
     }
     @Published var searchQuery: String = ""
     @Published var browseMode: LauncherBrowseMode = .all
@@ -227,6 +237,12 @@ final class ClipboardViewModel: ObservableObject {
     private static let pageSize = 50
     private static let previewNeighborItemLimit = 80
     private static let launcherLoadingMinimumVisibleSeconds: TimeInterval = 0.65
+    /// 预览去抖窗口。渲染整棵 PreviewPane 子树会占住主线程（实测：getItem 仅 0.2ms、图片走缩略图
+    /// 缓存命中，开销全在 SwiftUI 重渲染），若上在导航关键路径上，会把紧接着的下一次 ↑↓ 按键处理顶到
+    /// 后面 → 高亮慢半拍、不跟手。故所有选中一律去抖：selectItem 先睡此窗口，期间又来新选中就取消重来，
+    /// 预览只在导航停下那一刻渲染一次，按键路径永远是空的。窗口须大于系统按键连发间隔（实测 ~83ms）
+    /// 才能吞掉一次连按里的所有中间项，留足余量取 120ms。
+    private static let previewSettleWindow: TimeInterval = 0.12
     /// 当前已从 DB 加载的条目总数（用于 offset 计算）
     private var totalLoadedFromDB = 0
     /// 是否还有更多可加载的条目（非 pinned 浏览模式、非搜索时有效）
@@ -368,20 +384,33 @@ final class ClipboardViewModel: ObservableObject {
         previewTask = nil
         isPreparingPreview = false
         clearLauncherLoading()
-        fileAttachmentPreviewIndex = 0
         selectedItemID = id
-        reloadRepresentationsForSelected()
         guard let id else {
+            // 无选中:预览伴随状态立即清空(没有"上一落定项"要维持)。
+            fileAttachmentPreviewIndex = 0
+            selectedRepresentationUTIs = []
             selectedItem = nil
             return
         }
-        // 主线程立即更新 ID（选中高亮即时响应），后台加载完整 item（避免 SQLite 阻塞主线程）。
-        // 旧实现用 try? 把 getItem 失败伪装成 selectedItem = nil，预览区悄无声息——
-        // 用户连按 Return/⌘O 重复 toast，根本不知道是 DB 故障。失败时显式 notice。
-        // 不点亮顶部流光：本地 getItem 是瞬时操作，流光只留给真异步源（见 LauncherLoadingSource）。
+        // 注意:fileAttachmentPreviewIndex 重置 与 reloadRepresentationsForSelected 都挪到下方「落定」处。
+        // 它们是「伴随被预览 item 的状态」,必须和 displayedItem(滞后的 selectedItem)同步,不能跟随
+        // 即时的 selectedItemID——否则去抖窗口内会出现「旧内容 + 新格式徽章」「多文件预览瞬间跳回第 1 张」
+        // 的错配(Codex 复审实证)。
+        // 选中高亮（selectedItemID）已同步更新、底栏走 selectedListItem，导航即时响应。
+        // 预览 payload（selectedItem → PreviewPane）的渲染绝不许上导航关键路径：
+        // 渲染整棵预览子树会占住主线程，把紧接着的下一次 ↑↓ 按键处理顶到后面 → 高亮慢半拍、不跟手
+        //（实测：持续按住时不渲染预览 = 完全跟手；单步走立即渲染 = 卡）。
+        // 故所有选中都去抖：先睡 previewSettleWindow，期间又来新选中就取消重来——预览只在你手停下
+        // 那一刻渲染一次，按键路径永远是空的。窗口需大于系统连发间隔（实测 ~83ms）才能吞掉连发，取 120ms。
+        // 去抖期间 displayedItem 维持上一落定值（完成守卫 selectedItemID==capturedId 杜绝错配），
+        // 配合 AsyncPreviewImage 的低清占位，落定渲染时是瞬时清晰、无空窗、无转圈圈。
         let core = self.core
         let capturedId = id
-        loadItemTask = Task {
+        loadItemTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(Self.previewSettleWindow * 1_000_000_000))
+            guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
+            // 旧实现用 try? 把 getItem 失败伪装成 selectedItem = nil，预览区悄无声息——
+            // 用户连按 Return/⌘O 重复 toast，根本不知道是 DB 故障。失败时显式 notice。
             let result: Result<ClipItem, Error> = await Task.detached(priority: .userInitiated) {
                 do { return .success(try core.getItem(id: capturedId)) }
                 catch { return .failure(error) }
@@ -390,10 +419,36 @@ final class ClipboardViewModel: ObservableObject {
             switch result {
             case .success(let item):
                 self.selectedItem = item
+                // 伴随被预览 item 的状态在「落定」这一刻与它同步刷新(见上方说明):
+                // 重置多文件栈到第 1 张、按落定项重查可粘贴格式 UTI。两者都只在预览真正切到新 item
+                // 时发生,去抖窗口内维持上一落定项的值,与 displayedItem 一致。
+                self.fileAttachmentPreviewIndex = 0
+                self.reloadRepresentationsForSelected()
+                self.prewarmPreviewNeighbors(around: capturedId)
             case .failure(let error):
                 ClipinLog.viewModel.error("selectItem.getItem failed id=\(capturedId, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 self.selectedItem = nil
                 self.showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+            }
+        }
+    }
+
+    /// 落定某项时，后台预解码相邻图片的预览大图。大图首次落上来要现解码多兆像素原图（最慢 ~100ms），
+    /// 用户单步浏览时这段空窗就是「加载慢」的来源。提前在邻居上把解码摊销到用户停留期之外，
+    /// 下一步切过去即缓存命中、清晰瞬现。只预热前后各 2 张图片项；解码限并发由 ThumbnailDecodeGate 兜底。
+    private func prewarmPreviewNeighbors(around id: String) {
+        guard let idx = flatOrder.firstIndex(where: { $0.id == id }) else { return }
+        let lo = max(0, idx - 2)
+        let hi = min(flatOrder.count - 1, idx + 2)
+        let paths: [String] = (lo...hi).compactMap { i in
+            guard i != idx else { return nil }  // 当前项由 AsyncPreviewImage 自己解码，不重复
+            let item = flatOrder[i]
+            guard item.clipType == .image, let path = item.imagePath else { return nil }
+            return path
+        }
+        for path in paths {
+            Task.detached(priority: .utility) {
+                _ = await ClipImageThumbnailCache.preview.thumbnail(for: path)
             }
         }
     }
@@ -452,20 +507,27 @@ final class ClipboardViewModel: ObservableObject {
             selectedRepresentationUTIs = []
             return
         }
+        // 选中导航与「格式数据加载」解耦：只有 text / url 才有可粘贴的富文本格式（HTML / RTF），
+        // 其余类型（图片 / 文件）没有这层动作，直接清空、连查询都不发。图片的 representations 是
+        // 数十 MB 的无压缩 TIFF/PNG，高频上下选中时若为拿格式名而读它，就是大图卡顿的根因。
+        guard let clipType = selectedListItem?.clipType, clipType == .text || clipType == .url else {
+            selectedRepresentationUTIs = []
+            return
+        }
         let core = self.core
         Task.detached(priority: .userInitiated) { [weak self] in
-            // 旧实现 ?? [] 把 representations 加载失败伪装成"没有 rich format"，
-            // 用户在 footer 看不到 HTML/RTF 选项不知道是 DB 故障——按"不兜底"显式 log，
-            // 失败时清空 UTI 集合（保留旧的会让别的条目显示错的格式）。
-            let result: Result<[ClipRepresentation], Error>
-            do { result = .success(try core.getRepresentations(id: id)) }
+            // 只查 UTI 列表、不读 data BLOB（getRepresentationUtis vs getRepresentations）：
+            // 选中只需知道「有哪些格式」，data 留到真正 ⌥H/⌥R 粘贴时由 performPasteRepresentation 按需读。
+            // 旧实现 ?? [] 把失败伪装成"没有 rich format"，按"不兜底"显式 log；失败清空（保留旧的会串格式）。
+            let result: Result<[String], Error>
+            do { result = .success(try core.getRepresentationUtis(id: id)) }
             catch { result = .failure(error) }
             await MainActor.run {
                 guard let self else { return }
                 guard self.selectedItemID == id else { return }
                 switch result {
-                case .success(let reps):
-                    self.selectedRepresentationUTIs = reps.map { $0.uti }
+                case .success(let utis):
+                    self.selectedRepresentationUTIs = utis
                 case .failure(let error):
                     ClipinLog.viewModel.error("reloadRepresentationsForSelected failed id=\(id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     self.selectedRepresentationUTIs = []

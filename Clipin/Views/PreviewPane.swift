@@ -4,12 +4,38 @@ import ImageIO
 import NaturalLanguage
 import UniformTypeIdentifiers
 
-/// 右侧预览面板
-struct PreviewPane: View {
+/// 右侧预览面板。
+///
+/// 与导航解耦的关键：本视图**不观察** ClipboardViewModel（不用 @EnvironmentObject/@ObservedObject），
+/// 只持 `let vm` 引用调用动作；所有响应式状态由 MainPanel（它观察 vm）以**值**注入。
+/// 配合 MainPanel 处的 `.equatable()`，导航连按时这些值不变（selectedItem 被去抖压住、revision 不变）
+/// → 整棵预览子树跳过重渲染，按键路径不被预览渲染占住（实测预览渲染是 ↑↓ 卡顿的确凿主因）。
+struct PreviewPane: View, Equatable {
     let item: ClipItem?
     var searchQuery: String = ""
     let sceneState: ClipinSceneState
-    @EnvironmentObject var vm: ClipboardViewModel
+    /// 见 ClipboardViewModel.selectedItemRevision：被预览条目变化的精确判等信号。
+    let itemRevision: Int
+    let editingItemID: String?
+    let representationUTIs: [String]
+    let hasSelection: Bool
+    let fileAttachmentIndex: Int
+    /// 内容编辑草稿（独立 ObservableObject，ContentEditorView 自行 @ObservedObject 订阅）。
+    let editingDraft: EditingDraft
+    /// 仅用于调用动作（commit/cancel 编辑、showNotice、网络加载标记等），不观察。
+    let vm: ClipboardViewModel
+
+    /// 判等只比「会影响预览渲染的值」，忽略 item（其变化由 itemRevision 捕获）、vm（同一实例）、
+    /// editingDraft（同一实例）。导航连按时全部相等 → SwiftUI 跳过 body。
+    nonisolated static func == (lhs: PreviewPane, rhs: PreviewPane) -> Bool {
+        lhs.itemRevision == rhs.itemRevision &&
+        lhs.searchQuery == rhs.searchQuery &&
+        lhs.sceneState == rhs.sceneState &&
+        lhs.editingItemID == rhs.editingItemID &&
+        lhs.representationUTIs == rhs.representationUTIs &&
+        lhs.hasSelection == rhs.hasSelection &&
+        lhs.fileAttachmentIndex == rhs.fileAttachmentIndex
+    }
 
     /// metadata 预热触发器：item 切换时 `.task` 异步把 dimensions/fileSize/appIcon 写进
     /// PreviewMetadataCache，完成后 revision +1 强制 body 重建，此时 cached* 同步命中显示。
@@ -20,10 +46,10 @@ struct PreviewPane: View {
     var body: some View {
         Group {
             if let item {
-                if vm.editingContentItemID == item.id {
+                if editingItemID == item.id {
                     contentStage {
                         ContentEditorView(
-                            draft: vm.editingContentDraft,
+                            draft: editingDraft,
                             onSave: { vm.commitEditContent() },
                             onCancel: { vm.cancelEditContent() }
                         )
@@ -31,13 +57,12 @@ struct PreviewPane: View {
                 } else {
                     contentStage(for: item)
                 }
-            } else if vm.selectedListItem != nil {
-                // 已有选中行，但完整 ClipItem 还在后台 SQLite 读取中（或 ID-match guard
-                // 拒绝了上一次选中的陈旧数据）。显式给一个安静的加载态，避免出现
-                // "有内容 → 空占位 → 新内容" 的闪烁；正常路径 <16ms 看不到 spinner。
+            } else if hasSelection {
+                // 已有选中行、但 payload 尚未落定（仅首帧 / 读失败后会短暂命中——正常导航中
+                // displayedItem 滞后停在上一落定项，不会落到这里）。保留布局留白即可，禁止转圈圈：
+                // 加载指示全 app 统一只走顶部流光（且仅真异步源点亮），本地 getItem 瞬时无需任何指示。
                 contentStage {
-                    ProgressView()
-                        .controlSize(.small)
+                    Color.clear
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {
@@ -103,13 +128,12 @@ struct PreviewPane: View {
 
     private func contentStage<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         // 预览是阅读区(非选中行),内容左右上内距用 groupGap 留出阅读呼吸位。
-        // 内容下内距单独用 gap(8)而非 groupGap(16):FooterRail 下方紧接浮动底栏 Paste 胶囊,
-        // 胶囊自带 .padding(.bottom, gap),最终可见距离 = gap(下内距 8) + gap(胶囊上缓冲 8) = 8+8 一致节奏。
-        // 若两边都用 groupGap,胶囊上方会多出 8pt 错位,与全 app gap 网格不齐。
+        // 下方不再额外加内距:metadata(footer) 直接坐在 floatingFooterBand 避让线上,底栏命令簇在
+        // 该避让带内居中,与 metadata、与窗口底各 ~9 对称。(旧实现这里补 8pt 是为已删除的 Paste
+        // 胶囊节奏配的,胶囊删后那 8pt 反而把 metadata 顶离避让线、破坏对称——一并清掉。)
         content()
             .padding(.horizontal, ClipinChrome.groupGap)
             .padding(.top, ClipinChrome.groupGap)
-            .padding(.bottom, ClipinChrome.gap)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.bottom, ClipinChrome.floatingFooterBand)
     }
@@ -126,16 +150,16 @@ struct PreviewPane: View {
                 scrollStrategy: .external
             ) {
                 if let color = detectColorForPreview(in: item.content) {
-                    ColorSwatchPreview(color: color, originalText: item.content)
+                    ColorSwatchPreview(vm: vm, color: color, originalText: item.content)
                         .frame(maxWidth: 480, alignment: .leading)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 } else {
                     TextPreviewBody(
                         text: item.content,
                         font: previewTextFont(),
-                        searchQuery: searchQuery
+                        searchQuery: searchQuery,
+                        vm: vm
                     )
-                    .environmentObject(vm)
                     .frame(maxWidth: 560, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
@@ -144,19 +168,21 @@ struct PreviewPane: View {
             URLPreviewView(
                 urlString: item.content,
                 searchQuery: searchQuery,
-                footerEntries: footerEntries(for: item)
+                footerEntries: footerEntries(for: item),
+                vm: vm
             )
-            .environmentObject(vm)
 
         case .image:
-            // `.id(item.id)` 让切换条目时整棵 view 重建，隔离图片/OCR 的异步加载状态。
+            // 不挂 `.id(item.id)`：整棵子树（ScrollView + 渐隐遮罩 + footer）按 item 全量重建是
+            // 一次 ~20ms 主线程开销，停留后又按 ↑↓ 时偶尔撞上这次重建 → 偶发不跟手。去掉后 SwiftUI
+            // diff 复用容器、只换内容，渲染更便宜。唯一持有异步 @State 的图片叶子按 path 单独 .id 重置
+            // （见 ImagePreviewBody），既防错图闪、又不牵连整棵子树。
             ImagePreviewBody(
                 item: item,
                 searchQuery: searchQuery,
                 vm: vm,
                 footerEntries: footerEntries(for: item)
             )
-            .id(item.id)
 
         case .file:
             // 同上：fileIcons 虽然每次 .task 都会全量覆盖，但 .id 是更稳的防御，
@@ -165,6 +191,7 @@ struct PreviewPane: View {
                 item: item,
                 searchQuery: searchQuery,
                 vm: vm,
+                fileAttachmentIndex: fileAttachmentIndex,
                 footerEntries: footerEntries(for: item)
             )
             .id(item.id)
@@ -385,7 +412,7 @@ struct PreviewPane: View {
 
     private var formatsDisplay: String {
         var labels: [String] = ["plain"]
-        let utis = vm.selectedRepresentationUTIs
+        let utis = representationUTIs
         if utis.contains("public.html") { labels.append("html") }
         if utis.contains("public.rtf")  { labels.append("rtf") }
         if utis.contains("public.rtfd") { labels.append("rtfd") }
@@ -493,7 +520,8 @@ struct PreviewPane: View {
         let text: String
         let font: NSFont
         let searchQuery: String
-        @EnvironmentObject var vm: ClipboardViewModel
+        /// 仅传 SelectableTextPreview 做动作（weak 持有），不观察。
+        let vm: ClipboardViewModel
 
         /// JSON 自动 pretty-print：默认开启（更易读），允许切回 Raw 看原始压缩格式。
         /// 用 @State 让用户的选择保留在当前 item 视图生命周期内；切到下一条目重置回默认。

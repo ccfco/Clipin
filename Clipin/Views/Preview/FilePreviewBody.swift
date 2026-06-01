@@ -5,10 +5,12 @@ import UniformTypeIdentifiers
 struct FilePreviewBody: View {
     let item: ClipItem
     let searchQuery: String
-    /// 必须 @ObservedObject:multiFileStack 读 vm.fileAttachmentPreviewIndex,
-    /// 改为 @ObservedObject 后 SwiftUI 才会订阅 @Published 变化重渲染视图。
-    /// 原写法 `let vm: ClipboardViewModel` 仅传引用不订阅,导致 ←→ / 鼠标点击切换栈无响应。
-    @ObservedObject var vm: ClipboardViewModel
+    /// 仅用于动作（stepFileAttachmentPreview），不观察——预览与导航解耦后整棵预览不订阅 vm。
+    /// 栈索引改由 `fileAttachmentIndex` 显式传入:它在 PreviewPane 的 EquatableView 判等键里,
+    /// 索引一变父层重渲染本视图,←→ / 点击切栈照常响应(不再靠 @ObservedObject 订阅)。
+    let vm: ClipboardViewModel
+    /// 当前多文件栈索引(= vm.fileAttachmentPreviewIndex 的值快照)。
+    let fileAttachmentIndex: Int
     /// 元数据底栏徽章数据;由 PreviewFadeFooterContainer 统一渲染。
     let footerEntries: [PreviewPane.PreviewRailEntry]
 
@@ -53,7 +55,7 @@ struct FilePreviewBody: View {
                     // 视觉权重已由叠放卡承担,小 icon 会和叠放冲突。
                     // 标题与列表同步当前栈顶 index:用户切到 file 2 时,标题和列表的高亮同步切换,
                     // 三处视觉信号(栈/标题/列表)指向同一个文件,避免"卡是 2、标题写 1"语义割裂。
-                    let clampedIndex = min(max(0, vm.fileAttachmentPreviewIndex), allPaths.count - 1)
+                    let clampedIndex = min(max(0, fileAttachmentIndex), allPaths.count - 1)
                     let currentPath = allPaths[clampedIndex]
                     let currentURL = URL(fileURLWithPath: currentPath)
                     multiFileStack(paths: allPaths, currentIndex: clampedIndex)

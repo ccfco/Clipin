@@ -440,7 +440,8 @@ struct URLPreviewView: View {
     let searchQuery: String
     /// 元数据底栏徽章数据;由 PreviewFadeFooterContainer 统一渲染。
     let footerEntries: [PreviewPane.PreviewRailEntry]
-    @EnvironmentObject var vm: ClipboardViewModel
+    /// 仅用于动作（setPreviewNetworkLoading / showNotice），不观察。
+    let vm: ClipboardViewModel
     /// 从 URLMetadataCache 异步拉取的页面标题；nil 表示尚未加载或拉不到。
     /// 加载完成后会显示在 header 顶部，host 退到次行——同其他应用对齐。
     @State private var pageTitle: String?

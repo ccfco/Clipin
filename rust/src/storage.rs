@@ -2287,6 +2287,23 @@ impl Storage {
         }
         Ok(result)
     }
+
+    /// 只读某条目的 representation UTI 列表，不触碰 data BLOB。
+    /// 选中导航高频调用：图片的 data 是无压缩 TIFF/PNG（数十 MB），若为拿格式名而读全部 data
+    /// 并跨 UniFFI 拷贝，会让「上下选中大图」付出加载全部格式数据的代价（卡顿根因）。
+    /// 选中只需知道「有哪些格式」，data 留到真正「粘贴为该格式」时按需读。
+    pub fn load_representation_utis(&self, item_id: &str) -> Result<Vec<String>, ClipinError> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
+            "SELECT uti FROM clip_representations WHERE item_id = ?1 ORDER BY uti",
+        )?;
+        let rows = stmt.query_map(params![item_id], |row| row.get(0))?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
 }
 
 impl SearchSortable for ClipItem {

@@ -3,7 +3,8 @@ import SwiftUI
 
 struct ColorSwatchPreview: View {
     @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var vm: ClipboardViewModel
+    /// 仅用于 showNotice 动作，不观察（避免随 vm 任意变化重渲染，破坏预览与导航解耦）。
+    let vm: ClipboardViewModel
     let color: Color
     let originalText: String
     @State private var hoveredRow: String?

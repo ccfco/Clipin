@@ -23,6 +23,10 @@ struct ImagePreviewBody: View {
                     }
                     .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    // 按 path 给图片叶子独立 identity：ImagePreviewBody 整体不再挂 .id（容器 diff 复用，
+                    // 渲染更便宜），但持有 @State(loaded/placeholder) 的只有这个叶子——若它跨 item 复用，
+                    // 新 path 的 .task 跑起来前首帧会闪上一张图。只重置这个叶子既防闪、又不全量重建整棵子树。
+                    .id(path)
                 } else {
                     Label("Image not found", systemImage: "exclamationmark.triangle")
                         .font(.system(size: 13))
@@ -143,7 +147,12 @@ struct AsyncPreviewImage<Placeholder: View>: View {
     let maxHeight: CGFloat
     @ViewBuilder var placeholder: () -> Placeholder
 
+    /// 清晰大图（预览档 ~1024px）。
     @State private var loaded: CGImage?
+    /// 即时低清占位：列表行 24px 缩略图早已解码缓存，瞬时可取。大图首次落上来要现解码原图
+    /// （多兆像素 PNG，最慢 ~100ms），期间若空白就是用户感知的「加载慢」。先把低清放大铺上去，
+    /// 永不空白，清晰大图解出即无缝替换。
+    @State private var lowResPlaceholder: CGImage?
     @State private var failed = false
 
     var body: some View {
@@ -153,21 +162,31 @@ struct AsyncPreviewImage<Placeholder: View>: View {
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: .infinity, maxHeight: maxHeight)
+            } else if let lowResPlaceholder {
+                // 低清占位：medium 插值让放大不至于硬块状；它是过渡态，清晰图就绪即换。
+                Image(decorative: lowResPlaceholder, scale: 1, orientation: .up)
+                    .resizable()
+                    .interpolation(.medium)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: maxHeight)
             } else if failed {
                 placeholder()
             } else {
-                // 解码中：保留 frame 占位，避免外层布局抖动
+                // 连低清占位都没有（图从未在列表解码过）：保留 frame 避免布局抖动。
                 Color.clear.frame(maxWidth: .infinity, maxHeight: maxHeight)
             }
         }
         .task(id: path) {
             failed = false
-            // 命中即同步显示（避免首帧空白），未命中再 await 后台解码
+            // 清晰大图已缓存：直接显示，无需占位、无解码延迟。
             if let cached = ClipImageThumbnailCache.preview.cachedThumbnail(for: path) {
                 loaded = cached
+                lowResPlaceholder = nil
                 return
             }
             loaded = nil
+            // 未命中清晰档：立刻铺列表小缩略图当占位（瞬时，消除空白），后台解清晰大图。
+            lowResPlaceholder = ClipImageThumbnailCache.shared.cachedThumbnail(for: path)
             let requestedPath = path
             let cg = await ClipImageThumbnailCache.preview.thumbnail(for: requestedPath)
             // 快速切换 item 时，旧 path 的解码结果可能在新 path 任务启动后才返回。
@@ -175,7 +194,9 @@ struct AsyncPreviewImage<Placeholder: View>: View {
             guard !Task.isCancelled, requestedPath == path else { return }
             if let cg {
                 loaded = cg
-            } else {
+                lowResPlaceholder = nil
+            } else if lowResPlaceholder == nil {
+                // 清晰档解码失败且无占位兜底，才算真失败。
                 failed = true
             }
         }

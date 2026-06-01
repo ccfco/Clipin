@@ -102,6 +102,8 @@ struct ActionPalette: View {
                 .onTapGesture { dismiss() }
 
             // 子面板打开时主面板退到身后:压暗 + 不可点,把焦点交给子面板。
+            // 边距 gap(8) 必须与底栏玻璃胶囊一致(MainPanel 同心注释):⌘K 从右下角胶囊
+            // 缩放展开,两者右下角锚点必须重合,否则切换 ⌘K 时右下角会跳。
             palettePanel
                 .opacity(isShowingSub ? 0.55 : 1)
                 .allowsHitTesting(!isShowingSub)

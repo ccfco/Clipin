@@ -55,10 +55,12 @@ struct MainPanel: View {
         .frame(width: 800, height: 540)
         .overlay(alignment: .top) {
             ZStack(alignment: .top) {
-                if viewModel.isLauncherLoading {
+                // 加载流光横跨整个面板顶边(launcher 通用「顶部加载条」心智)。
+                if viewModel.isLauncherLoading || QAFlags.forceLauncherLoading {
                     LauncherLoadingGlow()
                         .transition(.opacity)
                 }
+                // 连续粘贴是全局模式状态，同样横跨顶边。
                 if viewModel.isContinuousPasteEnabled {
                     LinearGradient(
                         colors: [Color.accentColor, Color.accentColor.opacity(0.4)],
@@ -190,13 +192,32 @@ struct MainPanel: View {
                 .frame(width: 292)
                 .opacity(sceneState.listRestingOpacity)
 
-            PreviewPane(item: viewModel.displayedItem, searchQuery: viewModel.searchQuery, sceneState: sceneState)
-                .environmentObject(viewModel)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            previewColumn
         }
         .padding(.horizontal, ClipinChrome.gap)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(ClipinMotion.focusShift, value: sceneState)
+    }
+
+    @ViewBuilder
+    private var previewColumn: some View {
+        // 预览与导航解耦:PreviewPane 不观察 vm,只吃这里注入的值 + `.equatable()`。
+        // 导航连按时 selectedItem 被去抖压住 → itemRevision 不变、其余值不变 → SwiftUI 跳过整棵
+        // 预览重渲染,按键路径不被预览占住(预览渲染是 ↑↓ 卡顿的确凿主因,实测占残留卡顿绝大部分)。
+        PreviewPane(
+            item: viewModel.displayedItem,
+            searchQuery: viewModel.searchQuery,
+            sceneState: sceneState,
+            itemRevision: viewModel.selectedItemRevision,
+            editingItemID: viewModel.editingContentItemID,
+            representationUTIs: viewModel.selectedRepresentationUTIs,
+            hasSelection: viewModel.selectedListItem != nil,
+            fileAttachmentIndex: viewModel.fileAttachmentPreviewIndex,
+            editingDraft: viewModel.editingContentDraft,
+            vm: viewModel
+        )
+        .equatable()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var itemList: some View {
@@ -226,12 +247,9 @@ struct MainPanel: View {
     }
 
     private var bottomBar: some View {
-        // macOS 26 标准:GlassEffectContainer 把相邻 .glassEffect(.regular.interactive(),
-        // in: Capsule) 元件融成一条连续液态玻璃(共享 rim),hover/press 由系统原生给。
-        // 前提:每颗 chip 必须先有内边距(见 ClipinFooterGlassButtonStyle),否则玻璃缩成发丝。
-        GlassEffectContainer(spacing: ClipinChrome.gap) {
-            bottomBarRow
-        }
+        // 命令簇坐在窗体玻璃上、无独立玻璃外壳(见 bottomBarRow),故不再需要 GlassEffectContainer
+        // ——它仅用于把多个 .glassEffect 元件融成连续玻璃,而这里已无任何 glassEffect。
+        bottomBarRow
     }
 
     private var bottomBarRow: some View {
@@ -240,10 +258,9 @@ struct MainPanel: View {
             // rail 已显示,底栏只承担右对齐命令簇(去掉伪按钮式来源胶囊)。
             Spacer()
 
-            // 右侧动作簇:整簇共用**一块**连续玻璃 Capsule(Raycast 效果①);
-            // 每颗按钮用 ClipinFooterSegmentStyle 自绘内缩灰高亮+微缩放(效果②)。
-            // 不再 per-button glass + glassEffectUnion(union 会把玻璃并成静态一块、
-            // 杀掉逐颗 hover,二者只能取一——故改组级玻璃 + 自绘 hover)。
+            // 右侧命令簇:每颗命令(Paste / Actions)是坐在窗体玻璃上的「文字 + 键帽」,无独立
+            // 材质外壳。ClipinFooterSegmentStyle 只负责 hover/press 的极淡内缩底板 + 微缩放
+            // (与列表选中底板同一套交互语言),不再承担任何玻璃。
             HStack(spacing: ClipinChrome.gap) {
                 if viewModel.selectedListItem != nil {
                     Button { viewModel.pasteSelected() } label: {
@@ -269,16 +286,17 @@ struct MainPanel: View {
                 }
                 .buttonStyle(ClipinFooterSegmentStyle())
             }
-            // 底栏胶囊用原生 Material 而非 Liquid Glass:Material 只做毛玻璃模糊、
-            // 不像 Liquid Glass 那样提亮,贴在整窗玻璃上不会二次发白,明暗两个模式
-            // 都由系统调好,无需 colorScheme 分支 tint 补偿。
-            .background(.regularMaterial, in: Capsule(style: .continuous))
+            // 命令直接坐窗体玻璃,不套盒子——与搜索栏 / 列表 / 预览同一套语法(内容靠 vibrancy
+            // 坐在那块唯一的 NSGlassEffectView 上)。底栏曾是全 app 唯一套了玻璃外壳的内容,反而
+            // 最突兀;删掉外壳,可点/选中反馈交给 ClipinFooterSegmentStyle 的极淡内缩底板(与列表
+            // 选中底板同源),Paste 主操作靠字重强调,不靠材质。同心/圆角/悬浮问题随外壳一并消失。
         }
         .animation(ClipinMotion.commandReveal, value: showsDerivedPills)
-        // 玻璃胶囊距窗口右 / 下都恰为 edge —— 与 ⌘K 动作面板同角对齐，
-        // 切换 ⌘K 时右下角锚点不跳。左侧由 Spacer 吸收，不需要 padding。
+        // 命令簇在底部避让带(floatingFooterBand)内垂直居中。前提:预览 metadata 也归位到避让线
+        // (见 PreviewPane.contentStage 已删旧胶囊遗留的 8pt 下内距),metadata 底 = 避让线 = 52,
+        // 命令簇在 52 带内居中 → 距 metadata、距窗口底严格相等(各 ~9),且命令簇扎实贴底不飘。
+        .frame(height: ClipinChrome.floatingFooterBand)
         .padding(.trailing, ClipinChrome.gap)
-        .padding(.bottom, ClipinChrome.gap)
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
 
@@ -346,16 +364,18 @@ struct MainPanel: View {
     private func pasteCallToAction(label: String, key: String) -> some View {
         HStack(spacing: ClipinChrome.gap) {
             Text(label)
-                // Paste 是底栏主操作,文字用纯黑突出(该黑的黑);Actions 等次级
-                // 命令仍走柔化灰,主次分明。
-                .font(.system(size: 13, weight: .medium))
+                // Paste 是底栏主操作:纯黑 + semibold 字重双重强调(该黑的黑、该重的重);
+                // Actions 等次级命令走柔化灰 + medium,主次分明。
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
 
+            // 全 app 唯一 accent 焦点:Paste 的 ↵ 键帽点亮(CLAUDE.md「accent 仅余 Paste 主键帽」)。
             ClipinKeycap(
                 key: key,
-                foreground: ClipinInk.secondary
+                foreground: ClipinInk.secondary,
+                accent: true
             )
         }
     }
@@ -480,6 +500,7 @@ private struct LauncherLoadingGlow: View {
             }
         }
         .frame(height: 18)
+        // +1pt 让流光避开面板物理顶边的 shell 圆角顶点 + window frame hairline，落在玻璃内侧第一排干净像素。
         .offset(y: 1)
     }
 }
