@@ -247,6 +247,15 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(urlPreviewAutoFetch, forKey: Keys.urlPreviewAutoFetch) }
     }
 
+    /// URL 预览的「截图兜底」：前面 og:image / 图片直链都拿不到时，用离屏 WKWebView 渲染页面截图。
+    /// 默认开启——它是 SPA（飞书/钉钉文档）/ 本地 file:// / 内网页面唯一能拿到真容的途径。
+    /// 但 WKWebView 会执行页面 JS、加载第三方资源，隐私暴露面比纯抓 HTML 大（cookie 用内存态
+    /// 不落盘，token/webhook 黑名单仍前置拦截），所以给用户一个独立开关可彻底关掉。
+    /// 依赖 urlPreviewAutoFetch：自动抓取整体关闭时截图也不触发。
+    @Published var urlPreviewScreenshot: Bool {
+        didSet { defaults.set(urlPreviewScreenshot, forKey: Keys.urlPreviewScreenshot) }
+    }
+
     @Published var pinnedItemsPresentation: PinnedItemsPresentation {
         didSet { defaults.set(pinnedItemsPresentation.rawValue, forKey: Keys.pinnedItemsPresentation) }
     }
@@ -292,6 +301,7 @@ final class SettingsStore: ObservableObject {
         static let rememberPanelPosition = "settings.rememberPanelPosition"
         static let useCtrlVInTerminalForImages = "settings.useCtrlVInTerminalForImages"
         static let urlPreviewAutoFetch = "settings.urlPreviewAutoFetch"
+        static let urlPreviewScreenshot = "settings.urlPreviewScreenshot"
         static let pinnedItemsPresentation = "settings.pinnedItemsPresentation"
         static let launcherDefaultView = "settings.launcherDefaultView"
         static let lastLauncherBrowseMode = "settings.lastLauncherBrowseMode"
@@ -376,6 +386,7 @@ final class SettingsStore: ObservableObject {
         self.rememberPanelPosition = defaults.object(forKey: Keys.rememberPanelPosition) as? Bool ?? false
         self.useCtrlVInTerminalForImages = defaults.object(forKey: Keys.useCtrlVInTerminalForImages) as? Bool ?? false
         self.urlPreviewAutoFetch = defaults.object(forKey: Keys.urlPreviewAutoFetch) as? Bool ?? true
+        self.urlPreviewScreenshot = defaults.object(forKey: Keys.urlPreviewScreenshot) as? Bool ?? true
         self.pinnedItemsPresentation = storedPinnedItemsPresentation
         self.launcherDefaultView = storedLauncherDefaultView
         self.lastLauncherBrowseMode = storedLastLauncherBrowseMode

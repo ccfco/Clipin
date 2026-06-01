@@ -60,7 +60,7 @@ actor URLMetadataCache {
         lru.append(key)
     }
 
-    /// HTML head 下载大小上限 256KB：与 FaviconCache 同款防护（防服务器忽略 Range 返回超大页面）。
+    /// HTML head 下载大小上限 256KB：与 FaviconCache 同款防护，streaming 读到上限即停，防超大页面吃满内存。
     private static let maxHTMLBytes = 256 * 1024
 
     /// query 里出现这些关键字时，跳过 title 抓取——避免"选中即 GET"消费一次性 token。
@@ -101,11 +101,33 @@ actor URLMetadataCache {
         !hasSensitiveToken(url) && !hasWebhookPath(url)
     }
 
+    /// 可直接当预览大图渲染的图片扩展名白名单。
+    /// `ico` 不在内——favicon 尺寸太小不适合做顶部大图；`pdf` 不在内——非位图。
+    private static let directImageExtensions: Set<String> = [
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "heif", "avif", "tiff", "tif",
+    ]
+
+    /// URL 是否直接指向图片资源（按 path 扩展名白名单判定）。
+    /// 命中则无需抓 HTML——URL 自身就是预览图，直接交给 OGImageCache 渲染。
+    ///
+    /// **必须用白名单而非"是否带扩展名"**：`arxiv.org/pdf/2305.13245` 的 `url.pathExtension`
+    /// 是 `13245`（版本号），朴素判断会把它误当图片直链。`url.pathExtension` 本身已剥离 query，
+    /// 故 `cdn.site.com/a.png?v=2` 取到的是 `png`。
+    nonisolated static func isDirectImageResource(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        return !ext.isEmpty && directImageExtensions.contains(ext)
+    }
+
     private nonisolated static func fetch(urlString: String) async -> Snapshot {
         guard let url = URL(string: urlString) else { return Snapshot(title: nil, ogImageURL: nil) }
         // 硬性黑名单只挡「选中即 GET」可能消费凭证或触发动作的 URL。
         // localhost / 内网链接是开发和自托管场景的常见剪贴板内容，不能按 host 误伤。
         guard shouldAutoFetchMetadata(for: url) else { return Snapshot(title: nil, ogImageURL: nil) }
+        // URL 自身就是图片 → 跳过 HTML 抓取，直接把它当 og:image 渲染，标题用文件名。
+        // 命中此分支的链接（剪贴板里常见的图床/CDN 图片直链）此前会被当 HTML 解析而拿不到任何 meta。
+        if isDirectImageResource(url) {
+            return Snapshot(title: url.lastPathComponent, ogImageURL: urlString)
+        }
         let request = makeHTMLPrefixRequest(for: url)
         // HTML metadata 只需要页面前缀；大页面 Content-Length 超限不应导致 title/OG 全部失败。
         guard let data = await FaviconCache.downloadHTMLPrefixWithLimit(request, maxBytes: maxHTMLBytes) else {
@@ -125,15 +147,9 @@ actor URLMetadataCache {
     nonisolated static func makeHTMLPrefixRequest(for url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
-        // 限制下载量：HTML head 在前 64KB 内的概率 >95%，部分 CDN 忽略 Range 也有 4s 兜底
-        request.setValue("bytes=0-65535", forHTTPHeaderField: "Range")
-        // Range + gzip 容易拿到不可解的压缩分片；metadata 解析需要未压缩 HTML 前缀。
-        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-        // 部分站点按 UA 切版本（移动版 vs PC 版），用通用 Safari UA 保证拿到完整 meta
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
-            forHTTPHeaderField: "User-Agent"
-        )
+        // 真实浏览器头：无 Range / 无 identity，由 URLSession 自动 gzip+解压，
+        // 下载量上限由 downloadHTMLPrefixWithLimit 的 streaming 截断到 maxHTMLBytes。
+        FaviconCache.applyBrowserHeaders(to: &request)
         return request
     }
 
@@ -416,13 +432,16 @@ actor OGImageCache {
     /// 5MB 兜底防恶意 image bomb（与 favicon 同款防护）。
     private static let maxImageBytes = 5 * 1024 * 1024
 
-    func image(for urlString: String) async -> NSImage? {
+    /// `referer` 是源页面 URL：og:image 常托管在 CDN 上且开了 Referer 防盗链，
+    /// 带上源页面 referer 模拟"浏览器从该页加载分享图"，绕过基础防盗链。
+    /// referer 不进 cache key——同一图片 URL 不论来自哪页都是同一张图。
+    func image(for urlString: String, referer: String? = nil) async -> NSImage? {
         if let cached = cache[urlString] {
             touch(urlString)
             return cached
         }
         if let task = pending[urlString] { return await task.value }
-        let task = Task<NSImage?, Never> { await Self.download(urlString) }
+        let task = Task<NSImage?, Never> { await Self.download(urlString, referer: referer) }
         pending[urlString] = task
         let result = await task.value
         pending[urlString] = nil
@@ -446,14 +465,11 @@ actor OGImageCache {
         lru.append(key)
     }
 
-    private nonisolated static func download(_ urlString: String) async -> NSImage? {
+    private nonisolated static func download(_ urlString: String, referer: String?) async -> NSImage? {
         guard let url = URL(string: urlString) else { return nil }
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
-            forHTTPHeaderField: "User-Agent"
-        )
+        FaviconCache.applyBrowserHeaders(to: &request, referer: referer.flatMap { URL(string: $0) })
         guard let data = await FaviconCache.downloadWithLimit(request, maxBytes: maxImageBytes),
               let image = NSImage(data: data) else { return nil }
         return image
@@ -519,21 +535,37 @@ struct URLPreviewView: View {
                 return
             }
             pageTitle = snapshot.title
-            // OG image 下载是独立网络请求，独立检查 task 状态——拉的同时用户可能已切走条目。
-            // 拿到 og:image 链接即进入 loading 态显示骨架，避免「先空白、图突然插进来」的跳动。
-            guard let ogURL = snapshot.ogImageURL else {
+
+            // 顶部大图三层 fallback：① og:image/twitter:image（含图片直链短路，质量最高）
+            // → ② 同上下载 → ③ WKWebView 截图兜底（覆盖 SPA/本地/内网这些纯抓 HTML 拿不到图的页面）。
+            // 只要接下来确实会去取图（有 og:image，或截图开关开着）才进 loading 骨架，
+            // 否则会「先闪占位再消失」。
+            let willTryScreenshot = SettingsStore.shared.urlPreviewScreenshot
+            guard snapshot.ogImageURL != nil || willTryScreenshot else {
                 vm.setPreviewNetworkLoading(false, key: requested)
                 return
             }
             withAnimation(ClipinMotion.feedback) { ogImageLoading = true }
-            let img = await OGImageCache.shared.image(for: ogURL)
-            guard !Task.isCancelled, requested == urlString else {
-                vm.setPreviewNetworkLoading(false, key: requested)
-                return
+
+            var hero: NSImage?
+            if let ogURL = snapshot.ogImageURL {
+                hero = await OGImageCache.shared.image(for: ogURL, referer: requested)
+                guard !Task.isCancelled, requested == urlString else {
+                    vm.setPreviewNetworkLoading(false, key: requested)
+                    return
+                }
             }
-            // img 可能为 nil（下载失败）→ 两个分支都不显示，占位淡出，退化到无图布局
+            // 前面没拿到真实图 → 截图兜底（开关开时）。截图较慢（最多 6s），骨架持续转。
+            if hero == nil, willTryScreenshot {
+                hero = await WebScreenshotCache.shared.screenshot(for: requested)
+                guard !Task.isCancelled, requested == urlString else {
+                    vm.setPreviewNetworkLoading(false, key: requested)
+                    return
+                }
+            }
+            // hero 仍可能为 nil（og 下载失败 + 截图失败/超时）→ 占位淡出，退化到无图布局
             withAnimation(ClipinMotion.feedback) {
-                ogImage = img
+                ogImage = hero
                 ogImageLoading = false
             }
             vm.setPreviewNetworkLoading(false, key: requested)

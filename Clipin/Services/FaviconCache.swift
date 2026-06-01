@@ -49,9 +49,38 @@ actor FaviconCache {
     /// 5MB 足够覆盖极端高分辨率 icon，又能挡住恶意服务器返回的 GB 级"图片炸弹"。
     private static let maxImageBytes = 5 * 1024 * 1024
 
-    /// HTML head 下载大小上限 256KB：Range 头只请求前 64KB，但服务端可忽略 Range
-    /// 返回完整页面；256KB 给重型 SPA 的 head 留足空间，又能挡住超大响应。
+    /// HTML head 下载大小上限 256KB：不发 Range，由 streaming 读到此上限即停。
+    /// 256KB 给重型 SPA 的 head 留足空间（实测 og:image/favicon link 几乎都在前 30KB），
+    /// 又能挡住超大响应把内存吃满。
     private static let maxHTMLBytes = 256 * 1024
+
+    /// 真实 Safari 加载文档/图片时发送的 User-Agent（带 `Version/` 段）。
+    /// 比裸 `AppleWebKit ... Safari` UA 更像真实浏览器，降低被按"非浏览器 UA"反爬的概率。
+    nonisolated static let browserUserAgent =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15"
+
+    /// 给请求套上"真实浏览器加载页面/子资源"的请求头。所有抓 HTML / favicon / og:image
+    /// 的出网请求统一走这里，保证指纹一致。
+    ///
+    /// **关键：不发 `Range` 也不发 `Accept-Encoding`**。
+    /// - 旧实现发 `Range: bytes=0-65535` + `Accept-Encoding: identity` 想"只拉 head 前缀 +
+    ///   避免压缩分片"，但这两个头都是爬虫/下载器特征，真实浏览器加载文档绝不发送，
+    ///   部分站点据此返回 403 / 验证页。
+    /// - 去掉后由 URLSession 自动协商 gzip 并**自动解压**；下载量上限改由调用方 streaming
+    ///   截断（读到 maxBytes 即停），既省传输（gzip）又不会因尊重 Range 的服务器只回 64KB
+    ///   而丢掉靠后的 meta。
+    /// - `referer` 非 nil 时带上，模拟"从该页面发起的子资源请求"，绕过基础 CDN 防盗链。
+    nonisolated static func applyBrowserHeaders(to request: inout URLRequest, referer: URL? = nil) {
+        request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue(
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,*/*;q=0.8",
+            forHTTPHeaderField: "Accept"
+        )
+        request.setValue("zh-CN,zh;q=0.9,en;q=0.8", forHTTPHeaderField: "Accept-Language")
+        if let referer {
+            request.setValue(referer.absoluteString, forHTTPHeaderField: "Referer")
+        }
+    }
 
     private static let diskDir: URL = {
         let fm = FileManager.default
@@ -204,8 +233,9 @@ actor FaviconCache {
             downloadTargets.append(resolved)
             if downloadTargets.count == 2 { break }
         }
+        let referer = URL(string: origin)
         for target in downloadTargets {
-            if let data = await downloadAndNormalize(url: target) { return data }
+            if let data = await downloadAndNormalize(url: target, referer: referer) { return data }
         }
         return nil
     }
@@ -274,16 +304,8 @@ actor FaviconCache {
         guard let url = URL(string: "\(origin)/") else { return [] }
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
-        // Range 64KB：绝大多数站点 head 在前 64KB 内，避免下载完整页面浪费带宽。
-        // 部分 CDN 忽略 Range 返回完整 HTML —— 4s 超时是兜底安全网。
-        request.setValue("bytes=0-65535", forHTTPHeaderField: "Range")
-        // Range + gzip 在部分服务器上会返回不可解的压缩分片；HTML 前缀抓取要求未压缩字节。
-        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-        // Safari UA：部分站点按 UA 切版本（移动版 vs PC 版），通用 UA 拿到完整 head
-        request.setValue(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/605.1.15",
-            forHTTPHeaderField: "User-Agent"
-        )
+        // 真实浏览器头（无 Range / 无 identity，由 URLSession 自动 gzip+解压，streaming 截断到 maxBytes）。
+        applyBrowserHeaders(to: &request)
         guard let data = await downloadHTMLPrefixWithLimit(request, maxBytes: maxHTMLBytes) else { return [] }
         guard let html = String(data: data, encoding: .utf8)
               ?? String(data: data, encoding: .isoLatin1) else { return [] }
@@ -295,9 +317,12 @@ actor FaviconCache {
     /// 校验码淹没（之前所有源都重复一遍 校验+转 PNG 的样板）。
     ///
     /// 下载经 downloadWithLimit 限制到 maxImageBytes，杜绝恶意"图片炸弹"撑爆内存。
-    private nonisolated static func downloadAndNormalize(url: URL) async -> Data? {
+    private nonisolated static func downloadAndNormalize(url: URL, referer: URL?) async -> Data? {
         var request = URLRequest(url: url)
         request.timeoutInterval = 4
+        // favicon 图片下载也走浏览器头：旧实现连 UA 都没带，部分站点直接拒；
+        // referer=origin 模拟"从站点页面加载 favicon"，绕过基础防盗链。
+        applyBrowserHeaders(to: &request, referer: referer)
         guard let data = await downloadWithLimit(request, maxBytes: maxImageBytes) else { return nil }
         // 校验是真实图片且非 1×1 透明占位：本地 NSImage 仅用于校验，校验完即丢
         guard let probe = NSImage(data: data), probe.size.width > 1 else { return nil }

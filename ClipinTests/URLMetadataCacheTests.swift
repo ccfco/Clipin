@@ -2,13 +2,39 @@ import XCTest
 @testable import Clipin
 
 final class URLMetadataCacheTests: XCTestCase {
-    func testHTMLPrefixRequestDisablesCompressionWhenUsingRange() throws {
+    func testHTMLPrefixRequestUsesBrowserHeadersWithoutCrawlerFingerprint() throws {
         let url = try XCTUnwrap(URL(string: "https://example.com/article"))
 
         let request = URLMetadataCache.makeHTMLPrefixRequest(for: url)
 
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Range"), "bytes=0-65535")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept-Encoding"), "identity")
+        // 不再发 Range / 手动 Accept-Encoding —— 让 URLSession 自动 gzip+解压，
+        // 且去掉爬虫/下载器指纹（真实浏览器加载文档不发这两个头）。
+        XCTAssertNil(request.value(forHTTPHeaderField: "Range"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "Accept-Encoding"))
+        // 真实 Safari UA（带 Version/ 段）+ 完整文档请求头。
+        let ua = try XCTUnwrap(request.value(forHTTPHeaderField: "User-Agent"))
+        XCTAssertTrue(ua.contains("Safari"))
+        XCTAssertTrue(ua.contains("Version/"))
+        XCTAssertNotNil(request.value(forHTTPHeaderField: "Accept-Language"))
+    }
+
+    func testDirectImageResourceMatchesImageExtensions() throws {
+        for path in ["https://cdn.site.com/a.png", "https://x.com/photo.JPG",
+                     "https://x.com/a.png?v=2", "https://x.com/share.webp",
+                     "https://x.com/pic.gif", "https://x.com/vector.svg"] {
+            let url = try XCTUnwrap(URL(string: path))
+            XCTAssertTrue(URLMetadataCache.isDirectImageResource(url), "应识别为图片直链: \(path)")
+        }
+    }
+
+    func testDirectImageResourceRejectsNonImageURLs() throws {
+        // arxiv PDF 的版本号 .13245 不是图片格式；ico/无扩展名/HTML 页面都不算预览大图。
+        for path in ["https://arxiv.org/pdf/2305.13245", "https://github.com/a/b",
+                     "https://x.com/favicon.ico", "https://x.com/doc.pdf",
+                     "https://example.com/"] {
+            let url = try XCTUnwrap(URL(string: path))
+            XCTAssertFalse(URLMetadataCache.isDirectImageResource(url), "不应识别为图片直链: \(path)")
+        }
     }
 
     func testExtractOGImageAcceptsSecureURL() throws {

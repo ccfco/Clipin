@@ -139,9 +139,18 @@ extension SettingsView {
 
                 toggleSettingRow(
                     "Auto-fetch URL preview titles",
-                    description: "When you select a URL item, Clipin fetches the page title in the background. Private network IPs (10.x, 192.168.x, etc.) and webhook-style paths are always skipped regardless of this setting.",
+                    description: "When you select a URL item, Clipin fetches the page title in the background. URLs with sensitive tokens or webhook-style paths are always skipped regardless of this setting.",
                     isOn: $settings.urlPreviewAutoFetch
                 )
+
+                groupDivider
+
+                toggleSettingRow(
+                    "Screenshot fallback for previews",
+                    description: "When a page declares no share image, render it in a headless browser to capture a screenshot — the only way to preview single-page apps (Feishu/DingTalk docs), local files, and intranet pages. Runs page JavaScript and loads third-party resources; cookies stay in memory and are never written to disk. Token and webhook URLs are always skipped.",
+                    isOn: $settings.urlPreviewScreenshot
+                )
+                .disabled(!settings.urlPreviewAutoFetch)
             }
         }
     }
