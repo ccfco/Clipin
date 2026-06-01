@@ -204,6 +204,9 @@ final class ClipboardViewModel: ObservableObject {
     private var ocrSubscription: AnyCancellable?
     private var settingsSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
+    // OCR 静默刷新当前 payload 的任务句柄：必须可被 selectItem 取消，否则 A→B→A 快切时
+    // 它会与新 loadItemTask 并发加载同一 id，后完成者把旧快照盖到新结果上。
+    private var reloadPayloadTask: Task<Void, Never>?
     private var launcherLoadingSources: Set<LauncherLoadingSource> = []
     private var launcherLoadingBecameVisibleAt: Date?
     private var launcherLoadingHideTask: Task<Void, Never>?
@@ -341,19 +344,24 @@ final class ClipboardViewModel: ObservableObject {
         guard let id = selectedItemID,
               selectedItem?.id == id else { return }
         let core = self.core
-        Task { [weak self] in
+        reloadPayloadTask?.cancel()
+        reloadPayloadTask = Task { [weak self] in
             let refreshed: ClipItem? = await Task.detached(priority: .utility) {
                 try? core.getItem(id: id)
             }.value
             guard let self,
+                  !Task.isCancelled,
                   let refreshed,
                   self.selectedItemID == id else { return }
             self.selectedItem = refreshed
+            self.reloadPayloadTask = nil
         }
     }
 
     func selectItem(id: String?) {
         loadItemTask?.cancel()
+        reloadPayloadTask?.cancel()
+        reloadPayloadTask = nil
         previewTask?.cancel()
         previewTask = nil
         isPreparingPreview = false
