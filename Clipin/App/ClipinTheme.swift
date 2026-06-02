@@ -391,19 +391,15 @@ struct ClipinFooterSegmentStyle: ButtonStyle {
             let pressed = configuration.isPressed
             let highlighted = isHovered || QAFlags.forceSegmentHover
             return configuration.label
-                // 横纵内距统一为 gap:token 语义即「文字↔选中底板 = gap」(见 ClipinChrome.gap 注释)。
-                // 曾横向用 groupGap(16)→底板成 16横/8纵的不对称胖片,且把相邻命令撑出 16+8+16=40 的
-                // 视觉间距(看着「Paste 和 Actions 离得远」)。收回 gap 后底板均匀 8/8,命令间距落到 24。
-                .padding(.horizontal, ClipinChrome.gap)
+                .padding(.horizontal, ClipinChrome.groupGap)
                 .padding(.vertical, ClipinChrome.gap)
                 .background(
-                    // hover/press 底板 = cornerControl 圆角矩形,填满命中区(不再内缩)。cornerControl
-                    // 比 cornerTile 圆润(8 太方),与派生 pill 外形同档,hover 时同屏元素圆角完全一致。
-                    RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
+                    Capsule(style: .continuous)
                         .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
+                        .padding(ClipinChrome.footerHoverRimInset) // 内缩一圈:高亮比按钮小一圈,露出外层连续玻璃
                 )
                 .scaleEffect(pressed ? 0.97 : 1)
-                .contentShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
+                .contentShape(Capsule(style: .continuous))
                 .onHover { hovering in
                     withAnimation(ClipinMotion.feedback) { isHovered = hovering }
                 }

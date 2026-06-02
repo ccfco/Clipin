@@ -128,9 +128,8 @@ struct PreviewPane: View, Equatable {
 
     private func contentStage<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         // 预览是阅读区(非选中行),内容左右上内距用 groupGap 留出阅读呼吸位。
-        // 下方不再额外加内距:metadata(footer) 直接坐在 floatingFooterBand 避让线上,底栏命令簇在
-        // 该避让带内居中,与 metadata、与窗口底各 ~9 对称。(旧实现这里补 8pt 是为已删除的 Paste
-        // 胶囊节奏配的,胶囊删后那 8pt 反而把 metadata 顶离避让线、破坏对称——一并清掉。)
+        // 下方留 floatingFooterBand 高的避让带给底栏命令胶囊;metadata 脚注由 PreviewFadeFooterContainer
+        // 内的 Spacer 顶到避让带顶沿,正好落在命令胶囊上方(短内容也不上浮、不离命令太远)。
         content()
             .padding(.horizontal, ClipinChrome.groupGap)
             .padding(.top, ClipinChrome.groupGap)

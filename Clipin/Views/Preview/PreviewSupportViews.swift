@@ -137,6 +137,9 @@ struct PreviewFadeFooterContainer<Content: View>: View {
                     .mask(PreviewBottomFadeMask(isScrolling: isScrolling))
             }
 
+            // 短内容时把 metadata 脚注顶到底、紧贴底栏命令胶囊上方,而非紧跟矮内容浮在中上部——后者
+            // 会让脚注离命令很远、上下不对称。Spacer 吸收内容与脚注间的空高;内容满屏时收为 0、脚注自然落底。
+            Spacer(minLength: 0)
             PreviewFooterRail(entries: footerEntries)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
