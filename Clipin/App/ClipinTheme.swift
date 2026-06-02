@@ -391,7 +391,10 @@ struct ClipinFooterSegmentStyle: ButtonStyle {
             let pressed = configuration.isPressed
             let highlighted = isHovered || QAFlags.forceSegmentHover
             return configuration.label
-                .padding(.horizontal, ClipinChrome.groupGap)
+                // 横纵内距统一为 gap:token 语义即「文字↔选中底板 = gap」(见 ClipinChrome.gap 注释)。
+                // 曾横向用 groupGap(16)→底板成 16横/8纵的不对称胖片,且把相邻命令撑出 16+8+16=40 的
+                // 视觉间距(看着「Paste 和 Actions 离得远」)。收回 gap 后底板均匀 8/8,命令间距落到 24。
+                .padding(.horizontal, ClipinChrome.gap)
                 .padding(.vertical, ClipinChrome.gap)
                 .background(
                     // hover/press 底板 = cornerControl 圆角矩形,填满命中区(不再内缩)。cornerControl
