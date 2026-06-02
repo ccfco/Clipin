@@ -596,8 +596,15 @@ private struct ItemListView: View {
             isSelected: isSelected,
             isHovered: isHovered,
             showsShortcutHint: showsShortcutHint,
-            sceneState: sceneState
+            sceneState: sceneState,
+            isRenaming: vm.renamingItemID == item.id,
+            renameDraft: vm.renameDraft,
+            onCommitRename: { vm.commitRenaming() }
         )
+        // .equatable():行不再观察整个 vm 后,本视图每次按键仍会被 ItemListView 重跑而重建每行 struct;
+        // EquatableView 用 == 拦下未变行的整 body(JSONDecode/AttributedString 全跳过),
+        // 每次 ↑↓ 只有旧选中 + 新选中两行真重算。详见 ClipItemRow 的 Equatable 扩展。
+        .equatable()
         .id(item.id)
         // 选中底板填满整列：左 edge 距窗口、右 edge 距预览，均由 contentArea/列间距提供，
         // 不再额外加 listRowOuterInset（去掉旧的「列内距 + 行外距」双层叠加）。

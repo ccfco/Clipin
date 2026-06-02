@@ -79,6 +79,9 @@ final class ClipboardViewModel: ObservableObject {
     /// 非 nil 表示该 id 的列表行正处于 inline 改名编辑态。
     @Published var renamingItemID: String?
     /// inline 改名 TextField 的草稿文本。独立 ObservableObject，每键不波及共享 VM。
+    /// 必须是贯穿全程的单实例(beginRenaming 改写 .text、不重建)——ClipItemRow 的 Equatable
+    /// 刻意不比 renameDraft(由 RenameField 自己 @ObservedObject 订阅)。若改成每次改名新建实例,
+    /// 该忽略就会变成「打字不刷新行」的真 bug,届时 == 必须改为纳入 draft 身份。
     let renameDraft = EditingDraft()
     /// beginRenaming 时记录的预填值。commitRenaming 用它判断用户是否真的改了名，
     /// 避免「打开 rename 又直接点走（失焦自动提交）」把派生标题误写成 alias。

@@ -337,10 +337,17 @@ struct ClipItemRow: View {
     /// 是否显示 ⌘1-9 快速粘贴数字提示(由"按住 ⌘"驱动)。
     var showsShortcutHint: Bool = false
     let sceneState: ClipinSceneState
-
-    @EnvironmentObject private var vm: ClipboardViewModel
-
-    private var isRenaming: Bool { vm.renamingItemID == item.id }
+    /// 当前行是否处于重命名态。改为值输入(原读 vm.renamingItemID)——见类型注释:
+    /// ClipItemRow 不再观察整个 ViewModel,否则每次 selectedItemID 变(每次 ↑↓ 按键)
+    /// 都会因 @EnvironmentObject 订阅 objectWillChange 而让每个已实例化行的 body 全重跑
+    /// (含 highlightedDisplayText 建 AttributedString、multiFileCount 跑 JSONDecode),
+    /// 在主线程上叠成 O(已实例化行数) 的导航卡顿。配合 Equatable + .equatable(),
+    /// 每次按键只有「旧选中 + 新选中」两行真重算。
+    let isRenaming: Bool
+    /// 重命名输入框订阅的 draft。仅 isRenaming 行用到;RenameField 自己 @ObservedObject 订阅,
+    /// 打字只重渲染它一个,不波及本行 body(故 Equatable 忽略本字段)。
+    let renameDraft: EditingDraft
+    let onCommitRename: () -> Void
 
     var body: some View {
         HStack(spacing: ClipinChrome.gap) {
@@ -351,7 +358,7 @@ struct ClipItemRow: View {
             // 重命名后不画额外标记：访达式——别名直接当标题（displayTitle 已别名优先），
             // 名字本身就是信号。真实内容随时在右侧预览可见，无需行首徽标。
             if isRenaming {
-                RenameField(draft: vm.renameDraft, onCommit: { vm.commitRenaming() })
+                RenameField(draft: renameDraft, onCommit: onCommitRename)
             } else {
                 // 非编辑态：保持 ClipItemRow 现有只读标题样式 —— 字重恒为 .regular，
                 // 选中走 accent 色、未选纯 Color.primary。务必照搬当前代码，
@@ -567,4 +574,22 @@ struct ClipItemRow: View {
         f.dateFormat = "M/d"
         return f
     }()
+}
+
+extension ClipItemRow: Equatable {
+    /// 供 `.equatable()` 跳过未变行的整 body(含 JSONDecode / AttributedString 等真活)。
+    /// 比 item 整体(ClipListItem: Equatable,沿用「比整体不比字段」——避免漏字段 / UniFFI 加字段腐烂)
+    /// 加所有影响渲染的值输入;忽略 renameDraft(由 RenameField 自己订阅) 与 onCommitRename 闭包
+    /// (闭包不可判等,纳入会让判等恒为 false、.equatable() 失效)。
+    /// View 在 @MainActor 隔离下,== 需 nonisolated 才能满足 Equatable 协议(无 actor 上下文)。
+    nonisolated static func == (lhs: ClipItemRow, rhs: ClipItemRow) -> Bool {
+        lhs.item == rhs.item
+            && lhs.shortcutNumber == rhs.shortcutNumber
+            && lhs.searchQuery == rhs.searchQuery
+            && lhs.isSelected == rhs.isSelected
+            && lhs.isHovered == rhs.isHovered
+            && lhs.showsShortcutHint == rhs.showsShortcutHint
+            && lhs.sceneState == rhs.sceneState
+            && lhs.isRenaming == rhs.isRenaming
+    }
 }
