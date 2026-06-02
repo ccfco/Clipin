@@ -295,7 +295,10 @@ struct MainPanel: View {
             // 底栏胶囊用原生 Material 而非 Liquid Glass:Material 只做毛玻璃模糊、
             // 不像 Liquid Glass 那样提亮,贴在整窗玻璃上不会二次发白,明暗两个模式
             // 都由系统调好,无需 colorScheme 分支 tint 补偿。
-            .background(.regularMaterial, in: Capsule(style: .continuous))
+            // 圆角矩形(cornerControl=16)而非 Capsule:只有 RoundedRectangle 的右下角圆心
+            // =(命令簇右−16, 底−16)=(窗口右−8−16, 底−8−16)=窗口角圆心,与窗口角严格同心平行。
+            // Capsule 圆心在垂直中线,永远差 1-2pt。16=cornerShell(24)−gap(8)。
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
         }
         .animation(ClipinMotion.commandReveal, value: showsDerivedPills)
         // 玻璃胶囊距窗口右 / 下都恰为 edge —— 与 ⌘K 动作面板同角对齐，

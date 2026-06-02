@@ -153,7 +153,9 @@ struct ActionPalette: View {
     /// 命令面板/子面板共用的玻璃底:半透明玻璃 + 亮色白 tint + hairline 描边 + 落影。
     @ViewBuilder
     private var paletteGlassBackground: some View {
-        let shape = RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
+        // 动作面板贴主面板右下角距 gap,圆角须 = cornerShell − gap = 24 − 8 = 16(cornerControl)
+        // 才与窗口角同心平行;不能用 cornerSurface(=窗口圆角 24),否则内缩一个 gap 后不平行。
+        let shape = RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
         Color.clear
             // 保留半透明玻璃,但亮色给玻璃加明显的白 tint —— 面板比窗体玻璃更白,
             // 一白一灰自然分层(对齐 Raycast:靠面板更白拉开层次,不靠压暗背景)。

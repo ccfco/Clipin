@@ -49,8 +49,11 @@ enum ClipinChrome {
     static var cornerControl: CGFloat { edge * 2 }
     /// 浮层面板、内容卡片。
     static var cornerSurface: CGFloat { edge * 3 }
-    /// 窗口外壳。
-    static var cornerShell: CGFloat { edge * 4 }
+    /// 窗口外壳。从 edge*4(32) 收敛到 edge*3(24):32 比系统浮层(Control Center 16)
+    /// 圆一倍、显胖;24 更贴近原生,且让命令簇 Capsule(≈17)与窗口角基本同心(24−8≈16)。
+    /// 现与 cornerSurface 同值——窗口外壳收敛到 surface 档;故贴窗口边距 gap 的浮层
+    /// (动作面板)圆角须用 cornerControl(16=24−8)才与窗口角同心,不能再用 cornerSurface。
+    static var cornerShell: CGFloat { edge * 3 }
 
     // MARK: 非缩放度量（不参与 edge 体系：要么是高度档位，要么是字号）
 
@@ -394,12 +397,14 @@ struct ClipinFooterSegmentStyle: ButtonStyle {
                 .padding(.horizontal, ClipinChrome.groupGap)
                 .padding(.vertical, ClipinChrome.gap)
                 .background(
-                    Capsule(style: .continuous)
+                    // 圆角矩形而非 Capsule:外层命令簇已改 RoundedRectangle(cornerControl),
+                    // hover 底板内缩一个 rimInset,圆角随之 = cornerControl − rimInset(与外层平行)。
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerControl - ClipinChrome.footerHoverRimInset, style: .continuous)
                         .fill(Color.primary.opacity(pressed ? 0.16 : (highlighted ? 0.09 : 0)))
-                        .padding(ClipinChrome.footerHoverRimInset) // 内缩一圈:高亮比按钮小一圈,露出外层连续玻璃
+                        .padding(ClipinChrome.footerHoverRimInset) // 内缩一圈:高亮比按钮小一圈,露出外层玻璃
                 )
                 .scaleEffect(pressed ? 0.97 : 1)
-                .contentShape(Capsule(style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
                 .onHover { hovering in
                     withAnimation(ClipinMotion.feedback) { isHovered = hovering }
                 }
