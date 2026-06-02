@@ -11,6 +11,8 @@ struct PermissionView: View {
                 .clipinChromeGlass(cornerRadius: ClipinChrome.cornerShell)
                 .ignoresSafeArea()
 
+            // 三卡几乎填满窗口、整体内缩一个 gap 贴窗口四角:首卡贴上两角、末卡贴下两角,
+            // 故内容卡圆角须降一档到 control(16=24−8)与窗口角同心,不用 surface(24)。
             VStack(spacing: ClipinChrome.gap) {
                 topStage
                 permissionSteps
@@ -57,7 +59,7 @@ struct PermissionView: View {
         .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
+            ClipinContentSurface(cornerRadius: ClipinChrome.cornerControl)
         )
     }
 
@@ -83,7 +85,7 @@ struct PermissionView: View {
         .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
+            ClipinContentSurface(cornerRadius: ClipinChrome.cornerControl)
         )
     }
 
@@ -132,7 +134,7 @@ struct PermissionView: View {
         .padding(.horizontal, ClipinChrome.groupGap)
         .padding(.vertical, ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerSurface)
+        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerControl)
     }
 
     private func permStepRow(_ number: String, text: LocalizedStringKey) -> some View {

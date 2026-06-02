@@ -15,7 +15,8 @@ extension SettingsView {
             .padding(ClipinChrome.gap)
         }
         .background(
-            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
+            // 侧栏贴窗口左两角(HStack 整体内缩一个 gap):同心须降一档到 control(16=24−8)。
+            ClipinContentSurface(cornerRadius: ClipinChrome.cornerControl)
         )
         .frame(width: 220)
         .frame(maxHeight: .infinity, alignment: .top)

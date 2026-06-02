@@ -220,5 +220,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        if let aux = QAFlags.showAuxWindowOnLaunch {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let self else { return }
+                switch aux {
+                case "settings":    self.openSettingsWindow()
+                case "onboarding":  self.openOnboardingWindow(permission: .shared)
+                case "permission":  self.showPermissionWindowIfNeeded(.shared, activateApp: true, forceShow: true)
+                default:            break
+                }
+            }
+        }
     }
 }

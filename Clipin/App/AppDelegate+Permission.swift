@@ -25,7 +25,7 @@ extension AppDelegate {
         // 关键：showPanel() 必须延后到下一个 run loop 轮次，不能在 applicationDidFinishLaunching
         // 的同步上下文里直接调用——实测同步调用时面板不会显示出来。延后一轮等启动序列收尾，
         // showPanel() 才和热键路径在同样的稳态时机执行（QA 自截图钩子早先也用 asyncAfter 绕过此问题）。
-        if !settings.launchAtLoginEnabled {
+        if !settings.launchAtLoginEnabled && QAFlags.showAuxWindowOnLaunch == nil {
             DispatchQueue.main.async { [weak self] in
                 self?.showPanel()
             }
@@ -101,12 +101,14 @@ extension AppDelegate {
         openOnboardingWindow(permission: .shared)
     }
 
-    func showPermissionWindowIfNeeded(_ pm: PermissionManager = .shared, activateApp: Bool = false) {
+    func showPermissionWindowIfNeeded(_ pm: PermissionManager = .shared, activateApp: Bool = false, forceShow: Bool = false) {
         pm.checkNow()
 
-        guard !pm.isAccessibilityGranted else {
-            permissionWindow?.close()
-            return
+        if !forceShow {
+            guard !pm.isAccessibilityGranted else {
+                permissionWindow?.close()
+                return
+            }
         }
 
         let window: NSWindow

@@ -13,6 +13,9 @@ enum QAFlags {
     static var showPanelOnLaunch: Bool { on("CLIPIN_QA_SHOW_PANEL") }
     /// 启动即打开 ⌘K 动作面板(自截图验收动作面板视觉,免去合成键盘发 ⌘K)。
     static var showActionsOnLaunch: Bool { on("CLIPIN_QA_SHOW_ACTIONS") }
+    /// 启动即打开指定辅助窗口(settings/onboarding/permission),自截图逐窗口验收 chrome
+    /// (圆角/同心/边距)。值取窗口名;permission 窗在 QA 下绕过「已授权即不弹」的守卫。
+    static var showAuxWindowOnLaunch: String? { ProcessInfo.processInfo.environment["CLIPIN_QA_SHOW_AUX"] }
     /// 去掉 .nonactivatingPanel 并跳过失焦自关,让合成鼠标能触发真 hover。
     static var hoverablePanel: Bool { on("CLIPIN_QA_HOVERABLE") }
     /// 强制常显派生簇(合成鼠标对 nonactivating panel 的 .onHover 不可靠)。

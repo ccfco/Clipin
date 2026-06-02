@@ -194,7 +194,8 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(
-            ClipinContentSurface(cornerRadius: ClipinChrome.cornerSurface)
+            // 内容区贴窗口右两角(HStack 整体内缩一个 gap):同心须降一档到 control(16=24−8)。
+            ClipinContentSurface(cornerRadius: ClipinChrome.cornerControl)
         )
     }
 

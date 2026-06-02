@@ -269,7 +269,9 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, ClipinChrome.groupGap)
         .padding(.vertical, ClipinChrome.groupGap)
-        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerSurface)
+        // footer 被 stage(maxHeight:.infinity)顶到窗口底、内缩一个 gap 贴下两角:
+        // 同心须降一档到 control(16=24−8)。stage 内的 surface 卡在滚动区中部不贴角,保持 surface。
+        .clipinChromeGlass(cornerRadius: ClipinChrome.cornerControl)
     }
 
     private var primaryTitle: LocalizedStringKey {
