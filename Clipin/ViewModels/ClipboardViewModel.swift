@@ -1125,29 +1125,8 @@ final class ClipboardViewModel: ObservableObject {
         return ClipPreviewResolver.resolve(item: item)
     }
 
-    /// section 标题用的简短月日格式。旧实现硬编码 "M月d日"，英文环境也会显示中文，
-    /// 违反 "用户可见文案走本地化" 约束。改用 dateFormat(fromTemplate:) 让 macOS 按当前
-    /// locale 自动选择合适的 month/day 排序（en: "May 20", zh: "5月20日"）。
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale.autoupdatingCurrent
-        f.setLocalizedDateFormatFromTemplate("Md")
-        return f
-    }()
-
     private func rebuildSections() {
-        if shouldShowPinnedSection {
-            let pinnedItems = items.filter(\.isPinned)
-            let regularItems = items.filter { !$0.isPinned }
-            var result: [ClipSection] = []
-            if !pinnedItems.isEmpty {
-                result.append(ClipSection(title: NSLocalizedString("Pinned", comment: ""), items: pinnedItems))
-            }
-            result.append(contentsOf: Self.makeDateSections(from: regularItems))
-            sections = result
-        } else {
-            sections = Self.makeDateSections(from: items)
-        }
+        sections = ClipSectionBuilder.build(items: items, showPinnedSection: shouldShowPinnedSection)
         flatOrder = sections.flatMap(\.items)
         shortcutOrder = flatOrder
         shortcutIndexByID = Dictionary(
@@ -1256,42 +1235,5 @@ final class ClipboardViewModel: ObservableObject {
         loadItems()
         selectItem(id: id)
         showNotice(NSLocalizedString("Deletion undone.", comment: ""), style: .success)
-    }
-
-    private static func makeDateSections(from items: [ClipListItem]) -> [ClipSection] {
-        let calendar = Calendar.current
-        var today: [ClipListItem] = []
-        var yesterday: [ClipListItem] = []
-        var older: [(key: String, items: [ClipListItem])] = []
-        var olderMap: [String: Int] = [:]
-
-        for item in items {
-            let date = Date(timeIntervalSince1970: TimeInterval(item.createdAt) / 1000.0)
-            if calendar.isDateInToday(date) {
-                today.append(item)
-            } else if calendar.isDateInYesterday(date) {
-                yesterday.append(item)
-            } else {
-                let key = Self.dateFormatter.string(from: date)
-                if let idx = olderMap[key] {
-                    older[idx].items.append(item)
-                } else {
-                    olderMap[key] = older.count
-                    older.append((key: key, items: [item]))
-                }
-            }
-        }
-
-        var result: [ClipSection] = []
-        if !today.isEmpty {
-            result.append(ClipSection(title: NSLocalizedString("Today", comment: ""), items: today))
-        }
-        if !yesterday.isEmpty {
-            result.append(ClipSection(title: NSLocalizedString("Yesterday", comment: ""), items: yesterday))
-        }
-        for group in older {
-            result.append(ClipSection(title: group.key, items: group.items))
-        }
-        return result
     }
 }
