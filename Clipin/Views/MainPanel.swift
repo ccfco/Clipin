@@ -89,9 +89,9 @@ struct MainPanel: View {
                     let pasteRect = proxy[anchor]
                     FooterHoverDerivedPills(pills: hoverPills())
                         .fixedSize()
-                        // 6pt 视觉缝下沉到 pills 视图内部底 padding,而不是用 .offset 减 6:
+                        // gap(8pt)视觉缝下沉到 pills 视图内部底 padding,而不是用 .offset 减 gap:
                         // 后者会在 Paste 顶边和 pills 底边之间留一段「真空 hover 死区」,
-                        // 鼠标从 Paste 经过这 6pt 缝去点 pills 时 isPasteHovered/Pills 全 false,
+                        // 鼠标从 Paste 经过这道缝去点 pills 时 isPasteHovered/Pills 全 false,
                         // showsDerivedPills 立刻收掉,点击根本来不及触发。
                         // padding + .contentShape(Rectangle()) 让 padding 区域参与 hit
                         // testing,鼠标穿过缝时仍命中 pills overlay,hover 持续 → 点击有效。
@@ -102,7 +102,7 @@ struct MainPanel: View {
                             withAnimation(ClipinMotion.commandReveal) { isPillsHovered = hovering }
                         }
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        // 右缘对齐 Paste 右缘;pills 底边(含 6pt padding)正好贴 Paste 顶边,
+                        // 右缘对齐 Paste 右缘;pills 底边(含 gap=8pt padding)正好贴 Paste 顶边,
                         // padding 内部提供视觉留缝,命中区连续。
                         .offset(
                             x: pasteRect.maxX - derivedPillsSize.width,
