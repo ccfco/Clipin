@@ -97,12 +97,15 @@ struct FilePreviewBody: View {
     }
 
     /// 单文件 image 预览:多文件由 multiFileStack 承担,这里只画一张大图。
-    /// 方角(.fit + .frame.alignment):用户明确要求,与列表行图片缩略图保持视觉语言一致。
+    /// 圆角走 previewHeroClip()——与图片条目预览(ImagePreviewBody)共用同一裁剪入口与圆角值(cornerControl)。
+    /// .fit 完整显示文件图片(要看全内容、不裁边):满幅图圆角、letterbox 偏方图实际边缘仍方角(取舍见
+    /// previewHeroClip 注释);与 URL 大图的 .fill 圆角卡是不同场景的刻意区分。
     @ViewBuilder
     private func imagePreview(path: String) -> some View {
         AsyncPreviewImage(path: path, maxHeight: 360) {
             pathFallback(allPaths: [path])
         }
+        .previewHeroClip()
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

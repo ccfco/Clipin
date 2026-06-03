@@ -532,13 +532,17 @@ struct URLPreviewView: View {
         }
     }
 
-    /// OG image 顶部大渲染：方角（与列表行图片缩略图 / FilePreviewBody 大缩略图同款视觉语言）。
-    /// 高度上限让图片不会无限挤压下方 metadata；contentMode .fit 不裁切让品牌图完整呈现。
+    /// OG image 顶部大渲染：Raycast 风圆角卡——图片 `.fill` 填满固定高的卡、四角由 previewHeroClip 圆角
+    /// 裁切，无白边无空隙。`.fill` 会裁掉超出卡比例的部分（og 分享图通常无损；网页长截图裁上下），换取
+    /// 图片本身四角真正圆角（`.fit` 完整图填不满卡、圆角只会落在空白上、图片仍方角——见 previewHeroClip 注释）。
+    /// 区别于 image / file 预览的 `.fit` 完整图：URL 大图是装饰性引子，裁边可接受、圆角卡观感优先。
     private func ogImageHero(_ image: NSImage) -> some View {
         Image(nsImage: image)
             .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(maxWidth: .infinity, maxHeight: Self.ogImageMaxHeight, alignment: .center)
+            .aspectRatio(contentMode: .fill)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.ogImageMaxHeight)
+            .previewHeroClip()
     }
 
     /// og:image 下载期间的骨架占位：中性底板 + 一道左右流动的微光（参考 Raycast 预览顶部）。
@@ -554,7 +558,7 @@ struct URLPreviewView: View {
                     ShimmerSweep()
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
+            .previewHeroClip()
     }
 
     private var header: some View {

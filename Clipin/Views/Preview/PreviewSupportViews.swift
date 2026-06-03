@@ -146,3 +146,14 @@ struct PreviewFadeFooterContainer<Content: View>: View {
     }
 }
 
+extension View {
+    /// 预览区图片大图的统一圆角收口（cornerControl 单点可改）——图片预览、URL 圆角卡、URL 占位骨架
+    /// 都走它，杜绝各 preview body 各写 clipShape 漏裁或取值分叉；与列表行小缩略图的方角刻意区分。
+    ///
+    /// 注意：clipShape 只裁「视图框」。图片填满框（.fill）时圆角才落在图片真实边缘；.fit 完整图填不满框、
+    /// 四角是空白、圆角裁在空白上、图片本身仍方角——「图片本身圆角」与「完整不裁」二选一，由调用方按场景定。
+    func previewHeroClip() -> some View {
+        clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
+    }
+}
+

@@ -21,7 +21,7 @@ struct ImagePreviewBody: View {
                             .foregroundStyle(ClipinInk.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous))
+                    .previewHeroClip()
                     .frame(maxWidth: .infinity, alignment: .leading)
                     // 按 path 给图片叶子独立 identity：ImagePreviewBody 整体不再挂 .id（容器 diff 复用，
                     // 渲染更便宜），但持有 @State(loaded/placeholder) 的只有这个叶子——若它跨 item 复用，
