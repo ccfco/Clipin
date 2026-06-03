@@ -215,6 +215,8 @@ final class ClipboardViewModel: ObservableObject {
     }
     /// 7s 可撤销删除状态机。删库副作用由 commitDeletion 注入。
     private let pendingDeletionController = PendingDeletionController(window: .seconds(7))
+    /// 分页取数 + pinned 展示策略过滤。持 core+settings,init 内构造。
+    private let browsePageLoader: BrowsePageLoader
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
     /// ⌘1-9 快捷粘贴序列：始终基于当前可见列表
@@ -258,6 +260,7 @@ final class ClipboardViewModel: ObservableObject {
     init(core: ClipinCore, settings: SettingsStore = .shared) {
         self.core = core
         self.settings = settings
+        self.browsePageLoader = BrowsePageLoader(core: core, settings: settings)
         self.sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
         self.browseMode = settings.resolvedLaunchBrowseMode()
         debounce = Publishers.CombineLatest($searchQuery, $browseMode)
@@ -299,26 +302,37 @@ final class ClipboardViewModel: ObservableObject {
         let currentSelectionID = selectLatest ? nil : selectedItemID
         totalLoadedFromDB = 0
 
-        let typeFilter = effectiveTypeFilter
+        let excludingID = pendingDeletionController.pendingID
         if searchQuery.isEmpty {
-            let page = fetchBrowsePage(offset: 0, typeFilter: typeFilter)
-            items = page.items
-            totalLoadedFromDB = page.rawCount
-            hasMore = page.hasMore
+            do {
+                let page = try browsePageLoader.fetchPage(
+                    offset: 0, pageSize: Self.pageSize,
+                    query: searchQuery, browseMode: browseMode, excludingID: excludingID)
+                items = page.items
+                totalLoadedFromDB = page.rawCount
+                hasMore = page.hasMore
+            } catch {
+                ClipinLog.viewModel.error("fetchPage failed: \(error.localizedDescription, privacy: .public)")
+                items = []
+                totalLoadedFromDB = 0
+                hasMore = false
+                showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+            }
         } else {
             do {
-                items = try core.searchListItems(query: searchQuery, typeFilter: typeFilter)
-            } catch {
                 // Rust 端搜索 SQL/FTS 故障不能 ?? [] 静默退化成"无结果"——用户根本
-                // 无法分辨"真的没匹配"和"DB 坏了"。失败时显式 notice，方便察觉异常
-                // （修改自 storage::search 返回 Result 的改造）。
+                // 无法分辨"真的没匹配"和"DB 坏了"。失败时显式 notice，方便察觉异常。
+                let results = try core.searchListItems(
+                    query: searchQuery,
+                    typeFilter: browsePageLoader.effectiveTypeFilter(query: searchQuery, browseMode: browseMode))
+                items = browsePageLoader.visible(results, query: searchQuery, browseMode: browseMode, excludingID: excludingID)
+            } catch {
                 ClipinLog.viewModel.error("searchListItems failed: \(error.localizedDescription, privacy: .public)")
                 items = []
                 showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
             }
             hasMore = false
         }
-        items = visibleItems(from: items)
         rebuildSections()
 
         let nextID: String?
@@ -334,7 +348,18 @@ final class ClipboardViewModel: ObservableObject {
     /// 滚到底时加载下一页，追加到 items 并重建 sections（不重置选中状态）
     func loadMoreItems() {
         guard hasMore, searchQuery.isEmpty else { return }
-        let page = fetchBrowsePage(offset: totalLoadedFromDB, typeFilter: effectiveTypeFilter)
+        let page: BrowsePageLoader.Page
+        do {
+            page = try browsePageLoader.fetchPage(
+                offset: totalLoadedFromDB, pageSize: Self.pageSize,
+                query: searchQuery, browseMode: browseMode,
+                excludingID: pendingDeletionController.pendingID)
+        } catch {
+            ClipinLog.viewModel.error("fetchPage(more) failed: \(error.localizedDescription, privacy: .public)")
+            showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+            hasMore = false
+            return
+        }
         guard !page.items.isEmpty || page.hasMore else {
             hasMore = false
             return
@@ -1053,86 +1078,14 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     private func rebuildSections() {
-        sections = ClipSectionBuilder.build(items: items, showPinnedSection: shouldShowPinnedSection)
+        sections = ClipSectionBuilder.build(
+            items: items,
+            showPinnedSection: browsePageLoader.shouldShowPinnedSection(query: searchQuery, browseMode: browseMode))
         flatOrder = sections.flatMap(\.items)
         shortcutOrder = flatOrder
         shortcutIndexByID = Dictionary(
             uniqueKeysWithValues: shortcutOrder.prefix(9).enumerated().map { ($1.id, $0 + 1) }
         )
-    }
-
-    /// 搜索永远返回全局结果；浏览态才由 pinned 展示策略决定。
-    private func visibleItems(from fetchedItems: [ClipListItem]) -> [ClipListItem] {
-        let filtered: [ClipListItem]
-        if !searchQuery.isEmpty {
-            filtered = fetchedItems
-        } else if browseMode.isPinnedOnly {
-            filtered = fetchedItems.filter(\.isPinned)
-        } else if settings.pinnedItemsPresentation == .pinnedOnlyView {
-            filtered = fetchedItems.filter { !$0.isPinned }
-        } else {
-            filtered = fetchedItems
-        }
-
-        guard let pendingID = pendingDeletionController.pendingID else { return filtered }
-        return filtered.filter { $0.id != pendingID }
-    }
-
-    private var effectiveTypeFilter: ClipType? {
-        if searchQuery.isEmpty {
-            return browseMode.typeFilter
-        }
-        return browseMode.isPinnedOnly ? nil : browseMode.typeFilter
-    }
-
-    private var shouldShowPinnedSection: Bool {
-        guard searchQuery.isEmpty, !browseMode.isPinnedOnly else { return false }
-        return settings.pinnedItemsPresentation == .topSection
-    }
-
-    /// 当普通浏览选择“仅在 pinned 视图显示”时，分页要以“可见项页”而不是“原始 SQL 页”为准，
-    /// 否则第一页可能被隐藏的 pinned 条目吃满，列表会错误显示为空。
-    ///
-    /// Rust 端 get_(pinned|unpinned)_list_items 现在返回 Result（旧实现把 SQL/decode 失败
-    /// unwrap_or_default 伪装成"空历史"，违反 CLAUDE.md "不兜底"）。失败时返回空 chunk +
-    /// 关闭分页 + showNotice，让用户知道 DB 故障而非"真的没数据"。
-    private func fetchBrowsePage(offset: Int, typeFilter: ClipType?) -> (items: [ClipListItem], rawCount: Int, hasMore: Bool) {
-        let chunk: [ClipListItem]
-        do {
-            if browseMode.isPinnedOnly {
-                chunk = try core.getPinnedListItems(
-                    limit: Int32(Self.pageSize),
-                    offset: Int32(offset),
-                    typeFilter: typeFilter
-                )
-            } else if usesUnpinnedBrowseQuery {
-                chunk = try core.getUnpinnedListItems(
-                    limit: Int32(Self.pageSize),
-                    offset: Int32(offset),
-                    typeFilter: typeFilter
-                )
-            } else {
-                chunk = try core.getListItems(
-                    limit: Int32(Self.pageSize),
-                    offset: Int32(offset),
-                    typeFilter: typeFilter
-                )
-            }
-        } catch {
-            ClipinLog.viewModel.error("fetchBrowsePage failed offset=\(offset, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
-            return (items: [], rawCount: 0, hasMore: false)
-        }
-
-        return (
-            items: visibleItems(from: chunk),
-            rawCount: chunk.count,
-            hasMore: chunk.count == Self.pageSize
-        )
-    }
-
-    private var usesUnpinnedBrowseQuery: Bool {
-        settings.pinnedItemsPresentation == .pinnedOnlyView
     }
 
     /// 真正删库 + 广播 + 刷新。由 pendingDeletionController 到点(或 commitNow/commitOther)
