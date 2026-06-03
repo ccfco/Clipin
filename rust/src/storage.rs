@@ -2181,6 +2181,8 @@ impl Storage {
         )
     }
 
+    /// ClipItem 行解码:ordinal 0..=14 必须与 item_cols 的列顺序逐位对应。
+    /// 改列顺序只动 item_cols + 本函数两处,各 SELECT 全由 item_cols 派生不再手抄。
     fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<ClipItem> {
         let clip_type_str: String = row.get(2)?;
         Ok(ClipItem {
@@ -2219,6 +2221,9 @@ impl Storage {
         })
     }
 
+    /// ClipListItem 行解码:ordinal 0..=14 必须与 list_item_cols 的列顺序逐位对应
+    /// (注意与 item_cols 顺序不同:此处 paste_count 在 copy_count 之前)。
+    /// 改列顺序只动 list_item_cols + 本函数两处。FTS rank 固定在 ordinal 15。
     fn row_to_list_item(row: &rusqlite::Row) -> rusqlite::Result<ClipListItem> {
         let clip_type_str: String = row.get(2)?;
         Ok(ClipListItem {
