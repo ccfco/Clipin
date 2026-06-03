@@ -1001,19 +1001,23 @@ impl Storage {
         // 任何 SQL 失败或行解码失败都向上传播，Swift 层显式 notice。
         if let Some(t) = type_filter {
             let filter_val = t.as_str().to_string();
-            let sql = "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias, attachment_paths
-                 FROM clip_items WHERE clip_type = ?1
+            let sql = format!(
+                "SELECT {} FROM clip_items WHERE clip_type = ?1
                  ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT ?2 OFFSET ?3";
-            let mut stmt = conn.prepare(sql)?;
+                 LIMIT ?2 OFFSET ?3",
+                Self::item_cols("")
+            );
+            let mut stmt = conn.prepare(&sql)?;
             let rows = stmt.query_map(params![filter_val, limit, offset], Self::row_to_item)?;
             Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
         } else {
-            let sql = "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias, attachment_paths
-                 FROM clip_items
+            let sql = format!(
+                "SELECT {} FROM clip_items
                  ORDER BY is_pinned DESC, created_at DESC
-                 LIMIT ?1 OFFSET ?2";
-            let mut stmt = conn.prepare(sql)?;
+                 LIMIT ?1 OFFSET ?2",
+                Self::item_cols("")
+            );
+            let mut stmt = conn.prepare(&sql)?;
             let rows = stmt.query_map(params![limit, offset], Self::row_to_item)?;
             Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
         }
@@ -1026,11 +1030,11 @@ impl Storage {
     pub fn export_archive_snapshot(&self) -> Result<Vec<ArchiveSnapshotItem>, ClipinError> {
         let conn = self.conn();
         let items: Vec<ClipItem> = {
-            let mut stmt = conn.prepare(
-                "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias, attachment_paths
-                 FROM clip_items
+            let mut stmt = conn.prepare(&format!(
+                "SELECT {} FROM clip_items
                  ORDER BY is_pinned DESC, created_at DESC, id DESC",
-            )?;
+                Self::item_cols("")
+            ))?;
             let rows = stmt.query_map([], Self::row_to_item)?;
             // 旧实现 filter_map(.ok) 会让单行 decode 失败被静默丢弃，归档仍然显示"成功"
             // 但快照实际少条目；按 "不兜底" 改为 fail-fast，便于在备份阶段就发现 schema 漂移。
@@ -1120,15 +1124,12 @@ impl Storage {
                 let filter_val = t.as_str().to_string();
                 let pinned_val = if pinned { 1 } else { 0 };
                 let sql = format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height, alias, attachment_paths
+                    "SELECT {cols}
                      FROM clip_items
                      WHERE clip_type = ?1 AND is_pinned = ?2
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT ?3 OFFSET ?4",
-                    p = Self::LIST_PREVIEW_CHARS
+                    cols = Self::list_item_cols("")
                 );
                 let mut stmt = conn.prepare(&sql)?;
                 let rows = stmt.query_map(
@@ -1140,15 +1141,12 @@ impl Storage {
             (Some(t), None) => {
                 let filter_val = t.as_str().to_string();
                 let sql = format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height, alias, attachment_paths
+                    "SELECT {cols}
                      FROM clip_items
                      WHERE clip_type = ?1
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT ?2 OFFSET ?3",
-                    p = Self::LIST_PREVIEW_CHARS
+                    cols = Self::list_item_cols("")
                 );
                 let mut stmt = conn.prepare(&sql)?;
                 let rows =
@@ -1158,15 +1156,12 @@ impl Storage {
             (None, Some(pinned)) => {
                 let pinned_val = if pinned { 1 } else { 0 };
                 let sql = format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height, alias, attachment_paths
+                    "SELECT {cols}
                      FROM clip_items
                      WHERE is_pinned = ?1
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT ?2 OFFSET ?3",
-                    p = Self::LIST_PREVIEW_CHARS
+                    cols = Self::list_item_cols("")
                 );
                 let mut stmt = conn.prepare(&sql)?;
                 let rows =
@@ -1175,14 +1170,11 @@ impl Storage {
             }
             (None, None) => {
                 let sql = format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height, alias, attachment_paths
+                    "SELECT {cols}
                      FROM clip_items
                      ORDER BY is_pinned DESC, created_at DESC
                      LIMIT ?1 OFFSET ?2",
-                    p = Self::LIST_PREVIEW_CHARS
+                    cols = Self::list_item_cols("")
                 );
                 let mut stmt = conn.prepare(&sql)?;
                 let rows = stmt.query_map(params![limit, offset], Self::row_to_list_item)?;
@@ -1287,65 +1279,69 @@ impl Storage {
         type_filter: Option<&ClipType>,
     ) -> rusqlite::Result<Vec<SearchHit<ClipItem>>> {
         if search.raw.chars().count() >= 3 {
+            let cols = Self::item_cols("ci.");
             let sql = if type_filter.is_some() {
-                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count, ci.alias, ci.attachment_paths,
-                        clip_fts.rank
-                 FROM clip_items ci
-                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
-                 WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                 LIMIT 200"
+                format!(
+                    "SELECT {cols}, clip_fts.rank
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                     LIMIT 200"
+                )
             } else {
-                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count, ci.alias, ci.attachment_paths,
-                        clip_fts.rank
-                 FROM clip_items ci
-                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
-                 WHERE clip_fts MATCH ?1
-                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                 LIMIT 200"
+                format!(
+                    "SELECT {cols}, clip_fts.rank
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                     LIMIT 200"
+                )
             };
 
             if let Some(t) = type_filter {
-                let mut stmt = conn.prepare(sql)?;
+                let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![&search.raw_fts, t.as_str()],
                     Self::row_to_item_search_hit,
                 )?
                 .collect()
             } else {
-                let mut stmt = conn.prepare(sql)?;
+                let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(params![&search.raw_fts], Self::row_to_item_search_hit)?
                     .collect()
             }
         } else {
+            let cols = Self::item_cols("");
             let sql = if type_filter.is_some() {
-                "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias, attachment_paths
-                 FROM clip_items
-                 WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
-                   AND clip_type = ?2
-                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                 LIMIT 200"
+                format!(
+                    "SELECT {cols}
+                     FROM clip_items
+                     WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
+                       AND clip_type = ?2
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
+                     LIMIT 200"
+                )
             } else {
-                "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias, attachment_paths
-                 FROM clip_items
-                 WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
-                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                 LIMIT 200"
+                format!(
+                    "SELECT {cols}
+                     FROM clip_items
+                     WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
+                     LIMIT 200"
+                )
             };
 
             if let Some(t) = type_filter {
-                let mut stmt = conn.prepare(sql)?;
+                let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![&search.raw_like, t.as_str()],
                     Self::row_to_item_search_hit_without_rank,
                 )?
                 .collect()
             } else {
-                let mut stmt = conn.prepare(sql)?;
+                let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![&search.raw_like],
                     Self::row_to_item_search_hit_without_rank,
@@ -1369,66 +1365,70 @@ impl Storage {
             // 导致拼音命中后排序退化为 (pin, paste, copy, time)，违反 CLAUDE.md
             // 「FTS 路径 ORDER BY 必须包含 clip_fts.rank」硬约束——同名查询走 raw FTS
             // 有 rank、拼音 FTS 没有，会造成两路 hit 合并后顺序不稳定。
+            let cols = Self::item_cols("ci.");
             let sql = if type_filter.is_some() {
-                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count, ci.alias, ci.attachment_paths,
-                        clip_fts.rank
-                 FROM clip_items ci
-                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
-                 WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
-                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                 LIMIT 200"
+                format!(
+                    "SELECT {cols}, clip_fts.rank
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                     LIMIT 200"
+                )
             } else {
-                "SELECT ci.id, ci.content, ci.clip_type, ci.source_app, ci.source_name,
-                        ci.is_pinned, ci.created_at, ci.image_path, ci.char_count, ci.copy_count, ci.first_copied_at, ci.ocr_text, ci.paste_count, ci.alias, ci.attachment_paths,
-                        clip_fts.rank
-                 FROM clip_items ci
-                 JOIN clip_fts ON clip_fts.rowid = ci.rowid
-                 WHERE clip_fts MATCH ?1
-                 ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                 LIMIT 200"
+                format!(
+                    "SELECT {cols}, clip_fts.rank
+                     FROM clip_items ci
+                     JOIN clip_fts ON clip_fts.rowid = ci.rowid
+                     WHERE clip_fts MATCH ?1
+                     ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
+                     LIMIT 200"
+                )
             };
 
             if let Some(t) = type_filter {
-                let mut stmt = conn.prepare(sql)?;
+                let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![pinyin_fts, t.as_str()],
                     Self::row_to_item_search_hit,
                 )?
                 .collect()
             } else {
-                let mut stmt = conn.prepare(sql)?;
+                let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(params![pinyin_fts], Self::row_to_item_search_hit)?
                     .collect()
             }
         } else {
             let pattern = Self::escape_like_pattern(normalized_pinyin);
+            let cols = Self::item_cols("");
             let sql = if type_filter.is_some() {
-                "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias, attachment_paths
-                 FROM clip_items
-                 WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
-                   AND clip_type = ?2
-                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                 LIMIT 200"
+                format!(
+                    "SELECT {cols}
+                     FROM clip_items
+                     WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
+                       AND clip_type = ?2
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
+                     LIMIT 200"
+                )
             } else {
-                "SELECT id, content, clip_type, source_app, source_name,
-                        is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias, attachment_paths
-                 FROM clip_items
-                 WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
-                 ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                 LIMIT 200"
+                format!(
+                    "SELECT {cols}
+                     FROM clip_items
+                     WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
+                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
+                     LIMIT 200"
+                )
             };
 
             if let Some(t) = type_filter {
-                let mut stmt = conn.prepare(sql)?;
+                let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![pattern, t.as_str()],
                     Self::row_to_item_search_hit_without_rank,
                 )?
                 .collect()
             } else {
-                let mut stmt = conn.prepare(sql)?;
+                let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(params![pattern], Self::row_to_item_search_hit_without_rank)?
                     .collect()
             }
@@ -1441,31 +1441,24 @@ impl Storage {
         type_filter: Option<&ClipType>,
     ) -> rusqlite::Result<Vec<SearchHit<ClipListItem>>> {
         if search.raw.chars().count() >= 3 {
+            let cols = Self::list_item_cols("ci.");
             let sql = if type_filter.is_some() {
                 format!(
-                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
-                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            ci.image_width, ci.image_height, ci.alias, ci.attachment_paths, clip_fts.rank
+                    "SELECT {cols}, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
                      ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
+                     LIMIT 200"
                 )
             } else {
                 format!(
-                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
-                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            ci.image_width, ci.image_height, ci.alias, ci.attachment_paths, clip_fts.rank
+                    "SELECT {cols}, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
                      ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
+                     LIMIT 200"
                 )
             };
 
@@ -1482,30 +1475,23 @@ impl Storage {
                     .collect()
             }
         } else {
+            let cols = Self::list_item_cols("");
             let sql = if type_filter.is_some() {
                 format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height, alias, attachment_paths
+                    "SELECT {cols}
                      FROM clip_items
                      WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
+                     LIMIT 200"
                 )
             } else {
                 format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height, alias, attachment_paths
+                    "SELECT {cols}
                      FROM clip_items
                      WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
+                     LIMIT 200"
                 )
             };
 
@@ -1539,31 +1525,24 @@ impl Storage {
             );
             // 同 query_pinyin_item_hits：rank 必须从 clip_fts.rank 取，
             // ORDER BY 同步补 clip_fts.rank，跟 raw FTS list 路径保持一致排序语义。
+            let cols = Self::list_item_cols("ci.");
             let sql = if type_filter.is_some() {
                 format!(
-                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
-                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            ci.image_width, ci.image_height, ci.alias, ci.attachment_paths, clip_fts.rank
+                    "SELECT {cols}, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1 AND ci.clip_type = ?2
                      ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
+                     LIMIT 200"
                 )
             } else {
                 format!(
-                    "SELECT ci.id, substr(COALESCE(NULLIF(ci.ocr_text,''),ci.content),1,{p}),
-                            ci.clip_type, ci.source_app, ci.source_name, ci.is_pinned,
-                            ci.created_at, ci.image_path, ci.char_count, ci.paste_count, ci.copy_count,
-                            ci.image_width, ci.image_height, ci.alias, ci.attachment_paths, clip_fts.rank
+                    "SELECT {cols}, clip_fts.rank
                      FROM clip_items ci
                      JOIN clip_fts ON clip_fts.rowid = ci.rowid
                      WHERE clip_fts MATCH ?1
                      ORDER BY ci.is_pinned DESC, ci.paste_count DESC, clip_fts.rank, ci.copy_count DESC, ci.created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
+                     LIMIT 200"
                 )
             };
 
@@ -1581,30 +1560,23 @@ impl Storage {
             }
         } else {
             let pattern = Self::escape_like_pattern(normalized_pinyin);
+            let cols = Self::list_item_cols("");
             let sql = if type_filter.is_some() {
                 format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height, alias, attachment_paths
+                    "SELECT {cols}
                      FROM clip_items
                      WHERE (pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
+                     LIMIT 200"
                 )
             } else {
                 format!(
-                    "SELECT id, substr(COALESCE(NULLIF(ocr_text,''),content),1,{p}),
-                            clip_type, source_app, source_name, is_pinned,
-                            created_at, image_path, char_count, paste_count, copy_count,
-                            image_width, image_height, alias, attachment_paths
+                    "SELECT {cols}
                      FROM clip_items
                      WHERE pinyin_flat LIKE ?1 ESCAPE '\\' OR pinyin_initials LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
-                     LIMIT 200",
-                    p = Self::LIST_PREVIEW_CHARS
+                     LIMIT 200"
                 )
             };
 
@@ -1661,9 +1633,10 @@ impl Storage {
     pub fn get_item(&self, id: &str) -> Result<ClipItem, ClipinError> {
         let conn = self.conn();
         conn.query_row(
-            "SELECT id, content, clip_type, source_app, source_name, is_pinned, created_at, image_path, char_count, copy_count, first_copied_at, ocr_text, paste_count, alias, attachment_paths
-             FROM clip_items
-             WHERE id = ?1",
+            &format!(
+                "SELECT {} FROM clip_items WHERE id = ?1",
+                Self::item_cols("")
+            ),
             params![id],
             Self::row_to_item,
         )
@@ -1677,15 +1650,13 @@ impl Storage {
     /// OCR backfill 长期"无声停止"——按 "不兜底" 改 Result，调用方 log 错误。
     pub fn get_unprocessed_images(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
         let conn = self.conn();
-        let mut stmt = conn.prepare(
-            "SELECT id, content, clip_type, source_app, source_name,
-                    is_pinned, created_at, image_path, char_count, copy_count,
-                    first_copied_at, ocr_text, paste_count, alias, attachment_paths
-             FROM clip_items
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM clip_items
              WHERE clip_type = 'image' AND ocr_text IS NULL
              ORDER BY created_at ASC
              LIMIT ?1",
-        )?;
+            Self::item_cols("")
+        ))?;
         let rows = stmt.query_map(params![limit], Self::row_to_item)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
@@ -1694,15 +1665,13 @@ impl Storage {
     /// 与 get_unprocessed_images 同构——直接查 NULL 列，无 offset，不受新增条目影响。
     pub fn get_unsized_images(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
         let conn = self.conn();
-        let mut stmt = conn.prepare(
-            "SELECT id, content, clip_type, source_app, source_name,
-                    is_pinned, created_at, image_path, char_count, copy_count,
-                    first_copied_at, ocr_text, paste_count, alias, attachment_paths
-             FROM clip_items
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM clip_items
              WHERE clip_type = 'image' AND image_width IS NULL
              ORDER BY created_at ASC
              LIMIT ?1",
-        )?;
+            Self::item_cols("")
+        ))?;
         let rows = stmt.query_map(params![limit], Self::row_to_item)?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
@@ -2180,6 +2149,36 @@ impl Storage {
         // 失败而非 unwrap_or(0) 伪装成"版本 0"误导 migration 断言。
         conn.query_row("PRAGMA user_version", [], |r| r.get(0))
             .expect("PRAGMA user_version query failed")
+    }
+
+    /// ClipItem 的 15 列投影,顺序必须与 row_to_item 的 ordinal 0..=14 一一对应。
+    /// 改列顺序 = 同步改本函数 + row_to_item 两处,别处不再手抄。
+    /// prefix: "" (裸列:浏览/LIKE/get_item) 或 "ci." (JOIN clip_fts 时消歧)。
+    /// FTS 分支的 `, clip_fts.rank` 由调用点自行 format! 追加,不在此函数内。
+    fn item_cols(prefix: &str) -> String {
+        [
+            "id", "content", "clip_type", "source_app", "source_name",
+            "is_pinned", "created_at", "image_path", "char_count", "copy_count",
+            "first_copied_at", "ocr_text", "paste_count", "alias", "attachment_paths",
+        ]
+        .iter()
+        .map(|c| format!("{prefix}{c}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+    }
+
+    /// ClipListItem 的 15 列投影(第二列是 preview 表达式,吃 LIST_PREVIEW_CHARS),
+    /// 顺序必须与 row_to_list_item 的 ordinal 0..=14 一一对应。
+    /// 改列顺序 = 同步改本函数 + row_to_list_item 两处。prefix 与 rank 约定同 item_cols。
+    fn list_item_cols(prefix: &str) -> String {
+        let p = Self::LIST_PREVIEW_CHARS;
+        format!(
+            "{prefix}id, \
+             substr(COALESCE(NULLIF({prefix}ocr_text,''),{prefix}content),1,{p}), \
+             {prefix}clip_type, {prefix}source_app, {prefix}source_name, {prefix}is_pinned, \
+             {prefix}created_at, {prefix}image_path, {prefix}char_count, {prefix}paste_count, {prefix}copy_count, \
+             {prefix}image_width, {prefix}image_height, {prefix}alias, {prefix}attachment_paths"
+        )
     }
 
     fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<ClipItem> {
