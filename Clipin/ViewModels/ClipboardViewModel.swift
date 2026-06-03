@@ -31,6 +31,16 @@ struct LauncherNotice: Identifiable {
     let actionTitle: String?
 }
 
+/// launcher 的门面 ViewModel(唯一 ObservableObject)。自洽状态机已抽到独立单元,
+/// 本类负责编排它们 + 持有 SwiftUI 渲染态(@Published、selectedItemRevision 判等信号、
+/// shortcutIndexByID 等):
+///   - ClipSectionBuilder         items → 分组 sections(纯函数)
+///   - LauncherNoticeCenter       一次性提示队列 → @Published launcherNotice
+///   - LauncherLoadingCoordinator 顶部流光引用计数防闪烁 → @Published isLauncherLoading
+///   - PendingDeletionController   7s 可撤销删除 timer(删库副作用由本类注入 commitDeletion)
+///   - BrowsePageLoader           分页取数 + pinned 展示策略过滤
+/// 渲染拓扑不可动:MainPanel @ObservedObject 全量订阅本类;PreviewPane 刻意不订阅、
+/// 靠 selectedItemRevision 判等。改这些会重蹈导航卡顿。
 @MainActor
 final class ClipboardViewModel: ObservableObject {
     /// `selectedItem` 是"异步加载的完整 payload"，与同步设值的 `selectedItemID` 形成双轨流。
