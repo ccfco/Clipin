@@ -209,6 +209,10 @@ final class ClipboardViewModel: ObservableObject {
     private lazy var noticeCenter = LauncherNoticeCenter { [weak self] notice in
         self?.launcherNotice = notice
     }
+    /// 顶部流光引用计数 + 防闪烁状态机。0.65 = 最小可见时长,避免一闪而过。
+    private lazy var loadingCoordinator = LauncherLoadingCoordinator(minimumVisibleSeconds: 0.65) { [weak self] visible in
+        self?.isLauncherLoading = visible
+    }
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
     /// ⌘1-9 快捷粘贴序列：始终基于当前可见列表
@@ -224,9 +228,6 @@ final class ClipboardViewModel: ObservableObject {
     // OCR 静默刷新当前 payload 的任务句柄：必须可被 selectItem 取消，否则 A→B→A 快切时
     // 它会与新 loadItemTask 并发加载同一 id，后完成者把旧快照盖到新结果上。
     private var reloadPayloadTask: Task<Void, Never>?
-    private var launcherLoadingSources: Set<LauncherLoadingSource> = []
-    private var launcherLoadingBecameVisibleAt: Date?
-    private var launcherLoadingHideTask: Task<Void, Never>?
     private var skipNextDebouncedLoad = false
     private var sessionBaseBrowseMode: LauncherBrowseMode
     private var previewTask: Task<Void, Never>?
@@ -241,7 +242,6 @@ final class ClipboardViewModel: ObservableObject {
     // MARK: - Pagination
     private static let pageSize = 50
     private static let previewNeighborItemLimit = 80
-    private static let launcherLoadingMinimumVisibleSeconds: TimeInterval = 0.65
     /// 预览去抖窗口。渲染整棵 PreviewPane 子树会占住主线程（实测：getItem 仅 0.2ms、图片走缩略图
     /// 缓存命中，开销全在 SwiftUI 重渲染），若上在导航关键路径上，会把紧接着的下一次 ↑↓ 按键处理顶到
     /// 后面 → 高亮慢半拍、不跟手。故所有选中一律去抖：selectItem 先睡此窗口，期间又来新选中就取消重来，
@@ -259,14 +259,6 @@ final class ClipboardViewModel: ObservableObject {
     var onCopyRequested: ((ClipItem) -> Void)?
     var onCloseRequested: (() -> Void)?
     var onOpenSettingsRequested: (() -> Void)?
-
-    // 顶部流光（isLauncherLoading）只跟随「真正慢的异步加载」。本地 SQLite getItem（选中条目）是
-    // 瞬时操作，绝不入此集合——否则 ↑↓ 连按每次选中都点亮流光，叠加 0.65s 最小可见时长会把它钉成
-    // 持续的 TimelineView(.animation) 每帧重绘，拖卡键盘导航。
-    private enum LauncherLoadingSource: Hashable {
-        case quickLookPreparation
-        case previewNetwork(String)
-    }
 
     init(core: ClipinCore, settings: SettingsStore = .shared) {
         self.core = core
@@ -388,7 +380,7 @@ final class ClipboardViewModel: ObservableObject {
         previewTask?.cancel()
         previewTask = nil
         isPreparingPreview = false
-        clearLauncherLoading()
+        loadingCoordinator.clear()
         selectedItemID = id
         guard let id else {
             // 无选中:预览伴随状态立即清空(没有"上一落定项"要维持)。
@@ -459,52 +451,7 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func setPreviewNetworkLoading(_ isLoading: Bool, key: String) {
-        setLauncherLoading(isLoading, source: .previewNetwork(key))
-    }
-
-    private func setLauncherLoading(_ isLoading: Bool, source: LauncherLoadingSource) {
-        if isLoading {
-            launcherLoadingSources.insert(source)
-        } else {
-            launcherLoadingSources.remove(source)
-        }
-        if launcherLoadingSources.isEmpty {
-            scheduleLauncherLoadingHide()
-        } else {
-            launcherLoadingHideTask?.cancel()
-            launcherLoadingHideTask = nil
-            if !isLauncherLoading {
-                launcherLoadingBecameVisibleAt = Date()
-                isLauncherLoading = true
-            }
-        }
-    }
-
-    private func clearLauncherLoading() {
-        launcherLoadingHideTask?.cancel()
-        launcherLoadingHideTask = nil
-        launcherLoadingSources.removeAll()
-        if isLauncherLoading {
-            isLauncherLoading = false
-        }
-        launcherLoadingBecameVisibleAt = nil
-    }
-
-    private func scheduleLauncherLoadingHide() {
-        guard isLauncherLoading else { return }
-        let visibleAt = launcherLoadingBecameVisibleAt ?? Date()
-        let elapsed = Date().timeIntervalSince(visibleAt)
-        let remaining = max(0, Self.launcherLoadingMinimumVisibleSeconds - elapsed)
-        launcherLoadingHideTask?.cancel()
-        launcherLoadingHideTask = Task { @MainActor [weak self] in
-            if remaining > 0 {
-                try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-            }
-            guard let self, !Task.isCancelled, self.launcherLoadingSources.isEmpty else { return }
-            self.isLauncherLoading = false
-            self.launcherLoadingBecameVisibleAt = nil
-            self.launcherLoadingHideTask = nil
-        }
+        loadingCoordinator.set(isLoading, source: .previewNetwork(key))
     }
 
     func reloadRepresentationsForSelected() {
@@ -818,7 +765,7 @@ final class ClipboardViewModel: ObservableObject {
         let core = self.core
         let neighborItemLimit = Self.previewNeighborItemLimit
         isPreparingPreview = true
-        setLauncherLoading(true, source: .quickLookPreparation)
+        loadingCoordinator.set(true, source: .quickLookPreparation)
         previewTask = Task { @MainActor [weak self] in
             // 旧实现用 Task.detached 切断了结构化 cancellation 链——外层 previewTask.cancel()
             // 只会让 wrapper 抛 CancellationError，detached 内的 resolveSession 仍然继续扫
@@ -851,7 +798,7 @@ final class ClipboardViewModel: ObservableObject {
             guard !Task.isCancelled, let self, self.selectedItemID == selectedItemID else { return }
             self.previewTask = nil
             self.isPreparingPreview = false
-            self.setLauncherLoading(false, source: .quickLookPreparation)
+            self.loadingCoordinator.set(false, source: .quickLookPreparation)
             guard let session else {
                 self.showNotice(NSLocalizedString("Could not preview this item.", comment: ""), style: .error)
                 return
@@ -865,7 +812,7 @@ final class ClipboardViewModel: ObservableObject {
         previewTask?.cancel()
         previewTask = nil
         isPreparingPreview = false
-        setLauncherLoading(false, source: .quickLookPreparation)
+        loadingCoordinator.set(false, source: .quickLookPreparation)
     }
 
     func close() { onCloseRequested?() }
