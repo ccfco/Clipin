@@ -9,7 +9,7 @@ struct ClipSection: Identifiable {
     var id: String { title }
 }
 
-enum LauncherNoticeStyle {
+enum LauncherNoticeStyle: Equatable {
     case info
     case success
     case warning
@@ -205,6 +205,10 @@ final class ClipboardViewModel: ObservableObject {
 
     private let core: ClipinCore
     private let settings: SettingsStore
+    /// 一次性提示队列状态机。lazy:首次访问在 init 之后,self 已完全初始化,[weak self] 安全。
+    private lazy var noticeCenter = LauncherNoticeCenter { [weak self] notice in
+        self?.launcherNotice = notice
+    }
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
     /// ⌘1-9 快捷粘贴序列：始终基于当前可见列表
@@ -225,8 +229,6 @@ final class ClipboardViewModel: ObservableObject {
     private var launcherLoadingHideTask: Task<Void, Never>?
     private var skipNextDebouncedLoad = false
     private var sessionBaseBrowseMode: LauncherBrowseMode
-    private var noticeTask: Task<Void, Never>?
-    private var noticeAction: (() -> Void)?
     private var previewTask: Task<Void, Never>?
 
     private struct PendingDeletion {
@@ -1007,27 +1009,15 @@ final class ClipboardViewModel: ObservableObject {
         duration: Duration = .seconds(3),
         action: (() -> Void)? = nil
     ) {
-        launcherNotice = LauncherNotice(text: text, style: style, actionTitle: actionTitle)
-        noticeAction = action
-        noticeTask?.cancel()
-        noticeTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: duration) } catch { return }
-            guard !Task.isCancelled else { return }
-            self?.dismissNotice()
-        }
+        noticeCenter.show(text, style: style, actionTitle: actionTitle, duration: duration, action: action)
     }
 
     func performNoticeAction() {
-        let action = noticeAction
-        dismissNotice()
-        action?()
+        noticeCenter.performAction()
     }
 
     func dismissNotice() {
-        noticeTask?.cancel()
-        noticeTask = nil
-        noticeAction = nil
-        launcherNotice = nil
+        noticeCenter.dismiss()
     }
 
     var selectedListItem: ClipListItem? {
