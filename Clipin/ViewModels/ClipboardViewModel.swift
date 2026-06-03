@@ -213,6 +213,8 @@ final class ClipboardViewModel: ObservableObject {
     private lazy var loadingCoordinator = LauncherLoadingCoordinator(minimumVisibleSeconds: 0.65) { [weak self] visible in
         self?.isLauncherLoading = visible
     }
+    /// 7s 可撤销删除状态机。删库副作用由 commitDeletion 注入。
+    private let pendingDeletionController = PendingDeletionController(window: .seconds(7))
     private var items: [ClipListItem] = []
     private var flatOrder: [ClipListItem] = []
     /// ⌘1-9 快捷粘贴序列：始终基于当前可见列表
@@ -231,13 +233,6 @@ final class ClipboardViewModel: ObservableObject {
     private var skipNextDebouncedLoad = false
     private var sessionBaseBrowseMode: LauncherBrowseMode
     private var previewTask: Task<Void, Never>?
-
-    private struct PendingDeletion {
-        let id: String
-    }
-
-    private var pendingDeletion: PendingDeletion?
-    private var pendingDeletionTask: Task<Void, Never>?
 
     // MARK: - Pagination
     private static let pageSize = 50
@@ -902,7 +897,7 @@ final class ClipboardViewModel: ObservableObject {
             hideActionsPalette()
         }
 
-        commitPendingDeletionBeforeReplacing(with: id)
+        pendingDeletionController.commitOther(than: id)
 
         guard (try? core.getItem(id: id)) != nil else {
             showNotice(NSLocalizedString("Item no longer exists.", comment: ""), style: .error)
@@ -924,7 +919,10 @@ final class ClipboardViewModel: ObservableObject {
             selectedItemID = nextSelectionID
             selectedItem = nil
         }
-        pendingDeletion = PendingDeletion(id: id)
+        // arm 在 loadItems 前:loadItems → visibleItems 要靠 controller.pendingID 把待删项滤掉。
+        pendingDeletionController.arm(id: id) { [weak self] in
+            self?.commitDeletion(id: id)
+        }
         loadItems()
 
         showNotice(
@@ -935,18 +933,10 @@ final class ClipboardViewModel: ObservableObject {
         ) { [weak self] in
             self?.undoPendingDeletion(id: id)
         }
-
-        pendingDeletionTask?.cancel()
-        pendingDeletionTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: .seconds(7)) } catch { return }
-            self?.commitPendingDeletion(id: id)
-        }
     }
 
     func finalizePendingDeletion() {
-        guard let id = pendingDeletion?.id else { return }
-        pendingDeletionTask?.cancel()
-        commitPendingDeletion(id: id)
+        pendingDeletionController.commitNow()
     }
 
     func showNotice(
@@ -1084,8 +1074,8 @@ final class ClipboardViewModel: ObservableObject {
             filtered = fetchedItems
         }
 
-        guard let pendingDeletion else { return filtered }
-        return filtered.filter { $0.id != pendingDeletion.id }
+        guard let pendingID = pendingDeletionController.pendingID else { return filtered }
+        return filtered.filter { $0.id != pendingID }
     }
 
     private var effectiveTypeFilter: ClipType? {
@@ -1145,16 +1135,9 @@ final class ClipboardViewModel: ObservableObject {
         settings.pinnedItemsPresentation == .pinnedOnlyView
     }
 
-    private func commitPendingDeletionBeforeReplacing(with id: String) {
-        guard let pendingID = pendingDeletion?.id, pendingID != id else { return }
-        pendingDeletionTask?.cancel()
-        commitPendingDeletion(id: pendingID)
-    }
-
-    private func commitPendingDeletion(id: String) {
-        guard pendingDeletion?.id == id else { return }
-        pendingDeletion = nil
-        pendingDeletionTask = nil
+    /// 真正删库 + 广播 + 刷新。由 pendingDeletionController 到点(或 commitNow/commitOther)
+    /// 触发的注入 closure 调用;失败显式 notice,不静默吞。
+    private func commitDeletion(id: String) {
         do {
             try core.deleteItem(id: id)
             NotificationCenter.default.post(name: .clipHistoryDidChange, object: nil)
@@ -1165,10 +1148,8 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     private func undoPendingDeletion(id: String) {
-        guard pendingDeletion?.id == id else { return }
-        pendingDeletionTask?.cancel()
-        pendingDeletion = nil
-        pendingDeletionTask = nil
+        guard pendingDeletionController.pendingID == id else { return }
+        pendingDeletionController.cancel()
         loadItems()
         selectItem(id: id)
         showNotice(NSLocalizedString("Deletion undone.", comment: ""), style: .success)
