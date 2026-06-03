@@ -482,8 +482,8 @@ struct URLPreviewView: View {
             pageTitle = nil
             ogImage = nil
             ogImageLoading = false
-            // 用户关闭自动抓取后预览只显示 URL 本身——硬性黑名单（私网/webhook/token query）
-            // 仍在 actor 内执行，这里只跳过用户偏好层
+            // 用户关闭自动抓取后预览只显示 URL 本身——硬性黑名单（webhook 路径 / token query，
+            // 不含私网地址）仍在 actor 内执行，这里只跳过用户偏好层
             guard SettingsStore.shared.urlPreviewAutoFetch else { return }
             guard let url, URLMetadataCache.shouldAutoFetchMetadata(for: url) else { return }
             let requested = urlString

@@ -242,7 +242,9 @@ final class SettingsStore: ObservableObject {
     /// URL 条目自动抓取页面标题：默认开启，关闭后预览仅显示原始 URL 与解析后字段。
     /// 用户复制内网管理后台/webhook 链接到 Clipin 后，只是"选中预览"就自动 GET 会触发管理动作、
     /// 消费 token、或污染审计日志——给用户一个全局开关把自动抓取彻底关掉，
-    /// 同时内置硬性黑名单（私网 IP / webhook 路径）即便开启也跳过。
+    /// 同时内置硬性黑名单（webhook 路径 / token query）即便开启也跳过。
+    /// 注意：私网/回环地址不在黑名单内（本机开发页、内网自托管页是剪贴板常见内容，
+    /// 按 host 一刀切会误杀正常预览）——这类地址的拦截靠用户手动关此全局开关。
     @Published var urlPreviewAutoFetch: Bool {
         didSet { defaults.set(urlPreviewAutoFetch, forKey: Keys.urlPreviewAutoFetch) }
     }
