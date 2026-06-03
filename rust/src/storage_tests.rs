@@ -518,3 +518,124 @@ fn test_delete_item_cascades_representations() {
     let loaded = storage.load_representations(&item.id).unwrap();
     assert_eq!(loaded.len(), 0, "ON DELETE CASCADE should have removed representations");
 }
+
+// ── 搜索路径特征化测试(列清单收口的回归基线)─────────────────────────
+// 针对当前行为编写,收口前后都必须全绿。主职责:验证 search/search_list_items
+// 的字段解码 ordinal 对齐;附带覆盖排序、FTS(≥3字)/LIKE(≤2字)双分支、拼音、type_filter。
+
+fn new_storage_for_search() -> (tempfile::TempDir, Storage) {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("search.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+    (tmp, storage)
+}
+
+#[test]
+fn test_search_item_field_decoding_roundtrip() {
+    // 字段解码对齐:构造各字段值互不相同的条目,搜索取回后逐字段断言,
+    // 任何列错位(如 paste_count/copy_count 互换)都会被这里抓到。
+    let (_tmp, storage) = new_storage_for_search();
+    let item = storage
+        .save_item("alpha bravo charlie", &ClipType::Text, Some("AppX"), Some("NameY"), None)
+        .unwrap();
+    storage.set_alias(&item.id, Some("myalias")).unwrap();
+    storage.increment_paste_count(&item.id).unwrap();
+    storage.increment_paste_count(&item.id).unwrap();
+    storage.increment_paste_count(&item.id).unwrap(); // paste_count = 3
+    storage.toggle_pin(&item.id).unwrap(); // is_pinned = true
+
+    // FTS 路径(query ≥3 字)
+    let hits = storage.search("alpha", None).unwrap();
+    assert_eq!(hits.len(), 1, "应命中 1 条");
+    let h = &hits[0];
+    assert_eq!(h.id, item.id);
+    assert_eq!(h.content, "alpha bravo charlie");
+    assert_eq!(h.clip_type, ClipType::Text);
+    assert_eq!(h.source_app.as_deref(), Some("AppX"));
+    assert_eq!(h.source_name.as_deref(), Some("NameY"));
+    assert!(h.is_pinned);
+    assert_eq!(h.paste_count, 3);
+    assert_eq!(h.copy_count, 1);
+    assert_eq!(h.alias.as_deref(), Some("myalias"));
+
+    // list 投影同样逐字段对齐(preview 取 content;image 尺寸对文本为 None)
+    let list = storage.search_list_items("alpha", None).unwrap();
+    assert_eq!(list.len(), 1);
+    let l = &list[0];
+    assert_eq!(l.id, item.id);
+    assert!(l.preview.starts_with("alpha bravo charlie"));
+    assert_eq!(l.clip_type, ClipType::Text);
+    assert!(l.is_pinned);
+    assert_eq!(l.paste_count, 3);
+    assert_eq!(l.copy_count, 1);
+    assert_eq!(l.image_width, None);
+    assert_eq!(l.image_height, None);
+    assert_eq!(l.alias.as_deref(), Some("myalias"));
+}
+
+#[test]
+fn test_search_fts_sort_pin_then_paste() {
+    // FTS(≥3字)路径排序:is_pinned > paste_count 优先级。
+    let (_tmp, storage) = new_storage_for_search();
+    let pinned = storage.save_item("term pinned", &ClipType::Text, None, None, None).unwrap();
+    storage.toggle_pin(&pinned.id).unwrap(); // 置顶,paste=0
+    let hot = storage.save_item("term hot", &ClipType::Text, None, None, None).unwrap();
+    for _ in 0..5 { storage.increment_paste_count(&hot.id).unwrap(); } // paste=5,不置顶
+    let cold = storage.save_item("term cold", &ClipType::Text, None, None, None).unwrap(); // paste=0
+
+    let hits = storage.search("term", None).unwrap();
+    let ids: Vec<&str> = hits.iter().map(|h| h.id.as_str()).collect();
+    assert_eq!(ids, vec![pinned.id.as_str(), hot.id.as_str(), cold.id.as_str()],
+        "置顶优先,其次按 paste_count 降序");
+}
+
+#[test]
+fn test_search_like_sort_copy_count_tiebreak() {
+    // LIKE(≤2字)路径排序:同 paste_count、均不置顶时按 copy_count 降序。
+    // 同 hash 重存走 INSERT OR REPLACE:换新 id、copy_count+1,旧行被替换,
+    // 所以幸存条目是"最后一次 save"返回的 ClipItem(其 copy_count 已是累计值)。
+    let (_tmp, storage) = new_storage_for_search();
+    let one = storage.save_item("xy one", &ClipType::Text, None, None, None).unwrap(); // copy=1
+    storage.save_item("xy two", &ClipType::Text, None, None, None).unwrap();
+    let two = storage.save_item("xy two", &ClipType::Text, None, None, None).unwrap(); // copy=2
+    storage.save_item("xy three", &ClipType::Text, None, None, None).unwrap();
+    storage.save_item("xy three", &ClipType::Text, None, None, None).unwrap();
+    let three = storage.save_item("xy three", &ClipType::Text, None, None, None).unwrap(); // copy=3
+    assert_eq!(one.copy_count, 1);
+    assert_eq!(two.copy_count, 2);
+    assert_eq!(three.copy_count, 3);
+
+    let hits = storage.search("xy", None).unwrap(); // 2 字 → LIKE 分支
+    let ids: Vec<&str> = hits.iter().map(|h| h.id.as_str()).collect();
+    assert_eq!(ids, vec![three.id.as_str(), two.id.as_str(), one.id.as_str()],
+        "copy_count 降序:three(3) > two(2) > one(1)");
+}
+
+#[test]
+fn test_search_pinyin_path_hits() {
+    // 拼音路径:中文内容由 compute_pinyin 写入 pinyin_flat,拼音 query 应命中。
+    let (_tmp, storage) = new_storage_for_search();
+    let item = storage.save_item("你好世界", &ClipType::Text, None, None, None).unwrap();
+    let hits = storage.search("nihao", None).unwrap(); // ≥3 字 → 拼音 FTS
+    assert!(hits.iter().any(|h| h.id == item.id), "拼音 nihao 应命中 你好世界");
+}
+
+#[test]
+fn test_search_type_filter_narrows_results() {
+    // type_filter 分支:同样匹配的文本 + 图片,带 Text 过滤只回文本。
+    let (tmp, storage) = new_storage_for_search();
+    let text = storage.save_item("term doc", &ClipType::Text, None, None, None).unwrap();
+    let png = tmp.path().join("images").join("term.png");
+    std::fs::write(&png, b"fake-png-bytes").unwrap();
+    storage
+        .save_item("term img", &ClipType::Image, None, None, Some(&png.to_string_lossy()))
+        .unwrap();
+
+    let only_text = storage.search("term", Some(&ClipType::Text)).unwrap();
+    assert!(only_text.iter().all(|h| h.clip_type == ClipType::Text));
+    assert!(only_text.iter().any(|h| h.id == text.id));
+    let all = storage.search("term", None).unwrap();
+    assert!(all.len() >= only_text.len(), "无过滤应 ≥ 有过滤");
+}
