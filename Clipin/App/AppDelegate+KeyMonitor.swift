@@ -727,17 +727,11 @@ extension AppDelegate {
         })
     }
 
+    /// 更新提示固定在主屏右上角(visibleFrame 已避开菜单栏/Dock)。
+    /// 不锚定菜单栏图标:图标位置随其它 status item 增减而漂移,固定右上角
+    /// 让提示落点稳定、不受影响,符合系统通知的空间心智。
     func positionUpdateReminderWindow(_ window: NSWindow) {
         let size = window.frame.size
-        if let button = statusItem?.button, let hostWindow = button.window {
-            let buttonFrameInWindow = button.convert(button.bounds, to: nil)
-            let buttonFrameOnScreen = hostWindow.convertToScreen(buttonFrameInWindow)
-            let x = max(buttonFrameOnScreen.maxX - size.width, buttonFrameOnScreen.minX - 12)
-            let y = buttonFrameOnScreen.minY - size.height - 10
-            window.setFrameOrigin(NSPoint(x: x, y: y))
-            return
-        }
-
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let visible = screen.visibleFrame
         let x = visible.maxX - size.width - 20
