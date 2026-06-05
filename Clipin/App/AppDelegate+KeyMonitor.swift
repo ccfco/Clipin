@@ -661,20 +661,22 @@ extension AppDelegate {
     func presentUpdateReminder(for release: ReleaseInfo) {
         let window: NSWindow
 
-        if let existingWindow = updateReminderWindow {
-            existingWindow.contentView = ClipinBorderlessHostingView(
-                rootView: UpdateReminderView(
-                    settings: settings,
-                    release: release,
-                    onLater: { [weak self] in self?.updateReminder.dismissActiveReminder() },
-                    onViewRelease: { [weak self] in self?.updateReminder.openReleasePage() },
-                    onDownload: { [weak self] in self?.updateReminder.downloadLatestRelease() }
-                )
+        let hostingView = ClipinBorderlessHostingView(
+            rootView: UpdateReminderView(
+                settings: settings,
+                release: release,
+                onLater: { [weak self] in self?.updateReminder.dismissActiveReminder() },
+                onViewRelease: { [weak self] in self?.updateReminder.openReleasePage() },
+                onDownload: { [weak self] in self?.updateReminder.downloadLatestRelease() }
             )
+        )
+
+        if let existingWindow = updateReminderWindow {
+            existingWindow.contentView = hostingView
             window = existingWindow
         } else {
             let newWindow = ClipinUpdateReminderPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 360, height: 220),
+                contentRect: NSRect(x: 0, y: 0, width: UpdateReminderView.preferredWidth, height: 1),
                 styleMask: [.borderless, .nonactivatingPanel],
                 backing: .buffered,
                 defer: false
@@ -687,19 +689,17 @@ extension AppDelegate {
             newWindow.hidesOnDeactivate = false
             newWindow.collectionBehavior = [.canJoinAllSpaces, .transient]
             newWindow.isReleasedWhenClosed = false
-            newWindow.contentView = ClipinBorderlessHostingView(
-                rootView: UpdateReminderView(
-                    settings: settings,
-                    release: release,
-                    onLater: { [weak self] in self?.updateReminder.dismissActiveReminder() },
-                    onViewRelease: { [weak self] in self?.updateReminder.openReleasePage() },
-                    onDownload: { [weak self] in self?.updateReminder.downloadLatestRelease() }
-                )
-            )
+            newWindow.contentView = hostingView
             newWindow.delegate = self
             updateReminderWindow = newWindow
             window = newWindow
         }
+
+        // 内容是变高的（标题 + 最多 5 行 release notes + 按钮行），窗口高度必须按
+        // SwiftUI fittingSize 自适应，否则写死高度会把底部按钮行裁掉（见 v0.1.13 截断 bug）。
+        hostingView.layoutSubtreeIfNeeded()
+        let fittingHeight = hostingView.fittingSize.height
+        window.setContentSize(NSSize(width: UpdateReminderView.preferredWidth, height: fittingHeight))
 
         positionUpdateReminderWindow(window)
         window.alphaValue = 0

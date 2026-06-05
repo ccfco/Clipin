@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct UpdateReminderView: View {
+    /// 浮层宽度的单一真相源：窗口 frame 与视图 `.frame(width:)` 共用，
+    /// 避免两处写死 360 漂移导致 fittingSize 高度算错。
+    static let preferredWidth: CGFloat = 360
+
     @ObservedObject var settings: SettingsStore
     let release: ReleaseInfo
     let onLater: () -> Void
@@ -66,6 +70,6 @@ struct UpdateReminderView: View {
             }
             .padding(ClipinChrome.groupGap)
         }
-        .frame(width: 360)
+        .frame(width: Self.preferredWidth)
     }
 }
