@@ -34,9 +34,12 @@ repo_slug=$(git remote get-url origin 2>/dev/null | sed -E 's#(git@github.com:|h
 emit_section() {
     local title="$1" pattern="$2"
     local body
+    # grep 无匹配时返回 1，在 set -euo pipefail 下会让整条管道失败、触发 set -e
+    # 让脚本中途退出（纯 bugfix 版本区间无 feat 提交，就会卡在第一个 feat section）。
+    # || true 把「该类型无提交」这一预期内的空匹配吞掉，body 留空即跳过该 section。
     body=$(git log --no-merges --format='%s' "$range" \
         | grep -E "^($pattern):" \
-        | sed -E "s/^($pattern): */- /")
+        | sed -E "s/^($pattern): */- /" || true)
     if [ -n "$body" ]; then
         printf '\n## %s\n\n%s\n' "$title" "$body"
     fi
