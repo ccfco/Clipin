@@ -136,26 +136,35 @@ extension AppDelegate {
         }
     }
 
-    /// 根据当前状态决定面板出现位置：优先使用已记忆的位置，否则计算友好默认位置。
+    /// 根据当前状态决定面板出现位置：始终以鼠标所在屏幕为目标屏。
+    /// 记忆位置只在「就落在目标屏上」时还原（同屏记忆）；鼠标移到别的屏则跟随鼠标在该屏居中（跨屏跟随）。
     func positionPanelForShow() {
         guard let panel else { return }
 
-        // 有记忆位置且面板矩形与某个屏幕可见区域相交 → 直接还原
+        // 鼠标当前所在屏幕即用户的操作焦点，作为本次唤起的目标屏
+        let target = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
+            ?? NSScreen.main ?? NSScreen.screens.first
+        guard let target else { return }
+        let f = target.visibleFrame
+
+        // 有记忆位置且就落在目标屏上 → 还原（同屏才记忆）。
+        // 用 frame.contains(origin) 判断「位置归属哪块屏」：屏幕 frame 无缝拼接，
+        // 任意点恰好属于一块屏；visibleFrame 间有菜单栏/Dock 缝隙会误判归属。
         if let saved = savedPanelOrigin {
-            let savedRect = NSRect(origin: saved, size: panel.frame.size)
-            if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(savedRect) }) {
+            if target.frame.contains(saved) {
                 isProgrammaticMove = true
                 panel.setFrameOrigin(saved)
                 isProgrammaticMove = false
                 return
             }
-            savedPanelOrigin = nil   // 记忆位置已失效（如拔掉外接屏），清除避免重复检查
+            // 记忆位置不属于任何现存屏幕（旧屏已拔）才清除；仅是跨屏时保留，
+            // 用户移回原屏仍能还原原位置。
+            if !NSScreen.screens.contains(where: { $0.frame.contains(saved) }) {
+                savedPanelOrigin = nil
+            }
         }
 
-        // 默认位置：跟随鼠标所在屏幕，面板中心位于可见区域 58% 高度处，确保不超出边界
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
-            ?? NSScreen.main ?? NSScreen.screens.first
-        guard let f = screen?.visibleFrame else { return }
+        // 默认 / 跨屏：在目标屏居中，面板中心位于可见区域 58% 高度处，确保不超出边界
         let size = panel.frame.size
         let x = f.minX + (f.width - size.width) / 2
         let centerY = f.minY + f.height * 0.58
