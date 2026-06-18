@@ -699,9 +699,12 @@ extension AppDelegate {
         // SwiftUI fittingSize 自适应，否则写死高度会把底部按钮行裁掉（见 v0.1.13 截断 bug）。
         hostingView.layoutSubtreeIfNeeded()
         let fittingHeight = hostingView.fittingSize.height
-        window.setContentSize(NSSize(width: UpdateReminderView.preferredWidth, height: fittingHeight))
+        let contentSize = NSSize(width: UpdateReminderView.preferredWidth, height: fittingHeight)
+        window.setContentSize(contentSize)
 
-        positionUpdateReminderWindow(window)
+        // 用已知的 contentSize 定位，不回读 window.frame.size——避免 setContentSize
+        // 尚未在 frame 上生效时读到旧尺寸把 origin 算错。
+        positionUpdateReminderWindow(window, size: contentSize)
         window.alphaValue = 0
         window.orderFrontRegardless()
 
@@ -727,16 +730,32 @@ extension AppDelegate {
         })
     }
 
-    /// 更新提示固定在主屏右上角(visibleFrame 已避开菜单栏/Dock)。
-    /// 不锚定菜单栏图标:图标位置随其它 status item 增减而漂移,固定右上角
-    /// 让提示落点稳定、不受影响,符合系统通知的空间心智。
-    func positionUpdateReminderWindow(_ window: NSWindow) {
-        let size = window.frame.size
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+    /// 更新提示落在「鼠标所在屏」右上角(visibleFrame 已避开菜单栏/Dock)，
+    /// 与主面板 positionPanelForShow 统一空间心智:提示出现在用户当前操作的屏。
+    /// 不锚定菜单栏图标:图标位置随其它 status item 增减而漂移,固定右上角让落点稳定。
+    ///
+    /// 选屏用 NSScreen.main 在双屏下不可靠(语义是「含 key window 的屏」会漂移),
+    /// 故复用主面板的「鼠标所在屏」三级 fallback。
+    /// 定位后对 visibleFrame 做硬 clamp:无论选屏/尺寸如何,窗口四边都被夹进可见区,
+    /// 数学上杜绝越界截断(此前固定右上角无 clamp,选错屏即飞出屏被切)。
+    func positionUpdateReminderWindow(_ window: NSWindow, size: NSSize) {
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
+            ?? NSScreen.main ?? NSScreen.screens.first
+        guard let screen else { return }
         let visible = screen.visibleFrame
-        let x = visible.maxX - size.width - 20
-        let y = visible.maxY - size.height - 20
+
+        // 右上角锚点,距边 20pt。
+        let anchorX = visible.maxX - size.width - 20
+        let anchorY = visible.maxY - size.height - 20
+
+        // 硬 clamp:窗口比可见区还宽/高时(理论极端)优先保左下,保证左上角可见。
+        let x = min(max(anchorX, visible.minX), max(visible.minX, visible.maxX - size.width))
+        let y = min(max(anchorY, visible.minY), max(visible.minY, visible.maxY - size.height))
+
         window.setFrameOrigin(NSPoint(x: x, y: y))
+        ClipinLog.update.debug(
+            "update reminder positioned: origin=(\(x, privacy: .public),\(y, privacy: .public)) size=(\(size.width, privacy: .public)x\(size.height, privacy: .public)) screen.visible=\(NSStringFromRect(visible), privacy: .public)"
+        )
     }
 
     func statusItemImage(hasPendingUpdate: Bool) -> NSImage? {
