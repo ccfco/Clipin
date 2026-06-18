@@ -2,7 +2,7 @@
 name = "clipin-core"
 # 与发布版本对齐（project.yml MARKETING_VERSION / git tag）；落后会让崩溃日志里的
 # crate 版本与实际 app 版本对不上，排查时误导。
-version = "0.1.14"
+version = "0.1.15"
 edition = "2024"
 
 [lib]
