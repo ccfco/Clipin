@@ -102,7 +102,6 @@ enum ClipinMotion {
     static let selection = Animation.spring(response: 0.26, dampingFraction: 0.84)
     static let commandReveal = Animation.spring(response: 0.34, dampingFraction: 0.88)
     static let statePulse = Animation.spring(response: 0.42, dampingFraction: 0.82)
-    static let ambient = Animation.easeInOut(duration: 7.6)
     static let panel = commandReveal
     /// ⌘K 动作面板入场：从右下角 ⌘K 按钮缩放展开，带一点生气、不过弹。
     static let paletteReveal = Animation.spring(response: 0.30, dampingFraction: 0.80)
@@ -192,38 +191,32 @@ struct ClipinKeycap: View {
 }
 
 struct ClipinSymbolOrb: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isFloating = false
-
     let systemImage: String
     var size: CGFloat = 64
     var iconSize: CGFloat = 22
     var emphasis: Double = 1.0
 
+    // 静态符号球：模糊光晕 + 毛玻璃 + 图标，一次合成、不再动。
+    // 早期版本给这三层叠了一个 ambient.repeatForever 的"呼吸"缩放，但对带 .blur /
+    // .clipinChromeGlass 的图层做 .scaleEffect 动画，会让 SwiftUI 每帧重建 CAFilter +
+    // 重算毛玻璃 SDF 层。该动画永不停止，连承载窗口被其它 App 完全遮挡（仍 on-screen）时
+    // 都在后台逐帧重绘，单这一个动画就能把 WindowServer 拖到 ~80% CPU、整机发烫。
+    // 装饰性微动效的收益远不抵这个代价，故彻底改为静态（reduce-motion 路径本就是静态）。
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
                 .fill(Color.accentColor.opacity(0.10 + (0.05 * emphasis)))
                 .frame(width: size + 14, height: size + 14)
                 .blur(radius: 18)
-                .scaleEffect(reduceMotion ? 1 : (isFloating ? 1.04 : 0.98))
 
             RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
                 .fill(Color.clear)
                 .frame(width: size, height: size)
                 .clipinChromeGlass(in: RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
-                .scaleEffect(reduceMotion ? 1 : (isFloating ? 1.01 : 0.99))
 
             Image(systemName: systemImage)
                 .font(.system(size: iconSize, weight: .medium))
                 .foregroundStyle(Color.accentColor)
-        }
-        .onAppear {
-            guard !reduceMotion else { return }
-            isFloating = false
-            withAnimation(ClipinMotion.ambient.repeatForever(autoreverses: true)) {
-                isFloating = true
-            }
         }
     }
 }
