@@ -32,7 +32,7 @@ struct UpdateReminderView: View {
 
                         Text(
                             String(
-                                format: NSLocalizedString("Clipin %@ is ready to download.", comment: ""),
+                                format: NSLocalizedString("Clipin %@ is ready to install.", comment: ""),
                                 release.displayVersion
                             )
                         )
@@ -64,7 +64,7 @@ struct UpdateReminderView: View {
 
                     Spacer(minLength: 0)
 
-                    Button("Download Latest", action: onDownload)
+                    Button("Install Update", action: onDownload)
                         .buttonStyle(.glassProminent)
                 }
             }

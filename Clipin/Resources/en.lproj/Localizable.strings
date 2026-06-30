@@ -149,7 +149,7 @@
 "A fast, keyboard-first clipboard companion for macOS." = "A fast, keyboard-first clipboard companion for macOS.";
 "Updates" = "Updates";
 "Current version" = "Current version";
-"Clipin checks GitHub Releases and lets you download the newest build manually." = "Clipin checks GitHub Releases and lets you download the newest build manually.";
+"Clipin detects updates via GitHub Releases and installs them automatically." = "Clipin detects updates via GitHub Releases and installs them automatically.";
 "Automatically check for updates" = "Automatically check for updates";
 "Check GitHub Releases in the background and surface a reminder when a new version is available." = "Check GitHub Releases in the background and surface a reminder when a new version is available.";
 "Update status" = "Update status";
@@ -158,12 +158,12 @@
 "Published %@." = "Published %@.";
 "Update available: %@" = "Update available: %@";
 "You're up to date. Last checked %@." = "You're up to date. Last checked %@.";
-"Checks GitHub Releases in the background and lets you download the latest version manually." = "Checks GitHub Releases in the background and lets you download the latest version manually.";
+"Checks GitHub Releases in the background and installs updates automatically." = "Checks GitHub Releases in the background and installs updates automatically.";
 "Couldn't check for updates right now." = "Couldn't check for updates right now.";
 "Release notes" = "Release notes";
 "No release notes provided." = "No release notes provided.";
-"Get the latest build" = "Get the latest build";
-"Open the GitHub release page, or jump straight to the latest installer asset." = "Open the GitHub release page, or jump straight to the latest installer asset.";
+"Install latest version" = "Install latest version";
+"Install the latest version automatically, or open the GitHub release page." = "Install the latest version automatically, or open the GitHub release page.";
 "Project" = "Project";
 "Source code" = "Source code";
 "Browse the repository, implementation details, and development history on GitHub." = "Browse the repository, implementation details, and development history on GitHub.";
@@ -175,14 +175,14 @@
 "Open GitHub Issues to report bugs, request features, or continue a discussion." = "Open GitHub Issues to report bugs, request features, or continue a discussion.";
 "Open Issues" = "Open Issues";
 "View Release" = "View Release";
-"Download Latest" = "Download Latest";
+"Install Update" = "Install Update";
 
 /* App update */
 "About Clipin" = "About Clipin";
 "Check for Updates..." = "Check for Updates...";
 "New Version Available: %@" = "New Version Available: %@";
 "New update available" = "New update available";
-"Clipin %@ is ready to download." = "Clipin %@ is ready to download.";
+"Clipin %@ is ready to install." = "Clipin %@ is ready to install.";
 "Later" = "Later";
 
 /* OnboardingView */

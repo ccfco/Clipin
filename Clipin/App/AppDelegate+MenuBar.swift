@@ -28,7 +28,7 @@ extension AppDelegate {
                 updateItem.target = self
                 menu.addItem(updateItem)
 
-                let downloadItem = NSMenuItem(title: NSLocalizedString("Download Latest", comment: ""), action: #selector(downloadLatestRelease), keyEquivalent: "")
+                let downloadItem = NSMenuItem(title: NSLocalizedString("Install Update", comment: ""), action: #selector(installLatestRelease), keyEquivalent: "")
                 downloadItem.target = self
                 menu.addItem(downloadItem)
 
@@ -112,8 +112,9 @@ extension AppDelegate {
         updateReminder.openReleasePage()
     }
 
-    @objc func downloadLatestRelease() {
-        updateReminder.downloadLatestRelease()
+    @objc func installLatestRelease() {
+        updateReminder.installUpdate()
+        updateReminder.dismissActiveReminder()
     }
 
     func makeOnboardingMenuItem() -> NSMenuItem {

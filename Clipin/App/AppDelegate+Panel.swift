@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import Sparkle
 
 extension AppDelegate {
     // MARK: - Panel
@@ -201,6 +202,23 @@ extension AppDelegate {
             .sink { [weak self] release in
                 self?.statusItem?.button?.image = self?.statusItemImage(hasPendingUpdate: release != nil)
             }
+    }
+
+    // MARK: - Sparkle
+
+    func setupSparkle() {
+        let controller = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
+        // 版本检测由 UpdateReminderService（GitHub API）负责；
+        // Sparkle 只做安装器，不需要自己轮询。
+        controller.updater.automaticallyChecksForUpdates = false
+        sparkleUpdater = controller
+        updateReminder.installHandler = { [weak self] in
+            self?.sparkleUpdater?.updater.checkForUpdates()
+        }
     }
 
     func registerGlobalShortcut(_ shortcut: HotKeyShortcut) {

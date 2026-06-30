@@ -1,4 +1,8 @@
 name: Clipin
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.9.0
 options:
   bundleIdPrefix: com.ccfco
   developmentLanguage: en
@@ -52,6 +56,9 @@ targets:
           - $(inherited)
           - "@executable_path/../Frameworks"
         SWIFT_VERSION: "6.0"
+    dependencies:
+      - package: Sparkle
+        product: Sparkle
     preBuildScripts:
       - name: Check Spacing Tokens
         script: |

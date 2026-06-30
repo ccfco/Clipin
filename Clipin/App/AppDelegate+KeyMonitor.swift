@@ -683,7 +683,10 @@ extension AppDelegate {
                 release: release,
                 onLater: { [weak self] in self?.updateReminder.dismissActiveReminder() },
                 onViewRelease: { [weak self] in self?.updateReminder.openReleasePage() },
-                onDownload: { [weak self] in self?.updateReminder.downloadLatestRelease() }
+                onDownload: { [weak self] in
+                    self?.updateReminder.installUpdate()
+                    self?.updateReminder.dismissActiveReminder()
+                }
             )
         )
 

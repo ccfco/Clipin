@@ -124,10 +124,21 @@ final class UpdateReminderService: ObservableObject {
         NSWorkspace.shared.open(releasesListURL)
     }
 
+    /// Sparkle 安装闭包，由 AppDelegate.setupSparkle() 注入。
+    /// nil 时回退打开下载 URL（兜底路径，不应发生）。
+    var installHandler: (() -> Void)?
+
+    func installUpdate() {
+        if let installHandler {
+            installHandler()
+        } else {
+            let targetURL = latestRelease?.downloadURL ?? latestRelease?.releasePageURL ?? releasesPageURL
+            NSWorkspace.shared.open(targetURL)
+        }
+    }
+
     func downloadLatestRelease() {
-        dismissActiveReminder()
-        let targetURL = latestRelease?.downloadURL ?? latestRelease?.releasePageURL ?? releasesPageURL
-        NSWorkspace.shared.open(targetURL)
+        installUpdate()
     }
 
     private func schedulePeriodicChecks() {

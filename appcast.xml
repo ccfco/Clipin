@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>Clipin</title>
+        <description>Clipin update feed</description>
+        <language>en</language>
+        <!--
+            由 scripts/release.sh 自动维护。
+            每次发版：脚本构建 zip → generate_appcast 签名 → 更新本文件 → commit → push。
+        -->
+    </channel>
+</rss>

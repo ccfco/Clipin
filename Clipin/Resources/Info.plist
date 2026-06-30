@@ -27,6 +27,12 @@
     风险评估：URLSession 仅用于拉 favicon 和 URL 页面 title，这两类资源都是只读、
     无认证、无脚本执行；最坏情况是 favicon 缓存里多一个无关图片。无敏感数据外发。
     -->
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/ccfco/Clipin/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>tan1/rD5UKDwTEXAxmI/CzX/XLRQeABtgCO0uZhmFi4=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

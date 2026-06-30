@@ -149,7 +149,7 @@
 "A fast, keyboard-first clipboard companion for macOS." = "一个为 macOS 打造的、快速而键盘优先的剪贴板助手。";
 "Updates" = "更新";
 "Current version" = "当前版本";
-"Clipin checks GitHub Releases and lets you download the newest build manually." = "Clipin 会检查 GitHub Releases，并允许你手动下载最新版本。";
+"Clipin detects updates via GitHub Releases and installs them automatically." = "Clipin 通过 GitHub Releases 检测更新，并自动安装。";
 "Automatically check for updates" = "自动检查更新";
 "Check GitHub Releases in the background and surface a reminder when a new version is available." = "在后台检查 GitHub Releases，并在发现新版本时显示提醒。";
 "Update status" = "更新状态";
@@ -158,12 +158,12 @@
 "Published %@." = "发布于 %@。";
 "Update available: %@" = "发现新版本：%@";
 "You're up to date. Last checked %@." = "当前已是最新版本。上次检查于 %@。";
-"Checks GitHub Releases in the background and lets you download the latest version manually." = "Clipin 会在后台检查 GitHub Releases，并允许你手动下载最新版本。";
+"Checks GitHub Releases in the background and installs updates automatically." = "在后台检查 GitHub Releases，发现新版本时自动安装。";
 "Couldn't check for updates right now." = "暂时无法检查更新。";
 "Release notes" = "更新说明";
 "No release notes provided." = "这次发布没有提供更新说明。";
-"Get the latest build" = "获取最新版本";
-"Open the GitHub release page, or jump straight to the latest installer asset." = "打开 GitHub Release 页面，或直接跳转到最新安装包资源。";
+"Install latest version" = "安装最新版本";
+"Install the latest version automatically, or open the GitHub release page." = "一键自动安装最新版本，或打开 GitHub Release 页面查看详情。";
 "Project" = "项目";
 "Source code" = "源码";
 "Browse the repository, implementation details, and development history on GitHub." = "在 GitHub 上查看仓库、实现细节和开发历史。";
@@ -175,14 +175,14 @@
 "Open GitHub Issues to report bugs, request features, or continue a discussion." = "打开 GitHub Issues，反馈 bug、提交功能请求或继续讨论。";
 "Open Issues" = "打开 Issues";
 "View Release" = "查看 Release";
-"Download Latest" = "下载最新版";
+"Install Update" = "安装更新";
 
 /* App update */
 "About Clipin" = "关于 Clipin";
 "Check for Updates..." = "检查更新…";
 "New Version Available: %@" = "发现新版本：%@";
 "New update available" = "发现新版本";
-"Clipin %@ is ready to download." = "Clipin %@ 已可下载。";
+"Clipin %@ is ready to install." = "Clipin %@ 已可安装。";
 "Later" = "稍后提醒";
 
 /* OnboardingView */

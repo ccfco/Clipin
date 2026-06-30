@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import Sparkle
 
 /// 原生 titled/fullSizeContentView 窗口专用 hosting view。
 /// 这类窗口的 frame、圆角、裁切和阴影都交给 AppKit，不在 content layer 再画边/裁切。
@@ -142,6 +143,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var dimensionBackfillTask: Task<Void, Never>?
     var updateReminderSubscription: AnyCancellable?
     var updateBadgeSubscription: AnyCancellable?
+    var sparkleUpdater: SPUStandardUpdaterController?
     var isRestoringFailedShortcut = false
     /// 「长按 ⌘」检测:当前是否处于「纯 ⌘ 按住」(未叠加 Shift/Option/Control),
     /// 以及尚未触发的延迟显示任务。
@@ -202,6 +204,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startActiveSpaceObserver()
         runCleanupAndReload()
         showLaunchExperienceIfNeeded()
+        setupSparkle()
         updateReminder.start()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()

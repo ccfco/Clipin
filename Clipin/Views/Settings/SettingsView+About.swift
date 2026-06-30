@@ -36,7 +36,7 @@ extension SettingsView {
                         Text("Updates")
                             .font(.system(size: 13, weight: .medium))
 
-                        Text("Clipin checks GitHub Releases and lets you download the newest build manually.")
+                        Text("Clipin detects updates via GitHub Releases and installs them automatically.")
                             .font(.system(size: 11))
                             .foregroundStyle(ClipinInk.secondary)
                     }
@@ -74,10 +74,10 @@ extension SettingsView {
 
                         HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
                             VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                                Text("Get the latest build")
+                                Text("Install latest version")
                                     .font(.system(size: 13, weight: .medium))
 
-                                Text("Open the GitHub release page, or jump straight to the latest installer asset.")
+                                Text("Install the latest version automatically, or open the GitHub release page.")
                                     .font(.system(size: 11))
                                     .foregroundStyle(ClipinInk.secondary)
                             }
@@ -89,8 +89,8 @@ extension SettingsView {
                                 }
                                 .buttonStyle(.bordered)
 
-                                Button("Download Latest") {
-                                    updateReminder.downloadLatestRelease()
+                                Button("Install Update") {
+                                    updateReminder.installUpdate()
                                 }
                                 .buttonStyle(.borderedProminent)
                             }
@@ -178,6 +178,6 @@ extension SettingsView {
             )
         }
 
-        return NSLocalizedString("Checks GitHub Releases in the background and lets you download the latest version manually.", comment: "")
+        return NSLocalizedString("Checks GitHub Releases in the background and installs updates automatically.", comment: "")
     }
 }
