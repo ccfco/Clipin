@@ -1,5 +1,11 @@
 /* SettingsView */
 "Settings" = "Settings";
+/* SettingsView - Section headers (native grouped Form) */
+"Startup & Shortcut" = "Startup & Shortcut";
+"Launcher behavior" = "Launcher behavior";
+"Paste & Preview" = "Paste & Preview";
+"Auto Backup" = "Auto Backup";
+"Transfer" = "Transfer";
 "Manage the shortcut, privacy, history retention, startup behavior, and transfer tools." = "Manage the shortcut, privacy, history retention, startup behavior, and transfer tools.";
 "Global shortcut" = "Global shortcut";
 "Click the field and press the new shortcut. At least one modifier key is required." = "Click the field and press the new shortcut. At least one modifier key is required.";

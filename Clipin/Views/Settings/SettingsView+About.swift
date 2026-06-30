@@ -4,124 +4,90 @@ extension SettingsView {
 
     // MARK: - About Tab
 
+    @ViewBuilder
     var aboutContent: some View {
-        VStack(spacing: contentStackSpacing) {
-            contentGroup {
-                HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable()
-                        .interpolation(.high)
-                        .frame(width: 68, height: 68)
-                        .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
+        Section {
+            HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 68, height: 68)
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
 
-                    VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                        Text(appDisplayName)
-                            .font(.system(size: 22, weight: .semibold))
+                VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                    Text(appDisplayName)
+                        .font(.system(size: 22, weight: .semibold))
 
-                        Text(currentVersionLine)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(ClipinInk.secondary)
+                    Text(currentVersionLine)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
 
-                        Text("A fast, keyboard-first clipboard companion for macOS.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(ClipinInk.secondary)
-                            .frame(maxWidth: 420, alignment: .leading)
-                    }
+                    Text("A fast, keyboard-first clipboard companion for macOS.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Spacer(minLength: 0)
             }
+            .padding(.vertical, ClipinChrome.gap)
+        }
 
-            contentGroup {
-                VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                    VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                        Text("Updates")
-                            .font(.system(size: 13, weight: .medium))
+        Section("Updates") {
+            Text("Clipin detects updates via GitHub Releases and installs them automatically.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                        Text("Clipin detects updates via GitHub Releases and installs them automatically.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(ClipinInk.secondary)
-                    }
+            toggleRow(
+                "Automatically check for updates",
+                "Check GitHub Releases in the background and surface a reminder when a new version is available.",
+                isOn: updateAutoCheckBinding
+            )
 
-                    toggleSettingRow(
-                        "Automatically check for updates",
-                        description: "Check GitHub Releases in the background and surface a reminder when a new version is available.",
-                        isOn: updateAutoCheckBinding
-                    )
+            actionRow(
+                "Update status",
+                description: updateStatusDescription,
+                buttonTitle: "Check Now",
+                action: { updateReminder.checkNow() }
+            )
 
-                    groupDivider
-
-                    actionRow(
-                        "Update status",
-                        description: updateStatusDescription,
-                        buttonTitle: "Check Now",
-                        action: { updateReminder.checkNow() }
-                    )
-
-                    if let latestRelease = updateReminder.latestRelease {
-                        groupDivider
-
-                        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                            Text("Release notes")
-                                .font(.system(size: 13, weight: .medium))
-
-                            Text(latestRelease.notesPreview.isEmpty ? NSLocalizedString("No release notes provided.", comment: "") : latestRelease.notesPreview)
-                                .font(.system(size: 11))
-                                .foregroundStyle(ClipinInk.secondary)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-
-                        groupDivider
-
-                        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
-                            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                                Text("Install latest version")
-                                    .font(.system(size: 13, weight: .medium))
-
-                                Text("Install the latest version automatically, or open the GitHub release page.")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(ClipinInk.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                            HStack(spacing: ClipinChrome.gap) {
-                                Button("View Release") {
-                                    updateReminder.openReleasePage()
-                                }
-                                .buttonStyle(.bordered)
-
-                                Button("Install Update") {
-                                    updateReminder.installUpdate()
-                                }
-                                .buttonStyle(.borderedProminent)
-                            }
-                        }
-                    }
-                }
-            }
-
-            contentGroup {
-                // 三个 GitHub 链接合成一个 horizontal 按钮组——它们都是"打开 GitHub 子页"
-                // 同类动作，不需要各占一整行 actionRow，节省 ~80px 垂直空间且分类更清晰。
-                HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
-                    VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                        Text("Project")
-                            .font(.system(size: 13, weight: .medium))
-
-                        Text("Browse the repository, all shipped releases, or report a bug—everything on GitHub.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(ClipinInk.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
+            if let latestRelease = updateReminder.latestRelease {
+                LabeledContent {
                     HStack(spacing: ClipinChrome.gap) {
-                        Button("Source") { openExternalURL(Self.repositoryURL) }
-                            .buttonStyle(.bordered)
-                        Button("Releases") { updateReminder.openReleasesListPage() }
-                            .buttonStyle(.bordered)
-                        Button("Issues") { openExternalURL(Self.issuesURL) }
-                            .buttonStyle(.bordered)
+                        Button("View Release") { updateReminder.openReleasePage() }
+                        Button("Install Update") { updateReminder.installUpdate() }
+                            .buttonStyle(.borderedProminent)
                     }
+                } label: {
+                    Text("Install latest version")
+                    Text("Install the latest version automatically, or open the GitHub release page.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
+
+                VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                    Text("Release notes")
+                        .font(.system(size: 13, weight: .medium))
+                    Text(latestRelease.notesPreview.isEmpty ? NSLocalizedString("No release notes provided.", comment: "") : latestRelease.notesPreview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+
+        Section("Project") {
+            LabeledContent {
+                HStack(spacing: ClipinChrome.gap) {
+                    Button("Source") { openExternalURL(Self.repositoryURL) }
+                    Button("Releases") { updateReminder.openReleasesListPage() }
+                    Button("Issues") { openExternalURL(Self.issuesURL) }
+                }
+            } label: {
+                Text("Project")
+                Text("Browse the repository, all shipped releases, or report a bug—everything on GitHub.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }

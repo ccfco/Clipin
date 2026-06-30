@@ -2,111 +2,69 @@ import SwiftUI
 
 extension SettingsView {
 
-    // MARK: - Detail Header
+    // MARK: - Native Form Row Builders
+    //
+    // 原生 System Settings 风格：行渲染交给 grouped Form，标题 + 副说明走「双行 Label」
+    // 习惯用法（Form 行内自动竖排：标题在上、caption 副说明在下），控件落在行尾。
+    // 不再自绘 contentGroup / surface / 手动 divider —— 这些由 Section + Form 提供。
 
-    func detailHeader(for tab: SettingsTab) -> some View {
-        contentGroup(padding: ClipinChrome.groupGap) {
-            HStack(alignment: .center, spacing: ClipinChrome.groupGap) {
-                ClipinSymbolOrb(systemImage: tab.icon, size: 58, iconSize: 20)
-
-                ClipinSectionIntro(
-                    title: tab.title,
-                    subtitle: tab.summary,
-                    eyebrow: "Preferences",
-                    titleFontSize: 21
-                )
-
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    // MARK: - Shared Primitives
-
-    var groupDivider: some View {
-        Rectangle()
-            .fill(ClipinInk.tertiary.opacity(colorScheme == .dark ? 0.16 : 0.12))
-            .frame(height: 1)
-    }
-
-    /// 子分组小标题——比 row title (13/medium) 视觉更轻、更小，
-    /// 区分"这是分组名"和"这是设置项名"。
-    /// uppercase + tracking 是 macOS 系统设置 eyebrow 标准做法。
-    func groupHeader(_ title: LocalizedStringKey) -> some View {
+    /// 标题 + 可选 caption 副说明，用作 Toggle / Picker / LabeledContent 的 label。
+    @ViewBuilder
+    func rowLabel(_ title: LocalizedStringKey, _ description: LocalizedStringKey? = nil) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .tracking(0.6)
-            .textCase(.uppercase)
-            .foregroundStyle(ClipinInk.tertiary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    var settingsSelectionPlaceholder: some View {
-        contentGroup(padding: ClipinChrome.groupGap) {
-            ClipinSectionIntro(
-                title: "Choose a section",
-                subtitle: "Select a section from the sidebar to edit Clipin preferences.",
-                eyebrow: "Preferences",
-                titleFontSize: 18,
-                subtitleFontSize: 12
-            )
+        if let description {
+            Text(description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
-    // MARK: - Row Builders
-
-    func settingFieldRow<Control: View>(
-        _ title: LocalizedStringKey,
-        description: LocalizedStringKey? = nil,
-        @ViewBuilder control: () -> Control
-    ) -> some View {
-        HStack(alignment: description == nil ? .firstTextBaseline : .top, spacing: ClipinChrome.groupGap) {
-            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-
-                if let description {
-                    Text(description)
-                        .font(.system(size: 11))
-                        .foregroundStyle(ClipinInk.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            control()
-        }
+    /// String 版副说明——运行时拼装的文案（含版本号 / 相对时间）不能用 LocalizedStringKey，
+    /// 否则 SwiftUI 会再去 Localizable.strings 查一次找不到键。
+    @ViewBuilder
+    func rowLabel(_ title: LocalizedStringKey, descriptionText: String) -> some View {
+        Text(title)
+        Text(descriptionText)
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
-    func toggleSettingRow(
+    /// 开关行：标题 + 副说明 + 行尾 Switch。
+    func toggleRow(
         _ title: LocalizedStringKey,
-        description: LocalizedStringKey,
-        note: String? = nil,
+        _ description: LocalizedStringKey,
         isOn: Binding<Bool>
     ) -> some View {
-        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
-            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-
-                Text(description)
-                    .font(.system(size: 11))
-                    .foregroundStyle(ClipinInk.secondary)
-
-                if let note {
-                    Text(note)
-                        .font(.system(size: 11))
-                        .foregroundStyle(ClipinInk.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
+        Toggle(isOn: isOn) {
+            rowLabel(title, description)
         }
     }
 
-    /// `LocalizedStringKey` overload — used when the description is a static string literal.
+    /// 动作行：标题 + 副说明 + 行尾按钮（带 busy spinner）。
+    func actionRow(
+        _ title: LocalizedStringKey,
+        descriptionText: Text,
+        buttonTitle: LocalizedStringKey,
+        busyTitle: LocalizedStringKey? = nil,
+        isBusy: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        LabeledContent {
+            Button(action: action) {
+                progressButtonLabel(
+                    title: isBusy ? (busyTitle ?? buttonTitle) : buttonTitle,
+                    isBusy: isBusy
+                )
+            }
+            .disabled(isBusy || activeOperation != nil)
+        } label: {
+            Text(title)
+            descriptionText
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     func actionRow(
         _ title: LocalizedStringKey,
         description: LocalizedStringKey,
@@ -115,13 +73,11 @@ extension SettingsView {
         isBusy: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        actionRow(title: title, descriptionText: Text(description),
+        actionRow(title, descriptionText: Text(description),
                   buttonTitle: buttonTitle, busyTitle: busyTitle,
                   isBusy: isBusy, action: action)
     }
 
-    /// `String` overload — used for runtime-assembled descriptions (e.g. containing version numbers).
-    /// Do not use `LocalizedStringKey` here; SwiftUI would re-query `Localizable.strings`.
     func actionRow(
         _ title: LocalizedStringKey,
         description: String,
@@ -130,39 +86,9 @@ extension SettingsView {
         isBusy: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        actionRow(title: title, descriptionText: Text(description),
+        actionRow(title, descriptionText: Text(description),
                   buttonTitle: buttonTitle, busyTitle: busyTitle,
                   isBusy: isBusy, action: action)
-    }
-
-    private func actionRow(
-        title: LocalizedStringKey,
-        descriptionText: Text,
-        buttonTitle: LocalizedStringKey,
-        busyTitle: LocalizedStringKey?,
-        isBusy: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
-            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-
-                descriptionText
-                    .font(.system(size: 11))
-                    .foregroundStyle(ClipinInk.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button(action: action) {
-                progressButtonLabel(
-                    title: isBusy ? (busyTitle ?? buttonTitle) : buttonTitle,
-                    isBusy: isBusy
-                )
-            }
-                .buttonStyle(.bordered)
-                .disabled(isBusy || activeOperation != nil)
-        }
     }
 
     func progressButtonLabel(title: LocalizedStringKey, isBusy: Bool) -> some View {
@@ -174,37 +100,6 @@ extension SettingsView {
             }
             Text(title)
         }
-    }
-
-    func infoCallout(icon: String, tint: Color, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
-        // firstTextBaseline 让 SwiftUI 按标题文字基线对齐 SF 图标，无魔数偏移。
-        HStack(alignment: .firstTextBaseline, spacing: ClipinChrome.groupGap) {
-            Image(systemName: icon)
-                .foregroundStyle(tint)
-                .font(.system(size: 14, weight: .semibold))
-                .frame(width: 18, alignment: .center)
-
-            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-
-                Text(message)
-                    .font(.system(size: 11))
-                    .foregroundStyle(ClipinInk.secondary)
-            }
-        }
-    }
-
-    /// 分节 = contentArea 这块 surface 内的留白区隔，自身不再叠加 surface 背景。
-    /// contentArea 已是面板 surface（与 sidebar 对称），分节若再各自上 surface 就成
-    /// 同色同半径的「卡片套卡片」——内层永远不可见且破坏同心，故只保留 padding 做区隔。
-    func contentGroup<Content: View>(
-        padding: CGFloat = ClipinChrome.groupGap,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        content()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(padding)
     }
 
     // MARK: - Utilities

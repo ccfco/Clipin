@@ -7,19 +7,40 @@ extension SettingsView {
     //
     // v5: Retention（保留多久）+ Auto Backup（自动备份）+ Transfer（一次性导入导出）
     // 合并为单一 Storage tab，自上而下贯穿"保多久 → 怎么归档 → 一次性搬运"心智链路。
-    /// 1. Retention：picker 规则 + 上次清理状态（retentionSection）
-    /// 2. Enable auto backup toggle
-    /// 3. 启用后：folder / frequency / status / legacy cleanup
-    /// 4. 一次性导入导出（始终显示）
+    // 原生 grouped Form：每段一个 Section，自带卡片背景；不再自绘 contentGroup / surface。
+    @ViewBuilder
     var storageContent: some View {
-        VStack(spacing: contentStackSpacing) {
-            retentionSection
-            autoBackupToggleGroup
-            if settings.autoBackupEnabled {
-                autoBackupDetailGroup
+        retentionSection
+        autoBackupToggleSection
+        if settings.autoBackupEnabled {
+            backupFolderFormSection
+            backupFrequencyStatusSection
+            if !cleanupCandidates.isEmpty {
+                backupCleanupFormSection
             }
-            transferGroup
         }
+        transferSection
+    }
+
+    // MARK: - Auto Backup toggle
+
+    private var autoBackupToggleSection: some View {
+        Section("Auto Backup") {
+            toggleRow(
+                "Enable auto backup",
+                "Export history as a .clipin.zip archive on a schedule. Store it in iCloud Drive, Dropbox, or any folder you trust.",
+                isOn: Binding(
+                    get: { settings.autoBackupEnabled },
+                    set: { handleEnableToggle($0) }
+                )
+            )
+            if !settings.autoBackupEnabled {
+                Text("Existing backups in the folder are preserved when this is disabled.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        // alert / sheet 挂在常驻 Section 上（toggle 永远存在，detail 组随 enabled 出现/消失）。
         .alert(
             "Heads up before turning on auto backup",
             isPresented: $showAutoBackupFirstSetupNotice
@@ -39,116 +60,49 @@ extension SettingsView {
         }
     }
 
-    // MARK: - Top-level groups
-
-    private var autoBackupToggleGroup: some View {
-        contentGroup {
-            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                toggleSettingRow(
-                    "Enable auto backup",
-                    description: "Export history as a .clipin.zip archive on a schedule. Store it in iCloud Drive, Dropbox, or any folder you trust.",
-                    isOn: Binding(
-                        get: { settings.autoBackupEnabled },
-                        set: { handleEnableToggle($0) }
-                    )
-                )
-                if !settings.autoBackupEnabled {
-                    Text("Existing backups in the folder are preserved when this is disabled.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(ClipinInk.tertiary)
-                }
-            }
-        }
-    }
-
-    private var autoBackupDetailGroup: some View {
-        contentGroup {
-            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                backupFolderSection
-                groupDivider
-                backupFrequencySection
-                groupDivider
-                backupStatusSection
-                if !cleanupCandidates.isEmpty {
-                    groupDivider
-                    backupCleanupSection
-                }
-            }
-            // 切换 folder/启停时重新扫描；onAppear 也扫一次
-            .onAppear(perform: refreshCleanupCandidates)
-            .onChange(of: settings.autoBackupFolderPath) { _, _ in refreshCleanupCandidates() }
-            .onChange(of: autoBackup.lastBackupAt) { _, _ in refreshCleanupCandidates() }
-        }
-    }
-
-    private var transferGroup: some View {
-        contentGroup {
-            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                actionRow(
-                    "Export clipboard history",
-                    description: "Create a one-off .clipin.zip snapshot you can archive or share elsewhere.",
-                    buttonTitle: "Export…",
-                    busyTitle: "Exporting…",
-                    isBusy: activeOperation == .exportArchive,
-                    action: exportArchive
-                )
-                groupDivider
-                actionRow(
-                    "Import from a backup",
-                    description: "Bring items back from a .clipin.zip archive or a legacy JSON export. Existing items stay in place and duplicates are skipped.",
-                    buttonTitle: "Import…",
-                    busyTitle: "Importing…",
-                    isBusy: activeOperation == .importArchive,
-                    action: importArchive
-                )
-            }
-        }
-    }
-
     // MARK: - Folder Section
 
-    private var backupFolderSection: some View {
-        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-            Text("Backup folder")
-                .font(.system(size: 13, weight: .medium))
+    private var backupFolderFormSection: some View {
+        Section("Backup folder") {
+            backupFolderContent
+        }
+        // 切换 folder/启停时重新扫描遗留文件；onAppear 也扫一次
+        .onAppear(perform: refreshCleanupCandidates)
+        .onChange(of: settings.autoBackupFolderPath) { _, _ in refreshCleanupCandidates() }
+        .onChange(of: autoBackup.lastBackupAt) { _, _ in refreshCleanupCandidates() }
+    }
 
+    private var backupFolderContent: some View {
+        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
             Text(
                 settings.autoBackupFolderPath.map(abbreviatedPath)
                     ?? "Choose a destination folder for the backup archive."
             )
             .font(.system(size: 12))
-            .foregroundStyle(ClipinInk.secondary)
+            .foregroundStyle(.secondary)
             .lineLimit(2)
             .truncationMode(.middle)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: ClipinChrome.gap) {
                 Button(settings.autoBackupFolderPath == nil ? "Choose Folder…" : "Change…") {
                     chooseBackupFolder()
                 }
-                .buttonStyle(.bordered)
 
                 // 默认 = iCloud Backups (if iCloud 可用) / ~/Documents/Clipin Backups。
-                // 永远显示提升发现性；已在默认路径时 disabled——避免"用户改过才知道
-                // 有这个按钮"的隐藏感。
+                // 永远显示提升发现性；已在默认路径时 disabled。
                 Button("Use Default Folder") { resetBackupFolderToDefault() }
-                    .buttonStyle(.bordered)
                     .disabled(AutoBackupService.isDefaultBackupFolder(settings.autoBackupFolderPath))
 
-                // iCloud 入口保留作为"明确表达 iCloud 意图"的独立按钮：当 iCloud 可用
-                // 且用户当前不在 iCloud 时给一次直达机会，不必经过"默认"语义绕一圈。
                 Button("Use iCloud Drive") { useICloudDrive() }
-                    .buttonStyle(.bordered)
                     .disabled(
                         !AutoBackupService.isICloudDriveAvailable()
                             || AutoBackupService.isICloudBackupFolder(settings.autoBackupFolderPath)
                     )
             }
 
-            // helper text：把"默认在哪"显式写出来，消除"默认"随 iCloud 可用性变化的歧义
             defaultFolderHint
 
-            // iCloud 不可用是"用户曾选了 iCloud 思维但前提不成立"——必须升级为 callout
-            // 视觉权重，不再混在 tertiary hint 里被无视。
             if !AutoBackupService.isICloudDriveAvailable() {
                 iCloudUnavailableCallout
             }
@@ -167,15 +121,15 @@ extension SettingsView {
                 Text("iCloud Drive is not enabled")
                     .font(.system(size: 12, weight: .medium))
                 Text("Backups will be saved locally. Enable iCloud Drive in System Settings to sync across Macs.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(ClipinInk.secondary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
 
             Button("Open System Settings…") { openICloudSettings() }
                 .buttonStyle(.link)
-                .font(.system(size: 11))
+                .font(.caption)
         }
         .padding(ClipinChrome.gap)
         .background(
@@ -188,8 +142,7 @@ extension SettingsView {
         )
     }
 
-    /// 默认文件夹位置提示：把动态的"默认 = iCloud 或 Documents"显式化，避免用户
-    /// 看到 "Use Default Folder" 时不知道点了会跳去哪里。
+    /// 默认文件夹位置提示：把动态的"默认 = iCloud 或 Documents"显式化。
     private var defaultFolderHint: some View {
         let defaultURL = AutoBackupService.computeDefaultBackupFolder()
         let isICloud = AutoBackupService.isICloudBackupFolder(defaultURL.path)
@@ -199,53 +152,46 @@ extension SettingsView {
             : String(format: NSLocalizedString("Default: %@", comment: ""), abbreviatedPath(defaultURL.path))
         return HStack(spacing: ClipinChrome.gap) {
             Image(systemName: icon)
-                .font(.system(size: 11))
-                .foregroundStyle(ClipinInk.tertiary)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(ClipinInk.tertiary)
+                .font(.caption)
+                .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
     }
 
-    // MARK: - Frequency Section
+    // MARK: - Frequency + Status Section
 
-    private var backupFrequencySection: some View {
-        settingFieldRow(
-            "Frequency",
-            description: "Daily is recommended. Hourly keeps the archive fresher at the cost of more uploads on iCloud Drive."
-        ) {
-            Picker("", selection: $settings.autoBackupInterval) {
+    private var backupFrequencyStatusSection: some View {
+        Section {
+            Picker(selection: $settings.autoBackupInterval) {
                 ForEach(AutoBackupInterval.allCases, id: \.self) { interval in
                     Text(interval.displayName).tag(interval)
                 }
+            } label: {
+                rowLabel(
+                    "Frequency",
+                    "Daily is recommended. Hourly keeps the archive fresher at the cost of more uploads on iCloud Drive."
+                )
             }
-            .labelsHidden()
-            .frame(width: ClipinChrome.pickerMedium)
+
+            backupStatusContent
         }
     }
 
-    // MARK: - Status Section
-
-    private var backupStatusSection: some View {
+    private var backupStatusContent: some View {
         VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-            Text("Backup status")
-                .font(.system(size: 13, weight: .medium))
-
-            contentGroup(padding: ClipinChrome.groupGap) {
-                VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                    statusPrimaryRow
-                    if let location = backupLocationLabel {
-                        Text(location)
-                            .font(.system(size: 11))
-                            .foregroundStyle(ClipinInk.tertiary)
-                            .lineLimit(2)
-                            .truncationMode(.middle)
-                    }
-                    statusActionRow
-                }
+            statusPrimaryRow
+            if let location = backupLocationLabel {
+                Text(location)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
             }
+            statusActionRow
         }
     }
 
@@ -253,15 +199,14 @@ extension SettingsView {
         HStack(spacing: ClipinChrome.gap) {
             statusIndicatorDot
             Text(statusPrimaryText)
-                .font(.system(size: 11))
+                .font(.caption)
                 .foregroundStyle(statusPrimaryColor)
                 .lineLimit(2)
             Spacer(minLength: 0)
         }
     }
 
-    /// partial backup（skippedCount > 0）= 数据不完整的"准成功"——必须橙色 warning
-    /// 提示用户某些条目（一般是图片文件丢失）没进归档，依赖此备份恢复时会缺数据。
+    /// partial backup（skippedCount > 0）= 数据不完整的"准成功"——必须橙色 warning。
     private var isPartialBackup: Bool {
         autoBackup.lastBackupAt != nil
             && autoBackup.lastBackupSkipped > 0
@@ -293,7 +238,6 @@ extension SettingsView {
         }
         if let date = autoBackup.lastBackupAt {
             let timeText = relativeString(from: date, to: now)
-            // partial：时间 + skipped count，明确告知用户"备份完成但不完整"
             if isPartialBackup {
                 return String(
                     format: NSLocalizedString(
@@ -317,8 +261,8 @@ extension SettingsView {
         if autoBackup.pausedDueToFailures { return .orange }
         if autoBackup.lastBackupError != nil { return .red }
         if isPartialBackup { return .orange }
-        if autoBackup.lastBackupAt != nil { return ClipinInk.secondary }
-        return ClipinInk.tertiary
+        if autoBackup.lastBackupAt != nil { return .secondary }
+        return .secondary
     }
 
     private var backupLocationLabel: String? {
@@ -338,7 +282,6 @@ extension SettingsView {
 
             if autoBackup.pausedDueToFailures {
                 Button("Resume") { autoBackup.resume() }
-                    .buttonStyle(.bordered)
                     .controlSize(.small)
             }
 
@@ -347,7 +290,6 @@ extension SettingsView {
             } label: {
                 Text("Show in Finder")
             }
-            .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(autoBackup.lastBackupURL == nil && settings.autoBackupFolderPath == nil)
 
@@ -360,7 +302,6 @@ extension SettingsView {
                         isBusy: autoBackup.isBackingUp
                     )
                 }
-                .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(autoBackup.isBackingUp || isJustBackedUp)
             }
@@ -379,23 +320,51 @@ extension SettingsView {
         return now.timeIntervalSince(last) < 30
     }
 
+    // MARK: - Transfer Section
+
+    private var transferSection: some View {
+        Section("Transfer") {
+            actionRow(
+                "Export clipboard history",
+                description: "Create a one-off .clipin.zip snapshot you can archive or share elsewhere.",
+                buttonTitle: "Export…",
+                busyTitle: "Exporting…",
+                isBusy: activeOperation == .exportArchive,
+                action: exportArchive
+            )
+            actionRow(
+                "Import from a backup",
+                description: "Bring items back from a .clipin.zip archive or a legacy JSON export. Existing items stay in place and duplicates are skipped.",
+                buttonTitle: "Import…",
+                busyTitle: "Importing…",
+                isBusy: activeOperation == .importArchive,
+                action: importArchive
+            )
+        }
+    }
+
     // MARK: - Cleanup Section
 
-    private var backupCleanupSection: some View {
+    private var backupCleanupFormSection: some View {
+        Section("Legacy backup files") {
+            backupCleanupContent
+        }
+    }
+
+    private var backupCleanupContent: some View {
         let count = cleanupCandidates.count
         let totalSize = cleanupCandidates.reduce(into: Int64(0)) { $0 += $1.size }
         let sizeText = ByteCountFormatter.string(fromByteCount: totalSize, countStyle: .file)
         return VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-            Text("Legacy backup files")
-                .font(.system(size: 13, weight: .medium))
             Text(
                 String(
                     format: NSLocalizedString("Found %d legacy file(s) totaling %@ in this folder. These are old JSON backups or archives from other Macs.", comment: ""),
                     count, sizeText
                 )
             )
-            .font(.system(size: 11))
-            .foregroundStyle(ClipinInk.secondary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: ClipinChrome.gap) {
                 Spacer(minLength: 0)
@@ -403,7 +372,6 @@ extension SettingsView {
                     cleanupSelection = Set(cleanupCandidates.map(\.id))
                     showCleanupSheet = true
                 }
-                .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(activeOperation == .cleanupBackupFolder)
             }
@@ -418,7 +386,7 @@ extension SettingsView {
                 .font(.system(size: 16, weight: .semibold))
             Text("These files were left over by previous versions or other devices and will be deleted permanently. Your current backup and its safety net are not affected.")
                 .font(.system(size: 12))
-                .foregroundStyle(ClipinInk.secondary)
+                .foregroundStyle(.secondary)
 
             cleanupBulkSelectionBar
 
@@ -505,7 +473,7 @@ extension SettingsView {
             .labelsHidden()
 
             Image(systemName: candidate.reason == .legacyJSON ? "doc.text" : "externaldrive.badge.icloud")
-                .foregroundStyle(ClipinInk.tertiary)
+                .foregroundStyle(.tertiary)
                 .font(.system(size: 12))
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: ClipinChrome.gap) {
@@ -513,12 +481,12 @@ extension SettingsView {
                     .font(.system(size: 12, weight: .medium))
                 Text(cleanupRowSubtitle(candidate))
                     .font(.system(size: 10))
-                    .foregroundStyle(ClipinInk.tertiary)
+                    .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 0)
             Text(ByteCountFormatter.string(fromByteCount: candidate.size, countStyle: .file))
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(ClipinInk.tertiary)
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -542,8 +510,7 @@ extension SettingsView {
         }
         let folderURL = URL(fileURLWithPath: folderPath, isDirectory: true)
         // 扫描失败 ≠ 无遗留：必须正面暴露错误避免误导用户。folderMissing 这种
-        // "目录正常缺失"（用户改了路径还没同步、或 iCloud 离线）silently 清空候选
-        // 即可，不打扰；真正的 enumerationFailed（权限/IO）才 showNotice。
+        // "目录正常缺失"（用户改了路径还没同步、或 iCloud 离线）silently 清空候选即可。
         do {
             cleanupCandidates = try BackupCleanupService.scan(
                 folderURL: folderURL,
@@ -555,15 +522,12 @@ extension SettingsView {
             cleanupCandidates = []
             showNotice(error.localizedDescription, isError: true)
         }
-        // 重新扫描后保留仍存在的选择——已被删/不在的 id 必须清掉，
-        // 否则 "Delete N File(s)" 按钮计数和实际可删数量不一致。
         let liveIds = Set(cleanupCandidates.map(\.id))
         cleanupSelection.formIntersection(liveIds)
     }
 
     private func confirmCleanup() {
         guard activeOperation == nil else { return }
-        // 只删用户勾选的——粒度选择关键路径，不再是"全删或不删"
         let snapshot = cleanupCandidates.filter { cleanupSelection.contains($0.id) }
         guard !snapshot.isEmpty else { return }
         activeOperation = .cleanupBackupFolder

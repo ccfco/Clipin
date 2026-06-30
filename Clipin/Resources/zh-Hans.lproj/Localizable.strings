@@ -1,5 +1,11 @@
 /* SettingsView */
 "Settings" = "设置";
+/* SettingsView - Section headers (native grouped Form) */
+"Startup & Shortcut" = "启动与快捷键";
+"Launcher behavior" = "启动器行为";
+"Paste & Preview" = "粘贴与预览";
+"Auto Backup" = "自动备份";
+"Transfer" = "导入导出";
 "Manage the shortcut, privacy, history retention, startup behavior, and transfer tools." = "管理快捷键、隐私、历史记录保留、开机启动及数据迁移工具。";
 "Global shortcut" = "全局快捷键";
 "Click the field and press the new shortcut. At least one modifier key is required." = "点击输入框，然后按下新快捷键。至少需要一个修饰键。";

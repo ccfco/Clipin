@@ -4,8 +4,8 @@ extension SettingsView {
 
     // MARK: - Retention Section
     //
-    // v5: 不再是独立 tab——并入 Storage tab 顶部，对外暴露 `retentionSection` 子视图。
-    // 内容分两层：规则（picker）+ 当前状态（历史项数 + 上次清理时间）。
+    // v5: 不再是独立 tab——并入 Storage tab 顶部，对外暴露 `retentionSection`（一个原生 Section）。
+    // 内容分两层：规则（picker）+ 当前状态（上次清理时间 + 实际移除项数）。
     // "当前状态"是 CLAUDE.md「不沉默成功」红线的延伸：用户改了 picker 没法判断
     // 规则有没有真的跑过，必须显式回显证据。
 
@@ -39,70 +39,49 @@ extension SettingsView {
         )
     }
 
+    @ViewBuilder
     var retentionSection: some View {
-        contentGroup {
-            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                groupHeader("Retention")
-
-                settingFieldRow("Keep unpinned history for", description: "Pinned items are always preserved.") {
-                    Picker("", selection: normalizedRetentionDays) {
-                        ForEach(Self.retentionOptions, id: \.days) { option in
-                            Text(option.label).tag(option.days)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(width: ClipinChrome.pickerNarrow)
+        Section("Retention") {
+            Picker(selection: normalizedRetentionDays) {
+                ForEach(Self.retentionOptions, id: \.days) { option in
+                    Text(option.label).tag(option.days)
                 }
-
-                groupDivider
-
-                settingFieldRow("Max unpinned items", description: "Oldest unpinned items are trimmed first when the limit is reached.") {
-                    Picker("", selection: normalizedMaxItems) {
-                        ForEach(Self.maxItemsOptions, id: \.count) { option in
-                            Text(option.label).tag(option.count)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(width: ClipinChrome.pickerNarrow)
-                }
-
-                groupDivider
-
-                cleanupActionRow
+            } label: {
+                rowLabel("Keep unpinned history for", "Pinned items are always preserved.")
             }
+
+            Picker(selection: normalizedMaxItems) {
+                ForEach(Self.maxItemsOptions, id: \.count) { option in
+                    Text(option.label).tag(option.count)
+                }
+            } label: {
+                rowLabel("Max unpinned items", "Oldest unpinned items are trimmed first when the limit is reached.")
+            }
+
+            cleanupActionRow
         }
     }
 
-    /// 把 actionRow + last-run 状态合并成一组——按钮在右、状态在左，
-    /// 用户先看到"上次清理结果"再决定要不要再点。
+    /// 清理动作行：右侧按钮 + 标题/说明/上次结果。用户先看到"上次清理结果"再决定要不要再点。
     private var cleanupActionRow: some View {
-        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
-            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                Text("Run Cleanup Now")
-                    .font(.system(size: 13, weight: .medium))
-
-                Text("Apply the current retention rules immediately and remove outdated unpinned items.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(ClipinInk.secondary)
-
-                if let statusText = lastCleanupStatusText {
-                    Text(statusText)
-                        .font(.system(size: 11))
-                        .foregroundStyle(ClipinInk.tertiary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
+        LabeledContent {
             Button(action: runCleanup) {
                 progressButtonLabel(
                     title: activeOperation == .cleanup ? "Cleaning…" : "Run Cleanup Now",
                     isBusy: activeOperation == .cleanup
                 )
             }
-            .buttonStyle(.bordered)
             .disabled(activeOperation != nil)
+        } label: {
+            Text("Run Cleanup Now")
+            Text("Apply the current retention rules immediately and remove outdated unpinned items.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let statusText = lastCleanupStatusText {
+                Text(statusText)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 

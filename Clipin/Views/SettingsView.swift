@@ -26,19 +26,6 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .about:        return "info.circle"
         }
     }
-
-    var summary: LocalizedStringKey {
-        switch self {
-        case .general:
-            return "Fine-tune keyboard behavior, launch defaults, and how Clipin looks."
-        case .privacy:
-            return "Control which clipboard writes are ignored so sensitive or noisy content stays out."
-        case .storage:
-            return "Set how long history stays around, keep an automatic archive on disk, and move history in or out."
-        case .about:
-            return "App version, updates, project links, and release notes."
-        }
-    }
 }
 
 @MainActor
@@ -96,9 +83,7 @@ struct SettingsView: View {
     let core: ClipinCore
 
     // Internal so cross-file extensions (tabs, helpers) can read them.
-    @Environment(\.colorScheme) var colorScheme
     @State var notice: SettingsNotice?
-    @State var hoveredTab: SettingsTab?
     @State var activeOperation: SettingsOperation?
     @State var now: Date = .now
     /// 自动备份首次启用的隐私警示 sheet 显示标志。
@@ -117,20 +102,21 @@ struct SettingsView: View {
     /// 当前 notice 是否被鼠标悬停——hover 时暂停 6s dismiss 让用户读完
     @State private var noticeHovered: Bool = false
 
-    /// Shared spacing between tab content groups.
-    let contentStackSpacing: CGFloat = ClipinChrome.groupGap
+    /// List(selection:) 需要可写 binding；selectedTab 仍 private(set)，写入只走 navigation.select。
+    /// key monitor 的 ↑↓ 仍驱动 navigation.selectPrev/Next，原生高亮通过此 binding 跟随。
+    var selectionBinding: Binding<SettingsTab?> {
+        Binding(
+            get: { navigation.selectedTab },
+            set: { if let tab = $0 { navigation.select(tab) } }
+        )
+    }
 
     var body: some View {
-        ZStack {
-            windowBackdrop
-            HStack(spacing: ClipinChrome.gap) {
-                sidebar
-                contentArea
-                    .animation(ClipinMotion.panel, value: navigation.selectedTab)
-            }
-            .padding(ClipinChrome.gap)
+        NavigationSplitView {
+            sidebar
+        } detail: {
+            detailPane
         }
-        .frame(width: 748, height: 620)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let notice {
                 noticeView(notice)
@@ -171,41 +157,33 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Content Area
+    // MARK: - Detail Pane
 
-    private var contentArea: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
-                if let tab = navigation.selectedTab {
-                    detailHeader(for: tab)
-
-                    switch tab {
-                    case .general:      generalContent
-                    case .privacy:      privacyContent
-                    case .storage:      storageContent
-                    case .about:        aboutContent
-                    }
-                } else {
-                    settingsSelectionPlaceholder
+    /// 原生 System Settings 风格详情区：grouped Form 提供分组卡片 + 分隔线，
+    /// 标题落到工具栏（.navigationTitle），不再自绘 detailHeader / orb。
+    @ViewBuilder
+    private var detailPane: some View {
+        if let tab = navigation.selectedTab {
+            Form {
+                switch tab {
+                case .general:      generalContent
+                case .privacy:      privacyContent
+                case .storage:      storageContent
+                case .about:        aboutContent
                 }
             }
-            .id(navigation.selectedTab?.rawValue)
-            .padding(ClipinChrome.gap)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .formStyle(.grouped)
+            .navigationTitle(tab.title)
+        } else {
+            ContentUnavailableView(
+                "Choose a section",
+                systemImage: "gearshape",
+                description: Text("Select a section from the sidebar to edit Clipin preferences.")
+            )
         }
-        .background(
-            // 内容区贴窗口右两角(HStack 整体内缩一个 gap):同心须降一档到 control(16=24−8)。
-            ClipinContentSurface(cornerRadius: ClipinChrome.cornerControl)
-        )
     }
 
-    // MARK: - Notice + Backdrop
-
-    private var windowBackdrop: some View {
-        Color.clear
-            .clipinChromeGlass(cornerRadius: ClipinChrome.cornerShell)
-            .ignoresSafeArea()
-    }
+    // MARK: - Notice
 
     private func noticeView(_ notice: SettingsNotice) -> some View {
         HStack(spacing: ClipinChrome.gap) {

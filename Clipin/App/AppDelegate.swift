@@ -172,6 +172,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     enum SettingsWindowMetrics {
         static let size = NSSize(width: 748, height: 620)
+        /// 可拉伸窗口的最小内容尺寸——低于此原生 split view 侧栏/详情会挤坏。
+        static let minSize = NSSize(width: 680, height: 520)
     }
 
     enum OnboardingWindowMetrics {
@@ -227,7 +229,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
                 guard let self else { return }
                 switch aux {
-                case "settings":    self.openSettingsWindow()
+                // "settings" 开默认 tab；"settings:storage" 等直达指定 tab（自截图逐 tab 验收）。
+                case let s where s == "settings" || s.hasPrefix("settings:"):
+                    let tabRaw = s.hasPrefix("settings:") ? String(s.dropFirst("settings:".count)) : nil
+                    self.openSettingsWindow(select: tabRaw.flatMap(SettingsTab.init(rawValue:)))
                 case "onboarding":  self.openOnboardingWindow(permission: .shared)
                 case "permission":  self.showPermissionWindowIfNeeded(.shared, activateApp: true, forceShow: true)
                 default:            break
