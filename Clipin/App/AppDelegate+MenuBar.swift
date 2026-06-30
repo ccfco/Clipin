@@ -113,8 +113,9 @@ extension AppDelegate {
     }
 
     @objc func installLatestRelease() {
+        // 同 banner：触发安装只收起，不持久化忽略——安装失败仍要能再提醒。
         updateReminder.installUpdate()
-        updateReminder.dismissActiveReminder()
+        updateReminder.closeActiveReminder()
     }
 
     func makeOnboardingMenuItem() -> NSMenuItem {

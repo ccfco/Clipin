@@ -610,9 +610,8 @@ extension AppDelegate {
         NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
     }
 
-    /// 三个辅助窗口（设置 / 引导 / 权限）共享的 chrome 安装器。
-    /// 透明 titlebar + 隐藏交通灯 + shell 圆角 + 原生阴影 + 不释放即关，
-    /// 收口前各处自行重复约 30 行配置；调用方仍保留窗口子类与 contentView 的控制权。
+    /// 权限 / 引导等无交通灯辅助浮层的 chrome 安装器。
+    /// 透明 titlebar + 隐藏交通灯 + shell 圆角 + 原生阴影 + 不释放即关。
     func applyAuxiliaryChrome(_ window: NSWindow, title: String) {
         window.title = title
         window.titlebarAppearsTransparent = true
@@ -623,11 +622,9 @@ extension AppDelegate {
         window.isMovableByWindowBackground = true
         window.hasShadow = true
         window.isReleasedWhenClosed = false
-        // 隐藏交通灯，避免和 .fullSizeContentView 内容重叠
         [.closeButton, .miniaturizeButton, .zoomButton].forEach { button in
             window.standardWindowButton(button)?.isHidden = true
         }
-        // 通过 KVC 设置窗口圆角，让系统 frame 的裁切和 SwiftUI 内容的 shellCornerRadius 对齐
         window.setValue(ClipinChrome.cornerShell, forKey: "cornerRadius")
     }
 
@@ -647,13 +644,19 @@ extension AppDelegate {
         } else {
             let newWindow = ClipinSettingsWindow(
                 contentRect: NSRect(origin: .zero, size: SettingsWindowMetrics.size),
-                styleMask: [.titled, .closable, .fullSizeContentView],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
             )
-            applyAuxiliaryChrome(newWindow, title: "Clipin Settings")
-            newWindow.toolbarStyle = .preference
-            newWindow.contentView = ClipinWindowHostingView(
+            // 原生 System Settings 风格：标准窗口 chrome（红绿灯 + 标题栏 + 可拉伸），
+            // NavigationSplitView 自带侧栏开关按钮，窗口背景/材质交还系统，不再自绘玻璃壳。
+            newWindow.title = NSLocalizedString("Clipin Settings", comment: "")
+            newWindow.titleVisibility = .hidden
+            newWindow.titlebarAppearsTransparent = false
+            newWindow.isReleasedWhenClosed = false
+            newWindow.setContentSize(SettingsWindowMetrics.size)
+            newWindow.contentMinSize = SettingsWindowMetrics.minSize
+            newWindow.contentView = NSHostingView(
                 rootView: SettingsView(
                     settings: settings,
                     updateReminder: updateReminder,
@@ -684,8 +687,10 @@ extension AppDelegate {
                 onLater: { [weak self] in self?.updateReminder.dismissActiveReminder() },
                 onViewRelease: { [weak self] in self?.updateReminder.openReleasePage() },
                 onDownload: { [weak self] in
+                    // 触发 Sparkle 安装后只收起 banner（不持久化忽略）：安装可能失败，
+                    // 失败时必须保留再次提醒的能力。Sparkle 接管后会用自己的 UI 报错/进度。
                     self?.updateReminder.installUpdate()
-                    self?.updateReminder.dismissActiveReminder()
+                    self?.updateReminder.closeActiveReminder()
                 }
             )
         )

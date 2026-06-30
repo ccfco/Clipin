@@ -13,7 +13,9 @@ extension AppDelegate: NSWindowDelegate {
             permissionGrantedObserver = nil
         }
         if notification.object as? NSWindow === updateReminderWindow {
-            updateReminder.dismissActiveReminder()
+            // 关窗（Esc / 点窗外）只收起 banner，不持久化忽略——下次检查到同版本仍可再提醒。
+            // 「永久忽略」只由用户明确点 Later / 看过 Release 触发。
+            updateReminder.closeActiveReminder()
         }
     }
 

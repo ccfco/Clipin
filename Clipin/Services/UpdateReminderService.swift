@@ -108,9 +108,18 @@ final class UpdateReminderService: ObservableObject {
         }
     }
 
+    /// 明确「忽略此版本」：持久化 dismissedReminderVersion，之后同版本不再弹 banner。
+    /// 仅供用户主动打发的入口（Later / 看过 Release 页）使用。
     func dismissActiveReminder() {
         guard let version = activeReminder?.version ?? latestRelease?.version else { return }
         dismissedReminderVersion = version
+        activeReminder = nil
+    }
+
+    /// 只收起 banner，不持久化忽略。供「开始安装 / Esc / 关窗」使用：
+    /// 安装可能失败（找不到 appcast item、下载/验签失败），此时必须保留提醒能力，
+    /// 不能把「点了安装」误当成「永久忽略」——否则失败后用户再也收不到提醒。
+    func closeActiveReminder() {
         activeReminder = nil
     }
 
@@ -129,12 +138,18 @@ final class UpdateReminderService: ObservableObject {
     var installHandler: (() -> Void)?
 
     func installUpdate() {
-        if let installHandler {
-            installHandler()
-        } else {
+        guard let installHandler else {
+            // installHandler 由 setupSparkle() 在启动时无条件注入；nil 只意味着集成断裂
+            // （setupSparkle 没跑 / Sparkle 初始化失败）。这是 bug 不是正常路径：
+            // assertionFailure 在 debug 当场暴露，os_log error 让 release 也能浮出问题。
+            // 不静默——记了日志 + 断言就不是「兜底吞异常」；仍打开下载页只是别让用户彻底卡死。
+            ClipinLog.update.error("installUpdate called but installHandler is nil — Sparkle setup missing")
+            assertionFailure("installHandler not injected; setupSparkle() must run at launch")
             let targetURL = latestRelease?.downloadURL ?? latestRelease?.releasePageURL ?? releasesPageURL
             NSWorkspace.shared.open(targetURL)
+            return
         }
+        installHandler()
     }
 
     func downloadLatestRelease() {
@@ -184,12 +199,19 @@ final class UpdateReminderService: ObservableObject {
                 releasePageURL: response.htmlURL,
                 downloadURL: Self.preferredDownloadURL(from: response.assets)
             )
-            if Self.compareVersions(remoteVersion, currentVersion) == .orderedDescending {
+            // compareVersions 用纯数字分段比较；非数字 tag（如 1.0.0-beta）会被 Int(_)??0
+            // 折叠成错误结果。我们只发纯数字版本，遇到非法 tag 直接忽略（log + 不提示更新），
+            // 不让畸形 tag 静默误判成「有/无更新」。
+            if Self.isNumericVersion(remoteVersion),
+               Self.compareVersions(remoteVersion, currentVersion) == .orderedDescending {
                 latestRelease = release
                 if !userInitiated, dismissedReminderVersion != release.version {
                     activeReminder = release
                 }
             } else {
+                if !Self.isNumericVersion(remoteVersion) {
+                    ClipinLog.update.error("Ignoring release with non-numeric tag: \(response.tagName, privacy: .public)")
+                }
                 latestRelease = nil
                 activeReminder = nil
             }
@@ -220,6 +242,14 @@ final class UpdateReminderService: ObservableObject {
 
     private static func normalizedVersion(_ version: String) -> String {
         version.hasPrefix("v") ? String(version.dropFirst()) : version
+    }
+
+    /// 是否为纯数字点分版本（1 / 1.2 / 1.2.0）。拒绝 beta/rc/hotfix 等非数字段，
+    /// 避免 compareVersions 把 1.0.0-beta 误折叠成 1.0.0。
+    private static func isNumericVersion(_ version: String) -> Bool {
+        !version.isEmpty && version.split(separator: ".").allSatisfy { segment in
+            !segment.isEmpty && segment.allSatisfy(\.isNumber)
+        }
     }
 
     private static func normalizedNotes(_ notes: String) -> String {
