@@ -67,11 +67,11 @@ ditto -c -k --keepParent "$BUILT_APP" "$ZIP_PATH"
 echo "  → $ZIP_PATH ($(du -sh "$ZIP_PATH" | cut -f1))"
 
 echo "▸ 生成 appcast（EdDSA 签名）…"
-# generate_appcast 从 Keychain 读私钥、对 releases/ 目录里的所有 zip 签名
-# --download-url-prefix 指定 GitHub Release 的下载地址前缀
+# generate_appcast 不支持 --output，固定写入 <archives-dir>/appcast.xml；
+# 写完后再复制到仓库根目录供 Sparkle 客户端拉取。
 generate_appcast "$RELEASES_DIR" \
-    --download-url-prefix "https://github.com/ccfco/Clipin/releases/download/$TAG/" \
-    --output "$PROJECT_ROOT/appcast.xml"
+    --download-url-prefix "https://github.com/ccfco/Clipin/releases/download/$TAG/"
+cp "$RELEASES_DIR/appcast.xml" "$PROJECT_ROOT/appcast.xml"
 
 echo "▸ 提交版本更新…"
 git add project.yml appcast.xml
