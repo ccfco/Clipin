@@ -1,12 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
-        <title>Clipin</title>
-        <description>Clipin update feed</description>
-        <language>en</language>
-        <!--
-            由 scripts/release.sh 自动维护。
-            每次发版：脚本构建 zip → generate_appcast 签名 → 更新本文件 → commit → push。
-        -->
+        <title>Clipin-test</title>
+        <item>
+            <title>99.0.0</title>
+            <pubDate>Tue, 30 Jun 2026 17:48:36 +0800</pubDate>
+            <sparkle:version>9000</sparkle:version>
+            <sparkle:shortVersionString>99.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/ccfco/Clipin/releases/download/v99.0.0/Clipin-99.0.0.zip" length="7661298" type="application/octet-stream" sparkle:edSignature="J333IqqcuZgdshBDiV9RsUVoQ6jt3t+V10DjS1ZIqShazg1/CrW0BgWQMeT109K4kqr4Do8Gr4VjUk9g7poMCw=="/>
+        </item>
     </channel>
 </rss>
