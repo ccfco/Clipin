@@ -640,7 +640,10 @@ private struct ItemListView: View {
             if vm.editingContentItemID == nil { onActivate(item) }
         }
         .simultaneousGesture(TapGesture(count: 1).onEnded {
-            if vm.editingContentItemID == nil { selection.wrappedValue = item.id }
+            if vm.editingContentItemID == nil {
+                vm.isInTypingMode = false
+                selection.wrappedValue = item.id
+            }
         })
         .onHover { hovered in hoveredID = hovered ? item.id : nil }
         .contextMenu {

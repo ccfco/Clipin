@@ -76,6 +76,26 @@ final class ActionPaletteShortcutTests: XCTestCase {
         ))
     }
 
+    func testTypingCharacterAcceptsPrintableInput() {
+        XCTAssertTrue(LauncherKeyRouting.isTypingCharacter("a"))
+        XCTAssertTrue(LauncherKeyRouting.isTypingCharacter("Z"))
+        XCTAssertTrue(LauncherKeyRouting.isTypingCharacter("7"))
+        XCTAssertTrue(LauncherKeyRouting.isTypingCharacter("中"))
+        XCTAssertTrue(LauncherKeyRouting.isTypingCharacter(" "))   // 空格是可打印字符
+        XCTAssertTrue(LauncherKeyRouting.isTypingCharacter("?"))
+    }
+
+    func testTypingCharacterRejectsControlAndFunctionKeys() {
+        XCTAssertFalse(LauncherKeyRouting.isTypingCharacter(nil))
+        XCTAssertFalse(LauncherKeyRouting.isTypingCharacter(""))
+        XCTAssertFalse(LauncherKeyRouting.isTypingCharacter("\u{7f}"))   // 退格 DEL —— 回归用例：曾被误判为打字
+        XCTAssertFalse(LauncherKeyRouting.isTypingCharacter("\u{1b}"))   // Esc
+        XCTAssertFalse(LauncherKeyRouting.isTypingCharacter("\t"))       // Tab
+        XCTAssertFalse(LauncherKeyRouting.isTypingCharacter("\r"))       // Return
+        XCTAssertFalse(LauncherKeyRouting.isTypingCharacter("\u{F704}")) // NSF1FunctionKey
+        XCTAssertFalse(LauncherKeyRouting.isTypingCharacter("\u{F700}")) // NSUpArrowFunctionKey
+    }
+
     private func makeCore() throws -> ClipinCore {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinActionPaletteTests-\(UUID().uuidString)", isDirectory: true)

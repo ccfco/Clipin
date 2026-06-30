@@ -460,27 +460,35 @@ extension AppDelegate {
 
         switch event.keyCode {
         case KeyCode.tab where flags.isEmpty:
+            vm.isInTypingMode = false
             vm.cycleBrowseMode()
             return nil
         case KeyCode.tab where flags == .shift:
+            vm.isInTypingMode = false
             vm.cycleBrowseMode(reverse: true)
             return nil
         case KeyCode.arrowUp:
+            vm.isInTypingMode = false
             vm.selectPrev()
             return nil
         case KeyCode.arrowDown:
+            vm.isInTypingMode = false
             vm.selectNext()
             return nil
         case KeyCode.home:
+            vm.isInTypingMode = false
             vm.selectFirst()
             return nil
         case KeyCode.end:
+            vm.isInTypingMode = false
             vm.selectLast()
             return nil
         case KeyCode.pageUp:
+            vm.isInTypingMode = false
             vm.selectByPage(-1)
             return nil
         case KeyCode.pageDown:
+            vm.isInTypingMode = false
             vm.selectByPage(1)
             return nil
         case KeyCode.arrowLeft:
@@ -496,7 +504,8 @@ extension AppDelegate {
             vm.pasteSelected()
             return nil
         case KeyCode.space where flags.isEmpty:
-            // 其余情况 Space 是 launcher 保留键，有可预览项则预览，否则吞掉
+            // 打字模式下 Space 是字符输入，交还搜索框；浏览模式下触发 Quick Look
+            if vm.isInTypingMode { return event }
             if vm.canPreviewSelectedItem {
                 _ = vm.previewSelected()
             }
@@ -578,6 +587,13 @@ extension AppDelegate {
             if flags == .option, let mode = Self.optionDigitBrowseMode[event.keyCode] {
                 vm.browseMode = mode
                 return nil
+            }
+            // 真·可打印字符（无修饰键或仅 Shift）落入搜索框 → 进入打字模式。
+            // 必须过滤控制字符：退格(\u{7f})、F1-F12、Help/Insert 等功能键的 characters 也非空，
+            // 若不滤会被误判为「正在打字」，导致空搜索框按退格后 Space 变输入空格而非预览。
+            if (flags.isEmpty || flags == .shift),
+               LauncherKeyRouting.isTypingCharacter(event.characters) {
+                vm.isInTypingMode = true
             }
             return event
         }

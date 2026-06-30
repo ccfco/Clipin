@@ -101,4 +101,20 @@ enum LauncherKeyRouting {
         guard firstResponderIsTextView else { return false }
         return keyCode == KeyCode.delete && normalizedFlags(flags) == .command
     }
+
+    /// 判断 NSEvent.characters 是否为「真·可打印字符」——决定该按键是否代表用户正在搜索框打字
+    /// （进而进入打字模式，让 Space 落入搜索框而非触发 Quick Look）。
+    ///
+    /// 必须排除两类「characters 非空但不是打字」的键，否则会误置 isInTypingMode：
+    /// - 控制字符：退格(DEL, U+007F)、回车、Tab 等；
+    /// - Apple 私有功能键区(U+F700–U+F8FF)：F1-F12、方向键、Help/Insert 等。
+    /// 典型暴露：空搜索框按一次退格后，Space 会变成输入空格而不是预览。
+    static func isTypingCharacter(_ characters: String?) -> Bool {
+        guard let characters, !characters.isEmpty else { return false }
+        for scalar in characters.unicodeScalars {
+            if CharacterSet.controlCharacters.contains(scalar) { return false }
+            if (0xF700...0xF8FF).contains(scalar.value) { return false }
+        }
+        return true
+    }
 }

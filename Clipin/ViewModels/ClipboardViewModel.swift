@@ -67,7 +67,10 @@ final class ClipboardViewModel: ObservableObject {
     var displayedItem: ClipItem? {
         selectedItem
     }
-    @Published var searchQuery: String = ""
+    @Published var isInTypingMode: Bool = false
+    @Published var searchQuery: String = "" {
+        didSet { if searchQuery.isEmpty { isInTypingMode = false } }
+    }
     @Published var browseMode: LauncherBrowseMode = .all
     @Published private(set) var sections: [ClipSection] = []
     @Published var targetAppName: String?

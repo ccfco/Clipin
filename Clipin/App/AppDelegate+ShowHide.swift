@@ -82,6 +82,7 @@ extension AppDelegate {
     func hidePanel(restorePreviousApp: Bool = true) {
         guard let panel else { return }
         viewModel?.isContinuousPasteEnabled = false
+        viewModel?.isInTypingMode = false
         viewModel?.commitRenaming()      // 改名进行中关面板 = 提交（与失焦自动提交一致）
         viewModel?.cancelEditContent()   // 内容编辑进行中关面板 = 放弃，不静默写入
         // 面板关闭时复位「长按 ⌘」状态,避免下次打开残留旧的数字提示
