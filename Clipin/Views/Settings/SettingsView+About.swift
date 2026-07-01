@@ -8,7 +8,9 @@ extension SettingsView {
     var aboutContent: some View {
         // App 身份卡：图标 + 名字 + 版本 + tagline，作为 About 自己的头部——
         // 本身就是它的 pane header，不再叠通用 paneHeader（避免「双头」冗余）。
-        Section {
+        // Section 必须带 header（见 SettingsView.paneHeader 注释——无 header 的首个
+        // Section 会把该显示 header 的高度原样空着）。
+        Section(SettingsTab.about.title) {
             identityHeaderRow(alignment: .top) {
                 Image(nsImage: NSApp.applicationIconImage)
                     .resizable()

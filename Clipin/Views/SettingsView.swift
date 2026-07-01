@@ -202,10 +202,18 @@ struct SettingsView: View {
         }
     }
 
-    /// 原生 System Settings 每个 pane 顶部的头部块：accent 圆角方块图标 + 标题 + 一句描述。
+    /// 原生 System Settings 每个 pane 顶部的头部块：accent 圆角方块图标 + 一句描述，
+    /// tab 名交给 Section 的原生 header（见下方注释——header 文字本身就是消除顶部
+    /// 留白的关键，不用再在卡片里重复一遍标题）。
     /// 图标用 accent 方块（不是侧栏那种单色符号）——它是本 pane 的主视觉，原生同款做法。
+    ///
+    /// Section 必须带 header 文字：macOS grouped Form 会把无 header 的首个 Section
+    /// 该显示 header 的那块高度原样留成空白（已用极简诊断文案验证：给同一个 Section
+    /// 加上任意 header 文字，顶部留白立刻消失）——这不是"Form 对首个 Section 固定
+    /// 预留、与内容无关"，而是"无 header 时那块高度空着"。给 tab.title 当 header 是
+    /// 100% 原生、零自绘的解法，顺带天然满足 CLAUDE.md「分组卡片交给 grouped Form」。
     private func paneHeader(_ tab: SettingsTab) -> some View {
-        Section {
+        Section(tab.title) {
             identityHeaderRow {
                 Image(systemName: tab.icon)
                     .font(.system(size: 22, weight: .medium))
@@ -216,8 +224,6 @@ struct SettingsView: View {
                             .fill(Color.accentColor)
                     )
             } content: {
-                Text(tab.title)
-                    .font(.system(size: 18, weight: .semibold))
                 Text(tab.summary)
                     .settingsCaption()
                     .fixedSize(horizontal: false, vertical: true)
