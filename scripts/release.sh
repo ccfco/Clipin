@@ -36,6 +36,15 @@ for cmd in xcodegen generate_appcast gh; do
     command -v "$cmd" >/dev/null 2>&1 || { echo "缺少 $cmd，请先安装。" >&2; exit 1; }
 done
 
+# 先于任何文件改动检查工作树,否则版本号 sed 会和已有的未提交改动混进同一个发布 commit
+echo "▸ 前置检查…"
+if [ -n "$(git status --porcelain)" ]; then
+    echo "✘ 有未提交改动,请先 commit,避免混入发布 commit" >&2; exit 1
+fi
+if git rev-parse -q --verify "$TAG" >/dev/null 2>&1; then
+    echo "✘ tag $TAG 已存在,如需重发请先 git tag -d $TAG" >&2; exit 1
+fi
+
 echo "▸ 更新 project.yml 版本号…"
 # 计算 build number：把版本号的点去掉作为整数（0.1.18 → 118）
 BUILD_NUMBER=$(echo "$VERSION" | tr -d '.')
@@ -102,24 +111,36 @@ gh release create "$TAG" \
     --title "Clipin $TAG" \
     --notes "$NOTES"
 
-echo "▸ 验证 release 资产可访问（appcast 即将指向的下载 URL）…"
+echo "▸ 验证 release 资产可下载（appcast 即将指向的下载 URL）…"
+# curl HEAD 对 GitHub Releases 不可靠(不保证与 GET 行为一致,也不保证上传后立即全局可见)。
+# 用 gh api 查资产真实状态(state==uploaded 且 size>0),确认后再用 curl HEAD 做一次真实可达性兜底。
 DOWNLOAD_URL="https://github.com/ccfco/Clipin/releases/download/$TAG/$ZIP_NAME"
 ASSET_OK=""
-for i in 1 2 3 4 5; do
-    if curl -fsIL "$DOWNLOAD_URL" >/dev/null 2>&1; then
-        ASSET_OK=1
-        echo "  ✓ 资产可访问：$DOWNLOAD_URL"
-        break
+DELAYS=(5 10 20 30 30 30)
+for i in "${!DELAYS[@]}"; do
+    STATE="$(gh api "repos/ccfco/Clipin/releases/tags/$TAG" \
+        --jq ".assets[] | select(.name==\"$ZIP_NAME\") | .state" 2>/dev/null || true)"
+    SIZE="$(gh api "repos/ccfco/Clipin/releases/tags/$TAG" \
+        --jq ".assets[] | select(.name==\"$ZIP_NAME\") | .size" 2>/dev/null || true)"
+    if [ "$STATE" = "uploaded" ] && [ -n "$SIZE" ] && [ "$SIZE" -gt 0 ]; then
+        ASSET_OK=1; echo "  ✓ 资产已就绪（state=uploaded, size=${SIZE}）"; break
     fi
-    echo "  资产暂不可访问，2s 后重试（$i/5）…"
-    sleep 2
+    echo "  资产未就绪（state=${STATE:-unknown}），${DELAYS[$i]}s 后重试（$((i + 1))/${#DELAYS[@]}）…"
+    sleep "${DELAYS[$i]}"
 done
 if [ -z "$ASSET_OK" ]; then
-    echo "✘ release 资产 5 次探测仍不可访问，已中止——不推送 appcast，避免客户端拿到 404。" >&2
+    echo "✘ release 资产轮询 ${#DELAYS[@]} 次仍未就绪，已中止——不推送 appcast，避免客户端拿到 404。" >&2
     echo "  appcast 仍为发版前状态（客户端无害）。请检查 release，修好后手动 push appcast，" >&2
     echo "  或回滚：git push origin :$TAG && git tag -d $TAG && gh release delete $TAG --yes" >&2
     exit 1
 fi
+if ! curl -fsIL "$DOWNLOAD_URL" >/dev/null 2>&1; then
+    echo "✘ gh api 报资产已就绪,但实际 HTTP 请求不可达,已中止——不推送 appcast。" >&2
+    echo "  appcast 仍为发版前状态（客户端无害）。请检查 release，修好后手动 push appcast，" >&2
+    echo "  或回滚：git push origin :$TAG && git tag -d $TAG && gh release delete $TAG --yes" >&2
+    exit 1
+fi
+echo "  ✓ HTTP 可达性确认通过：$DOWNLOAD_URL"
 
 echo "▸ 推送 appcast（资产已就位，此刻暴露才安全）…"
 git add appcast.xml

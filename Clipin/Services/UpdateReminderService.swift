@@ -35,11 +35,20 @@ final class UpdateReminderService: ObservableObject {
 
     let currentVersion: String
     let currentBuild: String
+    /// CFBundleVersion 的整数形式。Sparkle 自己判断"是否有更新"用它,不是 marketing 版本号
+    /// ——检测层必须跟它对齐,否则"同 marketing version、不同 build"的重发会出现 Sparkle
+    /// 判定有更新、这里却判定没有的分裂(Niche 同款集成实测踩过)。
+    private let currentBuildNumber: Int
 
     private let defaults = UserDefaults.standard
-    private let decoder = JSONDecoder()
     private let session: URLSession
-    private let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/ccfco/Clipin/releases/latest")!
+    /// 检测源是 appcast.xml(raw.githubusercontent.com 静态 CDN),不是 api.github.com——
+    /// 后者未认证限额 60 次/小时且按 IP 算,共享出口 IP 极易被其它流量打满,一旦打满检测层
+    /// (菜单栏红点/设置页/Sparkle 安装入口)全部瘫痪(Niche 同款集成实测踩过)。
+    private let appcastURL = URL(string: "https://raw.githubusercontent.com/ccfco/Clipin/main/appcast.xml")!
+    /// release notes 正文的补数据源:appcast.xml 不带这段文本,这里另开一个同样不受
+    /// api.github.com 限流影响的静态 feed(GitHub 网站侧的 Atom feed,不是 REST API)。
+    private let releasesAtomURL = URL(string: "https://github.com/ccfco/Clipin/releases.atom")!
     private let releasesPageURL = URL(string: "https://github.com/ccfco/Clipin/releases/latest")!
     private let releasesListURL = URL(string: "https://github.com/ccfco/Clipin/releases")!
     private var periodicCheckTimer: Timer?
@@ -58,11 +67,10 @@ final class UpdateReminderService: ObservableObject {
     private init() {
         currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
         currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        currentBuildNumber = Int(currentBuild) ?? 0
         autoCheckEnabled = defaults.object(forKey: Keys.autoCheckEnabled) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
         dismissedReminderVersion = defaults.string(forKey: Keys.dismissedReminderVersion)
-
-        decoder.dateDecodingStrategy = .iso8601
 
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
@@ -183,35 +191,46 @@ final class UpdateReminderService: ObservableObject {
         defer { isChecking = false }
 
         do {
-            var request = URLRequest(url: latestReleaseAPIURL)
-            request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            var request = URLRequest(url: appcastURL)
             request.setValue("Clipin/\(currentVersion)", forHTTPHeaderField: "User-Agent")
 
-            let (data, _) = try await session.data(for: request)
-            let response = try decoder.decode(GitHubReleaseResponse.self, from: data)
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
             let fetchedAt = Date()
 
-            let remoteVersion = Self.normalizedVersion(response.tagName)
-            let release = ReleaseInfo(
-                version: remoteVersion,
-                publishedAt: response.publishedAt,
-                notes: Self.normalizedNotes(response.body),
-                releasePageURL: response.htmlURL,
-                downloadURL: Self.preferredDownloadURL(from: response.assets)
-            )
-            // compareVersions 用纯数字分段比较；非数字 tag（如 1.0.0-beta）会被 Int(_)??0
-            // 折叠成错误结果。我们只发纯数字版本，遇到非法 tag 直接忽略（log + 不提示更新），
-            // 不让畸形 tag 静默误判成「有/无更新」。
-            if Self.isNumericVersion(remoteVersion),
-               Self.compareVersions(remoteVersion, currentVersion) == .orderedDescending {
+            let parser = AppcastParser()
+            let xmlParser = XMLParser(data: data)
+            xmlParser.delegate = parser
+            guard xmlParser.parse() else { throw URLError(.cannotParseResponse) }
+
+            // appcast 可能累积多条历史 item(generate_appcast 不裁剪旧条目);挑 build number
+            // 最大的一条——必须按 build number(Sparkle 的真实判断依据)排序,不能按 marketing
+            // 版本号,否则"同 marketing version、不同 build"的条目会被错误地并列/丢弃。
+            let candidate = parser.items
+                .compactMap { item -> (version: String, buildNumber: Int, downloadURL: URL, pubDate: Date?)? in
+                    guard let version = item.version, Self.isNumericVersion(version),
+                          let buildNumber = item.buildNumber,
+                          let downloadURL = item.downloadURL else { return nil }
+                    return (version, buildNumber, downloadURL, item.pubDate)
+                }
+                .max { $0.buildNumber < $1.buildNumber }
+
+            if let candidate, candidate.buildNumber > currentBuildNumber {
+                let notes = await Self.fetchReleaseNotes(version: candidate.version, atomURL: releasesAtomURL, session: session)
+                let release = ReleaseInfo(
+                    version: candidate.version,
+                    publishedAt: candidate.pubDate,
+                    notes: notes,
+                    releasePageURL: URL(string: "https://github.com/ccfco/Clipin/releases/tag/v\(candidate.version)")!,
+                    downloadURL: candidate.downloadURL
+                )
                 latestRelease = release
                 if !userInitiated, dismissedReminderVersion != release.version {
                     activeReminder = release
                 }
             } else {
-                if !Self.isNumericVersion(remoteVersion) {
-                    ClipinLog.update.error("Ignoring release with non-numeric tag: \(response.tagName, privacy: .public)")
-                }
                 latestRelease = nil
                 activeReminder = nil
             }
@@ -228,24 +247,8 @@ final class UpdateReminderService: ObservableObject {
         }
     }
 
-    private static func preferredDownloadURL(from assets: [GitHubReleaseAsset]) -> URL? {
-        let lowercased = assets.map { ($0, $0.name.lowercased()) }
-
-        if let dmg = lowercased.first(where: { $0.1.hasSuffix(".dmg") })?.0.browserDownloadURL {
-            return dmg
-        }
-        if let zip = lowercased.first(where: { $0.1.hasSuffix(".zip") })?.0.browserDownloadURL {
-            return zip
-        }
-        return nil
-    }
-
-    private static func normalizedVersion(_ version: String) -> String {
-        version.hasPrefix("v") ? String(version.dropFirst()) : version
-    }
-
-    /// 是否为纯数字点分版本（1 / 1.2 / 1.2.0）。拒绝 beta/rc/hotfix 等非数字段，
-    /// 避免 compareVersions 把 1.0.0-beta 误折叠成 1.0.0。
+    /// 是否为纯数字点分版本（1 / 1.2 / 1.2.0）。拒绝 beta/rc/hotfix 等非数字段，仅用于显示
+    /// 前的脏数据兜底(判定"是否有更新"已改用 build number,不再靠这个字符串比较)。
     private static func isNumericVersion(_ version: String) -> Bool {
         !version.isEmpty && version.split(separator: ".").allSatisfy { segment in
             !segment.isEmpty && segment.allSatisfy(\.isNumber)
@@ -258,46 +261,173 @@ final class UpdateReminderService: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {
-        let left = lhs.split(separator: ".").map { Int($0) ?? 0 }
-        let right = rhs.split(separator: ".").map { Int($0) ?? 0 }
-        let count = max(left.count, right.count)
+    /// releases.atom 是 GitHub 网站侧的静态 Atom feed,不走 api.github.com,不受那个限流
+    /// 影响。只用来补 release notes 正文——appcast.xml 不带这段文本。best-effort:失败/
+    /// 找不到匹配条目都只是 notes 留空,不影响版本检测本身(检测已由 appcast.xml 独立完成)。
+    private static func fetchReleaseNotes(version: String, atomURL: URL, session: URLSession) async -> String {
+        do {
+            var request = URLRequest(url: atomURL)
+            request.setValue("Clipin/\(version)", forHTTPHeaderField: "User-Agent")
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return "" }
 
-        for index in 0..<count {
-            let leftPart = index < left.count ? left[index] : 0
-            let rightPart = index < right.count ? right[index] : 0
+            let parser = ReleaseNotesAtomParser()
+            let xmlParser = XMLParser(data: data)
+            xmlParser.delegate = parser
+            guard xmlParser.parse() else { return "" }
 
-            if leftPart != rightPart {
-                return leftPart < rightPart ? .orderedAscending : .orderedDescending
-            }
+            guard let entry = parser.entries.first(where: { $0.tagVersion == version }),
+                  let html = entry.contentHTML else { return "" }
+            return normalizedNotes(plainText(fromHTML: html))
+        } catch {
+            ClipinLog.update.error("Fetching release notes failed: \(error.localizedDescription, privacy: .public)")
+            return ""
         }
+    }
 
-        return .orderedSame
+    /// release notes 在 atom feed 里是渲染后的 HTML(XMLParser 已经把 XML 实体解码成字面
+    /// 标签),块级标签折成换行、其余标签直接去掉——只是给 banner/设置页的预览用,不需要
+    /// 保留富文本结构。
+    private static func plainText(fromHTML html: String) -> String {
+        var text = html
+        text = text.replacingOccurrences(
+            of: "(?i)</?(h[1-6]|p|li|br|ul|ol)[^>]*>", with: "\n", options: .regularExpression
+        )
+        text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        let lines = text.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return lines.joined(separator: "\n")
     }
 }
 
-private struct GitHubReleaseResponse: Decodable {
-    let tagName: String
-    let htmlURL: URL
-    let publishedAt: Date?
-    let body: String
-    let assets: [GitHubReleaseAsset]
-
-    enum CodingKeys: String, CodingKey {
-        case tagName = "tag_name"
-        case htmlURL = "html_url"
-        case publishedAt = "published_at"
-        case body
-        case assets
+/// Sparkle appcast(标准 RSS + sparkle 命名空间)的最小化解析器,只取 UpdateReminderService
+/// 需要的四个字段。不用 shouldProcessNamespaces,elementName 直接拿到
+/// "sparkle:shortVersionString" 这种限定名。
+private final class AppcastParser: NSObject, XMLParserDelegate {
+    struct Item {
+        var version: String?
+        var buildNumber: Int?
+        var pubDate: Date?
+        var downloadURL: URL?
     }
+
+    private(set) var items: [Item] = []
+    private var current: Item?
+    private var currentElement = ""
+    private var pubDateText = ""
+    private var buildNumberText = ""
+
+    func parser(
+        _ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
+        qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]
+    ) {
+        currentElement = elementName
+        switch elementName {
+        case "item":
+            current = Item()
+        case "enclosure":
+            if let urlString = attributeDict["url"] {
+                current?.downloadURL = URL(string: urlString)
+            }
+        default:
+            break
+        }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        switch currentElement {
+        case "sparkle:shortVersionString":
+            let appended = (current?.version ?? "") + string
+            current?.version = appended
+        case "sparkle:version":
+            buildNumberText += string
+        case "pubDate":
+            pubDateText += string
+        default:
+            break
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        if elementName == "pubDate" {
+            pubDateText = pubDateText.trimmingCharacters(in: .whitespacesAndNewlines)
+            current?.pubDate = Self.rfc822Formatter.date(from: pubDateText)
+            pubDateText = ""
+        }
+        if elementName == "sparkle:shortVersionString" {
+            let trimmed = current?.version?.trimmingCharacters(in: .whitespacesAndNewlines)
+            current?.version = trimmed
+        }
+        if elementName == "sparkle:version" {
+            current?.buildNumber = Int(buildNumberText.trimmingCharacters(in: .whitespacesAndNewlines))
+            buildNumberText = ""
+        }
+        if elementName == "item", let item = current {
+            items.append(item)
+            current = nil
+        }
+        // 结束标签后立刻清空,否则标签间的换行/缩进空白会被 foundCharacters 当作
+        // 仍在当前标签内、误追加进 version/pubDate/buildNumber。
+        currentElement = ""
+    }
+
+    private static let rfc822Formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
+        return formatter
+    }()
 }
 
-private struct GitHubReleaseAsset: Decodable {
-    let name: String
-    let browserDownloadURL: URL
+/// GitHub releases.atom 的最小化解析器,只取匹配 release notes 正文需要的两个字段:
+/// tag 版本号(从 <link rel="alternate" href=".../tag/vX.Y.Z"> 取)、<content type="html"> 正文。
+private final class ReleaseNotesAtomParser: NSObject, XMLParserDelegate {
+    struct Entry {
+        var tagVersion: String?
+        var contentHTML: String?
+    }
 
-    enum CodingKeys: String, CodingKey {
-        case name
-        case browserDownloadURL = "browser_download_url"
+    private(set) var entries: [Entry] = []
+    private var current: Entry?
+    private var capturingContent = false
+    private var contentText = ""
+
+    func parser(
+        _ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?,
+        qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]
+    ) {
+        switch elementName {
+        case "entry":
+            current = Entry()
+        case "link":
+            if attributeDict["rel"] == "alternate", let href = attributeDict["href"],
+               let range = href.range(of: "/tag/v", options: .backwards) {
+                current?.tagVersion = String(href[range.upperBound...])
+            }
+        case "content":
+            capturingContent = true
+            contentText = ""
+        default:
+            break
+        }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        if capturingContent {
+            contentText += string
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
+        if elementName == "content" {
+            current?.contentHTML = contentText
+            capturingContent = false
+            contentText = ""
+        }
+        if elementName == "entry", let entry = current {
+            entries.append(entry)
+            current = nil
+        }
     }
 }
