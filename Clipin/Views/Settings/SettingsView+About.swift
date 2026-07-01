@@ -4,17 +4,18 @@ extension SettingsView {
 
     // MARK: - About Tab
 
-    /// App 身份卡：图标 + 名字 + 版本 + tagline。跟 paneHeader 一样放在 Form 之外
-    /// （见 SettingsView.detailPane 注释）——避免吃 Form「首个 Section」固定预留的空白。
-    var aboutIdentityCard: some View {
-        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 68, height: 68)
-                .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
-
-            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+    @ViewBuilder
+    var aboutContent: some View {
+        // App 身份卡：图标 + 名字 + 版本 + tagline，作为 About 自己的头部——
+        // 本身就是它的 pane header，不再叠通用 paneHeader（避免「双头」冗余）。
+        Section {
+            identityHeaderRow(alignment: .top) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: 68, height: 68)
+                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
+            } content: {
                 Text(appDisplayName)
                     .font(.system(size: 22, weight: .semibold))
 
@@ -27,13 +28,7 @@ extension SettingsView {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
         }
-        .paneCardStyle()
-    }
-
-    @ViewBuilder
-    var aboutContent: some View {
         Section("Updates") {
             Text("Clipin detects updates via GitHub Releases and installs them automatically.")
                 .settingsCaption()

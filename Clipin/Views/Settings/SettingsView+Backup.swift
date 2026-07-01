@@ -179,6 +179,12 @@ extension SettingsView {
 
     private var backupStatusContent: some View {
         VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+            // 独立小标题：与上方 Frequency picker 分组区分——Section 本身无 header 文字，
+            // 靠这行让"频率设置" vs "备份状态展示"两组信息不会读成同一行内容。
+            Text("Backup status")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
             statusPrimaryRow
             if let location = backupLocationLabel {
                 Text(location)
@@ -256,7 +262,6 @@ extension SettingsView {
         if autoBackup.pausedDueToFailures { return .orange }
         if autoBackup.lastBackupError != nil { return .red }
         if isPartialBackup { return .orange }
-        if autoBackup.lastBackupAt != nil { return .secondary }
         return .secondary
     }
 

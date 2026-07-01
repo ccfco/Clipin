@@ -6,7 +6,6 @@
 "Paste & Preview" = "粘贴与预览";
 "Auto Backup" = "自动备份";
 "Transfer" = "导入导出";
-"Manage the shortcut, privacy, history retention, startup behavior, and transfer tools." = "管理快捷键、隐私、历史记录保留、开机启动及数据迁移工具。";
 "Global shortcut" = "全局快捷键";
 "Click the field and press the new shortcut. At least one modifier key is required." = "点击输入框，然后按下新快捷键。至少需要一个修饰键。";
 "Reset" = "重置";
@@ -281,9 +280,7 @@
 "Key %d" = "按键 %d";
 "Fine-tune keyboard behavior, launch defaults, and how Clipin looks." = "微调键盘行为、启动默认入口，以及 Clipin 的整体观感。";
 "Control which clipboard writes are ignored so sensitive or noisy content stays out." = "控制哪些剪贴板写入会被忽略，让敏感或噪音内容留在历史之外。";
-"Set how long history stays around and when unpinned items should be trimmed." = "设置历史记录保留多久，以及未固定条目何时开始清理。";
 "Set how long history stays around, keep an automatic archive on disk, and move history in or out." = "设置历史保留多久、在磁盘上保留自动归档，以及导入导出历史记录。";
-"Keep an automatic archive on disk so history can be restored, and move history in or out anytime." = "在磁盘上保留自动归档，需要时可恢复历史，并随时一次性导入或导出。";
 "Export…" = "导出…";
 "Import…" = "导入…";
 "Clipin launches automatically after you sign in." = "登录后自动启动 Clipin。";
