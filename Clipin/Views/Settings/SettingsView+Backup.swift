@@ -36,8 +36,7 @@ extension SettingsView {
             )
             if !settings.autoBackupEnabled {
                 Text("Existing backups in the folder are preserved when this is disabled.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .settingsCaption(.tertiary)
             }
         }
         // alert / sheet 挂在常驻 Section 上（toggle 永远存在，detail 组随 enabled 出现/消失）。
@@ -121,8 +120,7 @@ extension SettingsView {
                 Text("iCloud Drive is not enabled")
                     .font(.system(size: 12, weight: .medium))
                 Text("Backups will be saved locally. Enable iCloud Drive in System Settings to sync across Macs.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             }
 
             Spacer(minLength: 0)
@@ -152,11 +150,9 @@ extension SettingsView {
             : String(format: NSLocalizedString("Default: %@", comment: ""), abbreviatedPath(defaultURL.path))
         return HStack(spacing: ClipinChrome.gap) {
             Image(systemName: icon)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .settingsCaption(.tertiary)
             Text(label)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .settingsCaption(.tertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
@@ -186,8 +182,7 @@ extension SettingsView {
             statusPrimaryRow
             if let location = backupLocationLabel {
                 Text(location)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .settingsCaption(.tertiary)
                     .lineLimit(2)
                     .truncationMode(.middle)
             }
@@ -362,8 +357,7 @@ extension SettingsView {
                     count, sizeText
                 )
             )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .settingsCaption()
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: ClipinChrome.gap) {

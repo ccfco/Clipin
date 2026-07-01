@@ -75,12 +75,10 @@ extension SettingsView {
         } label: {
             Text("Run Cleanup Now")
             Text("Apply the current retention rules immediately and remove outdated unpinned items.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .settingsCaption()
             if let statusText = lastCleanupStatusText {
                 Text(statusText)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .settingsCaption(.tertiary)
             }
         }
     }

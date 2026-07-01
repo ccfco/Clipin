@@ -34,8 +34,7 @@ extension SettingsView {
 
         Section("Updates") {
             Text("Clipin detects updates via GitHub Releases and installs them automatically.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .settingsCaption()
 
             toggleRow(
                 "Automatically check for updates",
@@ -58,18 +57,14 @@ extension SettingsView {
                             .buttonStyle(.borderedProminent)
                     }
                 } label: {
-                    Text("Install latest version")
-                    Text("Install the latest version automatically, or open the GitHub release page.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    rowLabel("Install latest version", "Install the latest version automatically, or open the GitHub release page.")
                 }
 
                 VStack(alignment: .leading, spacing: ClipinChrome.gap) {
                     Text("Release notes")
                         .font(.system(size: 13, weight: .medium))
                     Text(latestRelease.notesPreview.isEmpty ? NSLocalizedString("No release notes provided.", comment: "") : latestRelease.notesPreview)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .settingsCaption()
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -84,10 +79,7 @@ extension SettingsView {
                     Button("Issues") { openExternalURL(Self.issuesURL) }
                 }
             } label: {
-                Text("Project")
-                Text("Browse the repository, all shipped releases, or report a bug—everything on GitHub.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                rowLabel("Project", "Browse the repository, all shipped releases, or report a bug—everything on GitHub.")
             }
         }
     }

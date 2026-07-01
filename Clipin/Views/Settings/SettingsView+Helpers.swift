@@ -13,20 +13,8 @@ extension SettingsView {
     func rowLabel(_ title: LocalizedStringKey, _ description: LocalizedStringKey? = nil) -> some View {
         Text(title)
         if let description {
-            Text(description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Text(description).settingsCaption()
         }
-    }
-
-    /// String 版副说明——运行时拼装的文案（含版本号 / 相对时间）不能用 LocalizedStringKey，
-    /// 否则 SwiftUI 会再去 Localizable.strings 查一次找不到键。
-    @ViewBuilder
-    func rowLabel(_ title: LocalizedStringKey, descriptionText: String) -> some View {
-        Text(title)
-        Text(descriptionText)
-            .font(.caption)
-            .foregroundStyle(.secondary)
     }
 
     /// 开关行：标题 + 副说明 + 行尾 Switch。
@@ -40,8 +28,8 @@ extension SettingsView {
         }
     }
 
-    /// 动作行：标题 + 副说明 + 行尾按钮（带 busy spinner）。
-    func actionRow(
+    /// 动作行：标题 + 副说明 + 行尾按钮（带 busy spinner）。base 只经两个 wrapper 转发，故 private。
+    private func actionRow(
         _ title: LocalizedStringKey,
         descriptionText: Text,
         buttonTitle: LocalizedStringKey,
@@ -59,9 +47,7 @@ extension SettingsView {
             .disabled(isBusy || activeOperation != nil)
         } label: {
             Text(title)
-            descriptionText
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            descriptionText.settingsCaption()
         }
     }
 
@@ -89,6 +75,18 @@ extension SettingsView {
         actionRow(title, descriptionText: Text(description),
                   buttonTitle: buttonTitle, busyTitle: busyTitle,
                   isBusy: isBusy, action: action)
+    }
+
+    /// 图标 callout 行：左侧 tint 图标 + 右侧标题/说明，用于隐私"始终排除"、过滤统计等提示行。
+    func calloutRow(systemImage: String, tint: Color, title: Text, description: Text) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                title.font(.system(size: 13, weight: .medium))
+                description.settingsCaption()
+            }
+        } icon: {
+            Image(systemName: systemImage).foregroundStyle(tint)
+        }
     }
 
     func progressButtonLabel(title: LocalizedStringKey, isBusy: Bool) -> some View {
@@ -121,5 +119,13 @@ extension SettingsView {
     func abbreviatedPath(_ path: String) -> String {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
+    }
+}
+
+extension View {
+    /// 设置页 grouped Form 里的 caption 副说明统一样式（标题下的次要说明行）。
+    /// 收口 `.font(.caption).foregroundStyle(...)` 双修饰，默认 secondary，状态提示可传 .tertiary。
+    func settingsCaption(_ tint: HierarchicalShapeStyle = .secondary) -> some View {
+        self.font(.caption).foregroundStyle(tint)
     }
 }

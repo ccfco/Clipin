@@ -41,8 +41,7 @@ extension SettingsView {
             } label: {
                 Text("Global shortcut")
                 Text("Click the field and press the new shortcut. At least one modifier key is required.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
                 if let note = settings.shortcutRegistrationNote {
                     Label(note, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
@@ -61,8 +60,7 @@ extension SettingsView {
             )
             if let note = settings.launchAtLoginNote {
                 Text(note)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .settingsCaption()
             }
         }
     }
