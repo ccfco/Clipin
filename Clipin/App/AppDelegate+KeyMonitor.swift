@@ -655,7 +655,9 @@ extension AppDelegate {
             // 一条 hairline 分隔线"（旧自绘设置页去掉是因内容会和红绿灯重叠，原生 split view 无此问题）。
             // 配套：titlebarAppearsTransparent=true 让材质透上来、titlebarSeparatorStyle=.none 去分隔线。
             newWindow.title = NSLocalizedString("Clipin Settings", comment: "")
-            newWindow.titleVisibility = .hidden
+            // 标题可见，SwiftUI 的 .navigationTitle(tab.title) 会桥到顶部工具栏，
+            // 显示当前 tab 名——对齐原生 System Settings 每个 pane 顶部都有的标题行。
+            newWindow.titleVisibility = .visible
             newWindow.titlebarAppearsTransparent = true
             newWindow.titlebarSeparatorStyle = .none
             newWindow.isReleasedWhenClosed = false

@@ -169,23 +169,35 @@ struct SettingsView: View {
 
     // MARK: - Detail Pane
 
-    /// 原生 System Settings 风格详情区：grouped Form 提供分组卡片 + 分隔线，
-    /// 顶部 paneHeader（图标 + 标题 + 描述）对齐原生每个 pane 的头部块。
+    /// 原生 System Settings 风格详情区：grouped Form 提供分组卡片 + 分隔线。
+    /// pane header 故意放在 Form 之外（见 paneHeader 注释）——不是审美选择，是绕开一个
+    /// 已实测证实的平台限制：macOS `Form(.formStyle(.grouped))` 对"第一个 Section"
+    /// 之前会固定预留一段与内容无关的空白（换成一行极简文字验证过，空白量不变），
+    /// 公开 API（.contentMargins 等）都够不着这段 AppKit 内部预留。放到 Form 外面
+    /// 自己画卡片，就不再吃这笔"首个 Section 税"。
     @ViewBuilder
     private var detailPane: some View {
         if let tab = navigation.selectedTab {
-            Form {
-                // About 的第一个 section 已是 app 身份卡（图标 + 名字 + 版本），
-                // 本身就是它的头部，不再叠通用 paneHeader，避免「双头」冗余。
-                if tab != .about { paneHeader(tab) }
-                switch tab {
-                case .general:      generalContent
-                case .privacy:      privacyContent
-                case .storage:      storageContent
-                case .about:        aboutContent
+            VStack(spacing: ClipinChrome.groupGap) {
+                // About 用自己的身份卡当头（图标+名字+版本），其余 tab 用通用 paneHeader——
+                // 两者都在 Form 之外，同样绕开「首个 Section」固定预留。
+                if tab == .about {
+                    aboutIdentityCard
+                        .padding(.top, ClipinChrome.gap)
+                } else {
+                    paneHeader(tab)
+                        .padding(.top, ClipinChrome.gap)
                 }
+                Form {
+                    switch tab {
+                    case .general:      generalContent
+                    case .privacy:      privacyContent
+                    case .storage:      storageContent
+                    case .about:        aboutContent
+                    }
+                }
+                .formStyle(.grouped)
             }
-            .formStyle(.grouped)
             .navigationTitle(tab.title)
         } else {
             ContentUnavailableView(
@@ -199,28 +211,26 @@ struct SettingsView: View {
     /// 原生 System Settings 每个 pane 顶部的头部块：accent 圆角方块图标 + 标题 + 一句描述。
     /// 图标用 accent 方块（不是侧栏那种单色符号）——它是本 pane 的主视觉，原生同款做法。
     private func paneHeader(_ tab: SettingsTab) -> some View {
-        Section {
-            HStack(alignment: .center, spacing: ClipinChrome.groupGap) {
-                Image(systemName: tab.icon)
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(
-                        RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
-                            .fill(Color.accentColor)
-                    )
+        HStack(alignment: .center, spacing: ClipinChrome.groupGap) {
+            Image(systemName: tab.icon)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
+                        .fill(Color.accentColor)
+                )
 
-                VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                    Text(tab.title)
-                        .font(.system(size: 18, weight: .semibold))
-                    Text(tab.summary)
-                        .settingsCaption()
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                Text(tab.title)
+                    .font(.system(size: 18, weight: .semibold))
+                Text(tab.summary)
+                    .settingsCaption()
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.vertical, ClipinChrome.gap)
+            Spacer(minLength: 0)
         }
+        .paneCardStyle()
     }
 
     // MARK: - Notice

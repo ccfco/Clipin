@@ -128,4 +128,16 @@ extension View {
     func settingsCaption(_ tint: HierarchicalShapeStyle = .secondary) -> some View {
         self.font(.caption).foregroundStyle(tint)
     }
+
+    /// pane header / About 身份卡共用的手绘卡片外壳：圆角矩形 + controlBackgroundColor 仿
+    /// Form(.grouped) 的 Section 视觉，横向 padding 对齐 Section 内边距。两处调用避免视觉漂移。
+    func paneCardStyle() -> some View {
+        self
+            .padding(ClipinChrome.groupGap)
+            .background(
+                RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .padding(.horizontal, ClipinChrome.groupGap)
+    }
 }

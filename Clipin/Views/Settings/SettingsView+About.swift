@@ -4,34 +4,36 @@ extension SettingsView {
 
     // MARK: - About Tab
 
+    /// App 身份卡：图标 + 名字 + 版本 + tagline。跟 paneHeader 一样放在 Form 之外
+    /// （见 SettingsView.detailPane 注释）——避免吃 Form「首个 Section」固定预留的空白。
+    var aboutIdentityCard: some View {
+        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 68, height: 68)
+                .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
+
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                Text(appDisplayName)
+                    .font(.system(size: 22, weight: .semibold))
+
+                Text(currentVersionLine)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+
+                Text("A fast, keyboard-first clipboard companion for macOS.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .paneCardStyle()
+    }
+
     @ViewBuilder
     var aboutContent: some View {
-        Section {
-            HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 68, height: 68)
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
-
-                VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                    Text(appDisplayName)
-                        .font(.system(size: 22, weight: .semibold))
-
-                    Text(currentVersionLine)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
-
-                    Text("A fast, keyboard-first clipboard companion for macOS.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.vertical, ClipinChrome.gap)
-        }
-
         Section("Updates") {
             Text("Clipin detects updates via GitHub Releases and installs them automatically.")
                 .settingsCaption()
