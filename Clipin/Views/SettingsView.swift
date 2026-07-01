@@ -175,7 +175,9 @@ struct SettingsView: View {
     private var detailPane: some View {
         if let tab = navigation.selectedTab {
             Form {
-                paneHeader(tab)
+                // About 的第一个 section 已是 app 身份卡（图标 + 名字 + 版本），
+                // 本身就是它的头部，不再叠通用 paneHeader，避免「双头」冗余。
+                if tab != .about { paneHeader(tab) }
                 switch tab {
                 case .general:      generalContent
                 case .privacy:      privacyContent
