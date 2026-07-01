@@ -26,6 +26,16 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         case .about:        return "info.circle"
         }
     }
+
+    /// pane header 描述——对齐原生 System Settings 每个 pane 顶部「图标 + 标题 + 一句说明」。
+    var summary: LocalizedStringKey {
+        switch self {
+        case .general:      return "Fine-tune keyboard behavior, launch defaults, and how Clipin looks."
+        case .privacy:      return "Control which clipboard writes are ignored so sensitive or noisy content stays out."
+        case .storage:      return "Set how long history stays around, keep an automatic archive on disk, and move history in or out."
+        case .about:        return "App version, updates, project links, and release notes."
+        }
+    }
 }
 
 @MainActor
@@ -160,11 +170,12 @@ struct SettingsView: View {
     // MARK: - Detail Pane
 
     /// 原生 System Settings 风格详情区：grouped Form 提供分组卡片 + 分隔线，
-    /// 标题落到工具栏（.navigationTitle），不再自绘 detailHeader / orb。
+    /// 顶部 paneHeader（图标 + 标题 + 描述）对齐原生每个 pane 的头部块。
     @ViewBuilder
     private var detailPane: some View {
         if let tab = navigation.selectedTab {
             Form {
+                paneHeader(tab)
                 switch tab {
                 case .general:      generalContent
                 case .privacy:      privacyContent
@@ -180,6 +191,33 @@ struct SettingsView: View {
                 systemImage: "gearshape",
                 description: Text("Select a section from the sidebar to edit Clipin preferences.")
             )
+        }
+    }
+
+    /// 原生 System Settings 每个 pane 顶部的头部块：accent 圆角方块图标 + 标题 + 一句描述。
+    /// 图标用 accent 方块（不是侧栏那种单色符号）——它是本 pane 的主视觉，原生同款做法。
+    private func paneHeader(_ tab: SettingsTab) -> some View {
+        Section {
+            HStack(alignment: .center, spacing: ClipinChrome.groupGap) {
+                Image(systemName: tab.icon)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
+                            .fill(Color.accentColor)
+                    )
+
+                VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                    Text(tab.title)
+                        .font(.system(size: 18, weight: .semibold))
+                    Text(tab.summary)
+                        .settingsCaption()
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, ClipinChrome.gap)
         }
     }
 

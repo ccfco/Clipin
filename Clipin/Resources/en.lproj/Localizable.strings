@@ -282,6 +282,7 @@
 "Fine-tune keyboard behavior, launch defaults, and how Clipin looks." = "Fine-tune keyboard behavior, launch defaults, and how Clipin looks.";
 "Control which clipboard writes are ignored so sensitive or noisy content stays out." = "Control which clipboard writes are ignored so sensitive or noisy content stays out.";
 "Set how long history stays around and when unpinned items should be trimmed." = "Set how long history stays around and when unpinned items should be trimmed.";
+"Set how long history stays around, keep an automatic archive on disk, and move history in or out." = "Set how long history stays around, keep an automatic archive on disk, and move history in or out.";
 "Keep an automatic archive on disk so history can be restored, and move history in or out anytime." = "Keep an automatic archive on disk so history can be restored, and move history in or out anytime.";
 "Clipin launches automatically after you sign in." = "Clipin launches automatically after you sign in.";
 "Remember panel position between sessions" = "Remember panel position between sessions";

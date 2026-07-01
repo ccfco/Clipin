@@ -282,6 +282,7 @@
 "Fine-tune keyboard behavior, launch defaults, and how Clipin looks." = "微调键盘行为、启动默认入口，以及 Clipin 的整体观感。";
 "Control which clipboard writes are ignored so sensitive or noisy content stays out." = "控制哪些剪贴板写入会被忽略，让敏感或噪音内容留在历史之外。";
 "Set how long history stays around and when unpinned items should be trimmed." = "设置历史记录保留多久，以及未固定条目何时开始清理。";
+"Set how long history stays around, keep an automatic archive on disk, and move history in or out." = "设置历史保留多久、在磁盘上保留自动归档，以及导入导出历史记录。";
 "Keep an automatic archive on disk so history can be restored, and move history in or out anytime." = "在磁盘上保留自动归档，需要时可恢复历史，并随时一次性导入或导出。";
 "Export…" = "导出…";
 "Import…" = "导入…";
