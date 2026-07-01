@@ -644,15 +644,20 @@ extension AppDelegate {
         } else {
             let newWindow = ClipinSettingsWindow(
                 contentRect: NSRect(origin: .zero, size: SettingsWindowMetrics.size),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
-            // 原生 System Settings 风格：标准窗口 chrome（红绿灯 + 标题栏 + 可拉伸），
-            // NavigationSplitView 自带侧栏开关按钮，窗口背景/材质交还系统，不再自绘玻璃壳。
+            // 原生 System Settings 风格：标准窗口 chrome（红绿灯 + 可拉伸），侧栏材质铺满全高。
+            // .fullSizeContentView 必须保留：原生 NavigationSplitView 靠它把 sidebar 的 vibrancy
+            // 材质延伸到窗口最顶端、让红绿灯坐在侧栏材质上（macOS 26 原生结构），并自动把右侧
+            // detail 避让到工具栏下方。禁止去掉——去掉会退化成"独立标题栏 + 红绿灯悬空 + 顶部
+            // 一条 hairline 分隔线"（旧自绘设置页去掉是因内容会和红绿灯重叠，原生 split view 无此问题）。
+            // 配套：titlebarAppearsTransparent=true 让材质透上来、titlebarSeparatorStyle=.none 去分隔线。
             newWindow.title = NSLocalizedString("Clipin Settings", comment: "")
             newWindow.titleVisibility = .hidden
-            newWindow.titlebarAppearsTransparent = false
+            newWindow.titlebarAppearsTransparent = true
+            newWindow.titlebarSeparatorStyle = .none
             newWindow.isReleasedWhenClosed = false
             newWindow.setContentSize(SettingsWindowMetrics.size)
             newWindow.contentMinSize = SettingsWindowMetrics.minSize
