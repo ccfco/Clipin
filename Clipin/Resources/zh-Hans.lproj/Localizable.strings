@@ -4,6 +4,8 @@
 "Startup & Shortcut" = "启动与快捷键";
 "Launcher behavior" = "启动器行为";
 "Paste & Preview" = "粘贴与预览";
+"Always protected" = "始终保护";
+"Filtering" = "过滤";
 "Auto Backup" = "自动备份";
 "Transfer" = "导入导出";
 "Global shortcut" = "全局快捷键";
@@ -170,6 +172,8 @@
 "Install latest version" = "安装最新版本";
 "Install the latest version automatically, or open the GitHub release page." = "一键自动安装最新版本，或打开 GitHub Release 页面查看详情。";
 "Project" = "项目";
+"Releases" = "发布版本";
+"Issues" = "问题反馈";
 "Source code" = "源码";
 "Browse the repository, implementation details, and development history on GitHub." = "在 GitHub 上查看仓库、实现细节和开发历史。";
 "Open GitHub" = "打开 GitHub";

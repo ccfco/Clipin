@@ -2,35 +2,52 @@ import SwiftUI
 
 extension SettingsView {
 
-    // MARK: - About Tab
+    // MARK: - About Pane
+
+    /// About 是「身份页」不是「设置表单」——按 Raycast / 原生 macOS About 的做法：
+    /// 居中 hero（大图标 + 名字 + 版本 + tagline，无背景 surface）浮在 Form 之上，
+    /// 下方才是 grouped 卡片（Updates / Project）。hero 只是 Image + Text 居中排布，
+    /// 不画任何背景/卡片/玻璃，满足 CLAUDE.md 无自绘红线。
+    /// 顶部幻影空白（rdar://122947424）由 detailPane 的负补偿统一抵消，见 settingsDetailTopGapFix。
+    var aboutPane: some View {
+        VStack(spacing: 0) {
+            aboutHero
+            Form { aboutContent }
+                .formStyle(.grouped)
+        }
+    }
+
+    /// 居中身份 hero：app 图标 + 名字 + 版本 + 一句 tagline，全部居中、无背景。
+    private var aboutHero: some View {
+        VStack(spacing: ClipinChrome.gap) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 80, height: 80)
+
+            Text(appDisplayName)
+                .font(.system(size: 26, weight: .bold))
+
+            Text(currentVersionLine)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            Text("A fast, keyboard-first clipboard companion for macOS.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, ClipinChrome.groupGap * 2)
+        .padding(.bottom, ClipinChrome.groupGap)
+        .padding(.horizontal, ClipinChrome.groupGap)
+    }
+
+    // MARK: - About Form Sections
 
     @ViewBuilder
     var aboutContent: some View {
-        // App 身份卡：图标 + 名字 + 版本 + tagline，作为 About 自己的头部——
-        // 本身就是它的 pane header，不再叠通用 paneHeader（避免「双头」冗余）。
-        // Section 必须带 header（见 SettingsView.paneHeader 注释——无 header 的首个
-        // Section 会把该显示 header 的高度原样空着）。
-        Section(SettingsTab.about.title) {
-            identityHeaderRow(alignment: .top) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 68, height: 68)
-                    .clipShape(RoundedRectangle(cornerRadius: ClipinChrome.cornerSurface, style: .continuous))
-            } content: {
-                Text(appDisplayName)
-                    .font(.system(size: 22, weight: .semibold))
-
-                Text(currentVersionLine)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                Text("A fast, keyboard-first clipboard companion for macOS.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
         Section("Updates") {
             Text("Clipin detects updates via GitHub Releases and installs them automatically.")
                 .settingsCaption()

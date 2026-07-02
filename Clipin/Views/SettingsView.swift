@@ -27,7 +27,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
         }
     }
 
-    /// pane header 描述——对齐原生 System Settings 每个 pane 顶部「图标 + 标题 + 一句说明」。
+    /// 介绍卡描述——对齐原生 System Settings 每个 pane 顶部「图标 + 标题 + 一句说明」介绍卡。
     var summary: LocalizedStringKey {
         switch self {
         case .general:      return "Fine-tune keyboard behavior, launch defaults, and how Clipin looks."
@@ -172,26 +172,33 @@ struct SettingsView: View {
 
     // MARK: - Detail Pane
 
-    /// 原生 System Settings 风格详情区：grouped Form 提供分组卡片 + 分隔线，
-    /// 顶部 paneHeader（图标 + 标题 + 描述）对齐原生每个 pane 的头部块。
-    /// 必须留在 Form 的 Section 里——CLAUDE.md「设置页内禁止再自绘 surface/卡片/玻璃壳，
-    /// 分组卡片交给 grouped Form」；Form 对首个 Section 有平台级固定顶部留白（已验证与内容
-    /// 无关、公开 API 够不着），这是接受该留白换取合规的代价，不再手绘卡片绕开它。
+    /// 原生 System Settings 风格详情区：grouped Form 提供分组卡片 + 分隔线。
+    /// 对齐原生（见「辅助功能」页参照）：pane 标题**同时**出现在两处——工具栏
+    /// （navigationTitle，配 ←→ 导航）+ 内容区首张介绍卡（图标 + 标题 + 一句说明）。
+    /// 这不是「双头」冗余，原生自己就这么做：工具栏是小的导航上下文，介绍卡是本页主视觉头部。
+    /// About 是身份页不是设置表单，走 aboutPane（居中 hero + Form），见 SettingsView+About。
     @ViewBuilder
     private var detailPane: some View {
         if let tab = navigation.selectedTab {
-            Form {
-                // About 的第一个 section 已是 app 身份卡（图标 + 名字 + 版本），
-                // 本身就是它的头部，不再叠通用 paneHeader，避免「双头」冗余。
-                if tab != .about { paneHeader(tab) }
-                switch tab {
-                case .general:      generalContent
-                case .privacy:      privacyContent
-                case .storage:      storageContent
-                case .about:        aboutContent
+            Group {
+                if tab == .about {
+                    aboutPane
+                } else {
+                    Form {
+                        paneHeader(tab)
+                        switch tab {
+                        case .general:      generalContent
+                        case .privacy:      privacyContent
+                        case .storage:      storageContent
+                        case .about:        EmptyView() // unreachable：About 走 aboutPane
+                        }
+                    }
+                    .formStyle(.grouped)
                 }
             }
-            .formStyle(.grouped)
+            // 抵消 NavigationSplitView detail 列的幻影顶部空白（SwiftUI bug rdar://122947424）——
+            // 见 ClipinChrome.settingsDetailTopGapFix 注释。负 padding 把内容上移到标题栏正下方。
+            .padding(.top, -ClipinChrome.settingsDetailTopGapFix)
             .navigationTitle(tab.title)
         } else {
             ContentUnavailableView(
@@ -202,32 +209,32 @@ struct SettingsView: View {
         }
     }
 
-    /// 原生 System Settings 每个 pane 顶部的头部块：accent 圆角方块图标 + 一句描述，
-    /// tab 名交给 Section 的原生 header（见下方注释——header 文字本身就是消除顶部
-    /// 留白的关键，不用再在卡片里重复一遍标题）。
-    /// 图标用 accent 方块（不是侧栏那种单色符号）——它是本 pane 的主视觉，原生同款做法。
-    ///
-    /// Section 必须带 header 文字：macOS grouped Form 会把无 header 的首个 Section
-    /// 该显示 header 的那块高度原样留成空白（已用极简诊断文案验证：给同一个 Section
-    /// 加上任意 header 文字，顶部留白立刻消失）——这不是"Form 对首个 Section 固定
-    /// 预留、与内容无关"，而是"无 header 时那块高度空着"。给 tab.title 当 header 是
-    /// 100% 原生、零自绘的解法，顺带天然满足 CLAUDE.md「分组卡片交给 grouped Form」。
+    /// 原生 System Settings 每个 pane 顶部的介绍卡：accent 圆角方块图标 + 标题 + 一句说明。
+    /// 参照系统「辅助功能」页——图标是本页主视觉方块（非侧栏单色符号）；标题与工具栏标题
+    /// 相同（原生本就重复，见 detailPane 注释）；说明取 tab.summary。作为 grouped Form 首张
+    /// 卡片（无 section header），卡片外观交给 Form 原生绘制，不自绘背景（CLAUDE.md 无自绘红线）。
     private func paneHeader(_ tab: SettingsTab) -> some View {
-        Section(tab.title) {
-            identityHeaderRow {
+        Section {
+            HStack(alignment: .center, spacing: ClipinChrome.groupGap) {
                 Image(systemName: tab.icon)
-                    .font(.system(size: 22, weight: .medium))
+                    .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 38, height: 38)
                     .background(
                         RoundedRectangle(cornerRadius: ClipinChrome.cornerControl, style: .continuous)
                             .fill(Color.accentColor)
                     )
-            } content: {
-                Text(tab.summary)
-                    .settingsCaption()
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                    Text(tab.title)
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(tab.summary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
             }
+            .padding(.vertical, ClipinChrome.gap)
         }
     }
 

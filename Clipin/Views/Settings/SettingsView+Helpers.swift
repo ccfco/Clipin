@@ -130,24 +130,3 @@ extension View {
     }
 
 }
-
-/// pane header / About 身份卡共用骨架：leading 图标 + leading VStack 内容 + trailing Spacer。
-/// 交给调用方包一层 Section——卡片外观由 Form(.grouped) 原生绘制，不再自行画背景
-/// （CLAUDE.md「设置页内禁止再自绘 surface/卡片/玻璃壳，分组卡片交给 grouped Form」）。
-/// 两处图标来源（SF Symbol 方块 / app 图标）和内容行数不同，各自传闭包，只收口重复的
-/// HStack/VStack/Spacer 骨架，避免调整间距时要同步改两处。
-@MainActor
-func identityHeaderRow<Icon: View, Content: View>(
-    alignment: VerticalAlignment = .center,
-    @ViewBuilder icon: () -> Icon,
-    @ViewBuilder content: () -> Content
-) -> some View {
-    HStack(alignment: alignment, spacing: ClipinChrome.groupGap) {
-        icon()
-        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-            content()
-        }
-        Spacer(minLength: 0)
-    }
-    .padding(.vertical, ClipinChrome.gap)
-}

@@ -4,6 +4,8 @@
 "Startup & Shortcut" = "Startup & Shortcut";
 "Launcher behavior" = "Launcher behavior";
 "Paste & Preview" = "Paste & Preview";
+"Always protected" = "Always protected";
+"Filtering" = "Filtering";
 "Auto Backup" = "Auto Backup";
 "Transfer" = "Transfer";
 "Global shortcut" = "Global shortcut";
@@ -170,6 +172,8 @@
 "Install latest version" = "Install latest version";
 "Install the latest version automatically, or open the GitHub release page." = "Install the latest version automatically, or open the GitHub release page.";
 "Project" = "Project";
+"Releases" = "Releases";
+"Issues" = "Issues";
 "Source code" = "Source code";
 "Browse the repository, implementation details, and development history on GitHub." = "Browse the repository, implementation details, and development history on GitHub.";
 "Open GitHub" = "Open GitHub";

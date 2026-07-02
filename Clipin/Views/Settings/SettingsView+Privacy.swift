@@ -6,7 +6,10 @@ extension SettingsView {
 
     @ViewBuilder
     var privacyContent: some View {
-        Section {
+        // 两个 section 都带标签，和 General/Storage 的分组标签惯例保持一致（首张卡片是
+        // detailPane 注入的 paneHeader 介绍卡，故这里不承担"消除首 section 留白"的职责——
+        // 顶部空白由 detailPane 的负补偿统一处理，见 ClipinChrome.settingsDetailTopGapFix）。
+        Section("Always protected") {
             calloutRow(
                 systemImage: "checkmark.shield.fill",
                 tint: .green,
@@ -15,7 +18,7 @@ extension SettingsView {
             )
         }
 
-        Section {
+        Section("Filtering") {
             toggleRow(
                 "Filter out drag-and-drop and app-generated clipboard writes",
                 "Skip clipboard writes that were not triggered by an explicit copy action so noisy transient items do not enter history.",

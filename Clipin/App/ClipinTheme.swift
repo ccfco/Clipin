@@ -76,6 +76,13 @@ enum ClipinChrome {
     /// 纯渲染细节，远小于最小网格单位，不挂 edge。
     static let footerHoverRimInset: CGFloat = 2
 
+    /// 设置页 detail 区顶部负补偿：抵消 SwiftUI 已确认 bug（rdar://122947424）——
+    /// NavigationSplitView 的 detail 列把工具栏高度的 safe area 重复传播，凭空多出
+    /// ≈一个工具栏高的顶部空白（详见 developer.apple.com/forums/thread/746611）。
+    /// 补偿框架 bug、非设计间距，故不挂 edge 网格（同 keycap/rimInset 特例）；值≈工具栏高，
+    /// 经验值，随 macOS 版本可能微调——若顶部仍有空隙或内容被压到标题下，调这一个数。
+    static let settingsDetailTopGapFix: CGFloat = 20
+
     /// 设置页唯一显式 Picker 宽度：给 segmented Theme picker 定宽（segmented 无显式 frame
     /// 会撑满整行）。其余 menu picker 交给原生 grouped Form 自动定宽，不再需要宽度 token。
     /// 不挂 edge 网格——Picker 宽度由内部文本决定，不是设计间距。
