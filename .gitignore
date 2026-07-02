@@ -18,6 +18,9 @@ com.apple.DeveloperTools/
 .build/
 build/
 
+# scripts/release.sh 产物（appcast.xml + zip，随 GitHub Release 走，不进 git）
+releases/
+
 # Claude Code local state
 .claude/
 CLAUDE.md
