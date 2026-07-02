@@ -67,7 +67,9 @@ final class UpdateReminderService: ObservableObject {
     private init() {
         currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
         currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
-        currentBuildNumber = Int(currentBuild) ?? 0
+        // build 号正常是纯整数；但曾因 release.sh 前导 0 → YAML 把 build 号解析成浮点，
+        // 出现过 "118.0"。整数解析失败再按浮点截断，容忍这类带小数点的 build 号。
+        currentBuildNumber = Int(currentBuild) ?? Int(Double(currentBuild) ?? 0)
         autoCheckEnabled = defaults.object(forKey: Keys.autoCheckEnabled) as? Bool ?? true
         lastCheckedAt = defaults.object(forKey: Keys.lastCheckedAt) as? Date
         dismissedReminderVersion = defaults.string(forKey: Keys.dismissedReminderVersion)
@@ -360,7 +362,10 @@ private final class AppcastParser: NSObject, XMLParserDelegate {
             current?.version = trimmed
         }
         if elementName == "sparkle:version" {
-            current?.buildNumber = Int(buildNumberText.trimmingCharacters(in: .whitespacesAndNewlines))
+            // 容忍带小数点的 build 号（"118.0"）：先整数、失败再按浮点截断
+            // （见 currentBuildNumber 注释——根因是 release.sh 前导 0 → YAML 浮点）。
+            let bt = buildNumberText.trimmingCharacters(in: .whitespacesAndNewlines)
+            current?.buildNumber = Int(bt) ?? Double(bt).map { Int($0) }
             buildNumberText = ""
         }
         if elementName == "item", let item = current {

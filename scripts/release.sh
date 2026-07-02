@@ -69,8 +69,13 @@ if git rev-parse -q --verify "$TAG" >/dev/null 2>&1; then
 fi
 
 echo "▸ 更新 project.yml 版本号…"
-# 计算 build number：把版本号的点去掉作为整数（0.1.18 → 118）
-BUILD_NUMBER=$(echo "$VERSION" | tr -d '.')
+# 计算 build number：major*10000 + minor*100 + patch（0.1.18 → 118；0.2.0 → 200）。
+# 不能用 `tr -d '.'`：① "0.1.18"→"0118" 带前导 0，YAML 会当非法八进制解析成浮点 118.0，
+# 最终 CFBundleVersion / appcast sparkle:version 都变 "118.0"，客户端 Int("118.0")=nil
+# 检不出更新；② "0.2.0"→"020"→20 会小于 "0.1.18"→118，非单调、跨 minor 升级检不出。
+# 10# 强制十进制，避免 patch 带前导 0（如 08）被当八进制。
+IFS='.' read -r _VMAJ _VMIN _VPAT <<< "$VERSION"
+BUILD_NUMBER=$(( 10#${_VMAJ:-0} * 10000 + 10#${_VMIN:-0} * 100 + 10#${_VPAT:-0} ))
 sed -i '' \
     -e "s/MARKETING_VERSION: \".*\"/MARKETING_VERSION: \"$VERSION\"/" \
     -e "s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: $BUILD_NUMBER/" \
