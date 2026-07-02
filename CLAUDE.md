@@ -1,1 +1,0 @@
-/Users/chenlei/Library/Mobile Documents/iCloud~md~obsidian/Documents/ccfco/Projects/personal/clipin/CLAUDE.md
