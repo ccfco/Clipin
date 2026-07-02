@@ -194,11 +194,13 @@ struct SettingsView: View {
                         }
                     }
                     .formStyle(.grouped)
+                    // 系统设置同款滚动边缘玻璃：内容滚入工具栏区域时渐进模糊（macOS 26
+                    // scroll edge effect，三前提见 AppDelegate+KeyMonitor.openSettingsWindow）。
+                    // 不可叠负 padding 抵消幻影空白——那会把内容硬挪出 safe area，edge effect
+                    // 的“内容进入工具栏区域”检测随之失效（旧 rdar://122947424 hack 已移除，
+                    // 桥接为真 NSToolbar 后该 bug 触发前提本身也消失）。
                 }
             }
-            // 抵消 NavigationSplitView detail 列的幻影顶部空白（SwiftUI bug rdar://122947424）——
-            // 见 ClipinChrome.settingsDetailTopGapFix 注释。负 padding 把内容上移到标题栏正下方。
-            .padding(.top, -ClipinChrome.settingsDetailTopGapFix)
             .navigationTitle(tab.title)
         } else {
             ContentUnavailableView(

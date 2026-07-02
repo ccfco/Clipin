@@ -653,19 +653,21 @@ extension AppDelegate {
             // 材质延伸到窗口最顶端、让红绿灯坐在侧栏材质上（macOS 26 原生结构），并自动把右侧
             // detail 避让到工具栏下方。禁止去掉——去掉会退化成"独立标题栏 + 红绿灯悬空 + 顶部
             // 一条 hairline 分隔线"（旧自绘设置页去掉是因内容会和红绿灯重叠，原生 split view 无此问题）。
-            // 配套：titlebarAppearsTransparent=true 让材质透上来、titlebarSeparatorStyle=.none 去分隔线。
             newWindow.title = NSLocalizedString("Clipin Settings", comment: "")
             // 标题显示在工具栏那条带里（SwiftUI .navigationTitle(tab.title) 会桥到这里），
             // 对齐原生 System Settings——pane 标题**故意出现两次**：工具栏一处（小，配 ←→）+
             // detail 首张介绍卡一处（大，配图标 + 说明）。这不是「双头」冗余，原生「辅助功能」页
             // 就这么做，两处角色不同（工具栏=导航上下文，介绍卡=本页主视觉头部）。见 SettingsView.detailPane。
             newWindow.titleVisibility = .visible
-            newWindow.titlebarAppearsTransparent = true
-            newWindow.titlebarSeparatorStyle = .none
             newWindow.isReleasedWhenClosed = false
-            newWindow.setContentSize(SettingsWindowMetrics.size)
-            newWindow.contentMinSize = SettingsWindowMetrics.minSize
-            newWindow.contentView = NSHostingView(
+            // 滚动边缘玻璃模糊（macOS 26 scroll edge effect，内容滚入工具栏区域时的渐进模糊，
+            // 系统设置详情区同款）三前提缺一不可（Niche 同款结构用独立最小复现工程验证过）：
+            // ① 工具栏必须经 NSHostingController + sceneBridgingOptions 桥成真 NSToolbar，裸
+            // NSHostingView 只在内容里画"假工具栏"，模糊层不出现；② titlebarAppearsTransparent
+            // 必须保持 false（默认）——置 true 会整个关掉该效果，且 false 不会带来不透明色带
+            // （未滚动时标题栏区域本就与 Form 背景融为一体）；③ detail 不能叠负 padding hack
+            // 硬挪内容出 safe area（本文件未用此 hack，天然满足）。
+            let host = NSHostingController(
                 rootView: SettingsView(
                     settings: settings,
                     updateReminder: updateReminder,
@@ -675,6 +677,10 @@ extension AppDelegate {
                     core: appState.core
                 )
             )
+            host.sceneBridgingOptions = [.toolbars, .title]
+            newWindow.contentViewController = host
+            newWindow.setContentSize(SettingsWindowMetrics.size)
+            newWindow.contentMinSize = SettingsWindowMetrics.minSize
             settingsWindow = newWindow
             window = newWindow
             isNew = true

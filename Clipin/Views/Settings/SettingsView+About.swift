@@ -8,7 +8,6 @@ extension SettingsView {
     /// 居中 hero（大图标 + 名字 + 版本 + tagline，无背景 surface）浮在 Form 之上，
     /// 下方才是 grouped 卡片（Updates / Project）。hero 只是 Image + Text 居中排布，
     /// 不画任何背景/卡片/玻璃，满足 CLAUDE.md 无自绘红线。
-    /// 顶部幻影空白（rdar://122947424）由 detailPane 的负补偿统一抵消，见 settingsDetailTopGapFix。
     var aboutPane: some View {
         VStack(spacing: 0) {
             aboutHero
