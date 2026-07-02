@@ -5,18 +5,24 @@ extension SettingsView {
     // MARK: - About Pane
 
     /// About 是「身份页」不是「设置表单」——按 Raycast / 原生 macOS About 的做法：
-    /// 居中 hero（大图标 + 名字 + 版本 + tagline，无背景 surface）浮在 Form 之上，
-    /// 下方才是 grouped 卡片（Updates / Project）。hero 只是 Image + Text 居中排布，
-    /// 不画任何背景/卡片/玻璃，满足 CLAUDE.md 无自绘红线。
+    /// 居中 hero（大图标 + 名字 + 版本 + tagline）+ 下方 grouped 卡片（Updates / Project）。
+    /// hero 曾是浮在 Form 之外、无背景的独立 VStack；改成 Form 内首个 Section 是为了拿到滚动
+    /// 边缘玻璃模糊（macOS 26 scroll edge effect）——排除法验证过：hero 不在 Form 的滚动区域内
+    /// 时，标题栏下会露出一条静态分隔线，且怎么关都关不掉（titlebarSeparatorStyle=.none 无效，
+    /// 另套一层禁用滚动的 ScrollView 仍然无效，还会带出嵌套滚动 bug——两种 hack 都试过，均失败）；
+    /// 唯一可靠的修法是让 hero 本身处于 Form 的同一滚动区域内，代价是随 Section 带一张浅灰卡片
+    /// 背景（Niche「关于」页同款处理）。
     var aboutPane: some View {
-        VStack(spacing: 0) {
-            aboutHero
-            Form { aboutContent }
-                .formStyle(.grouped)
+        Form {
+            Section {
+                aboutHero
+            }
+            aboutContent
         }
+        .formStyle(.grouped)
     }
 
-    /// 居中身份 hero：app 图标 + 名字 + 版本 + 一句 tagline，全部居中、无背景。
+    /// 居中身份 hero：app 图标 + 名字 + 版本 + 一句 tagline，Section 内居中排布。
     private var aboutHero: some View {
         VStack(spacing: ClipinChrome.gap) {
             Image(nsImage: NSApp.applicationIconImage)
