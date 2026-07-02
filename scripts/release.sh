@@ -2,7 +2,8 @@
 # release.sh — Clipin 发版脚本
 #
 # 用法：
-#   ./scripts/release.sh <版本号>     # 例：./scripts/release.sh 0.1.18
+#   ./scripts/release.sh <版本号>                        # 例：./scripts/release.sh 0.1.18
+#   ./scripts/release.sh <版本号> --notes-file notes.md  # 用综合好的 notes（推荐；不传则自动分类初稿）
 #
 # 依赖：
 #   - xcodegen（brew install xcodegen）
@@ -18,10 +19,32 @@
 
 set -euo pipefail
 
-VERSION="${1:-}"
+# 参数：版本号（位置）+ 可选 --notes-file <路径>。传了 notes 文件就用它作为 release notes
+# （推荐：先人工综合好再发），不传则回退到 release-notes.sh 的自动分类初稿。
+VERSION=""
+NOTES_FILE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --notes-file)
+            NOTES_FILE="${2:-}"
+            [ -n "$NOTES_FILE" ] || { echo "✘ --notes-file 需要一个路径参数" >&2; exit 1; }
+            shift 2 ;;
+        --notes-file=*)
+            NOTES_FILE="${1#*=}"
+            [ -n "$NOTES_FILE" ] || { echo "✘ --notes-file 需要一个路径参数" >&2; exit 1; }
+            shift ;;
+        -*)
+            echo "✘ 未知参数：$1" >&2; exit 1 ;;
+        *)
+            VERSION="$1"; shift ;;
+    esac
+done
 if [ -z "$VERSION" ]; then
-    echo "用法：$0 <版本号>  （例：$0 0.1.18）" >&2
+    echo "用法：$0 <版本号> [--notes-file notes.md]  （例：$0 0.1.18）" >&2
     exit 1
+fi
+if [ -n "$NOTES_FILE" ] && [ ! -f "$NOTES_FILE" ]; then
+    echo "✘ notes 文件不存在：$NOTES_FILE" >&2; exit 1
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -105,11 +128,18 @@ git push
 git push origin "$TAG"
 
 echo "▸ 创建 GitHub Release 并上传资产…"
-NOTES=$(./scripts/release-notes.sh 2>/dev/null || echo "")
-gh release create "$TAG" \
-    "$ZIP_PATH" \
-    --title "Clipin $TAG" \
-    --notes "$NOTES"
+if [ -n "$NOTES_FILE" ]; then
+    gh release create "$TAG" \
+        "$ZIP_PATH" \
+        --title "Clipin $TAG" \
+        --notes-file "$NOTES_FILE"
+else
+    NOTES=$(./scripts/release-notes.sh 2>/dev/null || echo "")
+    gh release create "$TAG" \
+        "$ZIP_PATH" \
+        --title "Clipin $TAG" \
+        --notes "$NOTES"
+fi
 
 echo "▸ 验证 release 资产可下载（appcast 即将指向的下载 URL）…"
 # curl HEAD 对 GitHub Releases 不可靠(不保证与 GET 行为一致,也不保证上传后立即全局可见)。
