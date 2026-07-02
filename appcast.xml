@@ -1,12 +1,14 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
     <channel>
         <title>Clipin</title>
-        <description>Clipin update feed</description>
-        <language>en</language>
-        <!--
-            由 scripts/release.sh 自动维护。
-            每次发版：脚本构建 zip → generate_appcast 签名 → 更新本文件 → commit → push。
-        -->
+        <item>
+            <title>0.1.18</title>
+            <pubDate>Thu, 02 Jul 2026 13:50:03 +0800</pubDate>
+            <sparkle:version>118.0</sparkle:version>
+            <sparkle:shortVersionString>0.1.18</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.18/Clipin-0.1.18.zip" length="5614408" type="application/octet-stream" sparkle:edSignature="ZygC4DwBvOY2VHpRT+TnJF0eEk9vieE7mKx3c0wap01oPyVBRpHL6syoeSudnJdBCNw1n4s8qxwnjSemxfoYCw=="/>
+        </item>
     </channel>
 </rss>
