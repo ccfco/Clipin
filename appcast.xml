@@ -5,7 +5,7 @@
         <item>
             <title>0.1.18</title>
             <pubDate>Thu, 02 Jul 2026 13:50:03 +0800</pubDate>
-            <sparkle:version>118.0</sparkle:version>
+            <sparkle:version>118</sparkle:version>
             <sparkle:shortVersionString>0.1.18</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.18/Clipin-0.1.18.zip" length="5614408" type="application/octet-stream" sparkle:edSignature="ZygC4DwBvOY2VHpRT+TnJF0eEk9vieE7mKx3c0wap01oPyVBRpHL6syoeSudnJdBCNw1n4s8qxwnjSemxfoYCw=="/>
