@@ -659,6 +659,12 @@ extension AppDelegate {
             // detail 首张介绍卡一处（大，配图标 + 说明）。这不是「双头」冗余，原生「辅助功能」页
             // 就这么做，两处角色不同（工具栏=导航上下文，介绍卡=本页主视觉头部）。见 SettingsView.detailPane。
             newWindow.titleVisibility = .visible
+            // 只有 Clipin 需要显式去分隔线：About 页 hero（aboutHero）浮在 Form 之外、不参与
+            // 滚动，直接贴在标题栏下方，若不去分隔线会露出一条静态 hairline（Niche 的「关于」
+            // 页把身份卡塞进同一个 Form 的 Section 里，天然在滚动区域内，没有这个问题，不需要
+            // 此设置）。已用最小复现工程验证：单独去分隔线（保持 titlebarAppearsTransparent
+            // 默认 false）不影响 scroll edge effect 生效。
+            newWindow.titlebarSeparatorStyle = .none
             newWindow.isReleasedWhenClosed = false
             // 滚动边缘玻璃模糊（macOS 26 scroll edge effect，内容滚入工具栏区域时的渐进模糊，
             // 系统设置详情区同款）三前提缺一不可（Niche 同款结构用独立最小复现工程验证过）：
