@@ -19,9 +19,10 @@ pkill -x Clipin 2>/dev/null && sleep 1 || true
 echo "Building..."
 xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release build -quiet
 
-# 找到构建产物
+# 找到构建产物。用 sed 取 ` = ` 之后的整行（保留含空格的路径），
+# awk '{print $3}' 遇空格路径会截断——release.sh 同款写法，两处必须保持一致。
 BUILT_APP=$(xcodebuild -project Clipin.xcodeproj -scheme Clipin -configuration Release \
-    -showBuildSettings 2>/dev/null | grep -m1 "BUILT_PRODUCTS_DIR" | awk '{print $3}')/Clipin.app
+    -showBuildSettings 2>/dev/null | grep -m1 " BUILT_PRODUCTS_DIR = " | sed 's/.* = //')/Clipin.app
 
 if [ ! -d "$BUILT_APP" ]; then
     echo "Build product not found."
