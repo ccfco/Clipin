@@ -68,7 +68,7 @@ if git rev-parse -q --verify "$TAG" >/dev/null 2>&1; then
     echo "✘ tag $TAG 已存在,如需重发请先 git tag -d $TAG" >&2; exit 1
 fi
 
-echo "▸ 更新 project.yml 版本号…"
+echo "▸ 更新 project.yml + rust/Cargo.toml 版本号…"
 # 计算 build number：major*10000 + minor*100 + patch（0.1.18 → 118；0.2.0 → 200）。
 # 不能用 `tr -d '.'`：① "0.1.18"→"0118" 带前导 0，YAML 会当非法八进制解析成浮点 118.0，
 # 最终 CFBundleVersion / appcast sparkle:version 都变 "118.0"，客户端 Int("118.0")=nil
@@ -80,6 +80,10 @@ sed -i '' \
     -e "s/MARKETING_VERSION: \".*\"/MARKETING_VERSION: \"$VERSION\"/" \
     -e "s/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: $BUILD_NUMBER/" \
     project.yml
+# Cargo.toml 版本必须同步（崩溃日志里 crate 版本与 app 版本对齐），只改 [package]
+# 区第一处 version，避免误伤依赖表里的 version 字段。Cargo.lock 由下面的构建步骤
+# （build-rust.sh → cargo build）自动刷新，无需手动 sed。
+sed -i '' "1,/^version = /s/^version = \".*\"/version = \"$VERSION\"/" rust/Cargo.toml
 
 echo "▸ 生成 Xcode 项目…"
 xcodegen generate --quiet
@@ -121,11 +125,11 @@ cp "$RELEASES_DIR/appcast.xml" "$PROJECT_ROOT/appcast.xml"
 # 任一前置步骤失败时，appcast 仍是旧的（指向旧版本），客户端无害——不会 404。
 
 echo "▸ 提交版本号 + 打 tag…"
-git add project.yml
+git add project.yml rust/Cargo.toml rust/Cargo.lock
 git commit -m "chore: 发布 $TAG
 
 【根因/背景】版本迭代
-【改动范围】project.yml 版本号 → $VERSION"
+【改动范围】project.yml + rust/Cargo.toml(+lock) 版本号 → $VERSION"
 git tag "$TAG"
 
 echo "▸ 推送代码 + tag…"
