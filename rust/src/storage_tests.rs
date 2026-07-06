@@ -645,7 +645,7 @@ fn test_search_source_name_short_query_like_fallback() {
     // source_name 匹配的长短查询语义必须一致:FTS(≥3字)搜四列
     // (content/source_name/ocr_text/alias),LIKE(≤2字)回退分支曾漏 source_name,
     // 导致"微信"这类 2 字来源 App 名静默无结果而 3 字却能命中。
-    let (tmp, storage) = new_storage_for_search();
+    let (_tmp, storage) = new_storage_for_search();
     let item = storage
         .save_item("完全不相关的内容", &ClipType::Text, Some("com.tencent.xinWeChat"), Some("微信"), None)
         .unwrap();
@@ -666,6 +666,4 @@ fn test_search_source_name_short_query_like_fallback() {
     assert!(filtered.iter().any(|h| h.id == item.id), "LIKE type_filter 分支应按 source_name 命中");
     let filtered_list = storage.search_list_items("微信", Some(&ClipType::Text)).unwrap();
     assert!(filtered_list.iter().any(|l| l.id == item.id), "LIKE list type_filter 分支应按 source_name 命中");
-
-    drop(tmp);
 }

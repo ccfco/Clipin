@@ -78,13 +78,17 @@ impl Storage {
         self.conn.lock().expect("storage connection mutex poisoned")
     }
 
+    /// 可搜索文本列的唯一真相源：FTS 查询（≥3 字）与 LIKE 回退（≤2 字）都从这里
+    /// 派生，保证两条路径匹配语义一致。加搜索列只改这一处（FTS 表结构/触发器
+    /// 与 migration 仍需单独同步）。曾因 LIKE 分支手写 4 份列清单漂移漏掉
+    /// source_name，收口后此类漂移结构性消除。
+    const SEARCHABLE_TEXT_COLS: &'static [&'static str] =
+        &["content", "source_name", "ocr_text", "alias"];
+
     fn build_search_query(query: &str) -> SearchQuery {
         let raw = query.trim().to_string();
         SearchQuery {
-            raw_fts: Self::build_fts5_query_for_columns(
-                &raw,
-                &["content", "source_name", "ocr_text", "alias"],
-            ),
+            raw_fts: Self::build_fts5_query_for_columns(&raw, Self::SEARCHABLE_TEXT_COLS),
             raw_like: Self::escape_like_pattern(&raw),
             normalized_pinyin: Self::normalize_pinyin_query(&raw),
             raw,
@@ -1188,6 +1192,16 @@ impl Storage {
         format!("\"{}\"", query.replace('"', "\"\""))
     }
 
+    /// LIKE 回退分支的 WHERE 片段，列清单来自 SEARCHABLE_TEXT_COLS。
+    /// ?1 由调用点绑定 raw_like（escape_like_pattern 已转义 % _ \）。
+    fn like_where_clause() -> String {
+        Self::SEARCHABLE_TEXT_COLS
+            .iter()
+            .map(|column| format!("{column} LIKE ?1 ESCAPE '\\'"))
+            .collect::<Vec<_>>()
+            .join(" OR ")
+    }
+
     fn build_fts5_query_for_columns(query: &str, columns: &[&str]) -> String {
         let phrase = Self::escape_fts5_phrase(query);
         columns
@@ -1314,11 +1328,12 @@ impl Storage {
             }
         } else {
             let cols = Self::item_cols("");
+            let like_where = Self::like_where_clause();
             let sql = if type_filter.is_some() {
                 format!(
                     "SELECT {cols}
                      FROM clip_items
-                     WHERE (content LIKE ?1 ESCAPE '\\' OR source_name LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
+                     WHERE ({like_where})
                        AND clip_type = ?2
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200"
@@ -1327,7 +1342,7 @@ impl Storage {
                 format!(
                     "SELECT {cols}
                      FROM clip_items
-                     WHERE content LIKE ?1 ESCAPE '\\' OR source_name LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
+                     WHERE {like_where}
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200"
                 )
@@ -1476,11 +1491,12 @@ impl Storage {
             }
         } else {
             let cols = Self::list_item_cols("");
+            let like_where = Self::like_where_clause();
             let sql = if type_filter.is_some() {
                 format!(
                     "SELECT {cols}
                      FROM clip_items
-                     WHERE (content LIKE ?1 ESCAPE '\\' OR source_name LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
+                     WHERE ({like_where})
                        AND clip_type = ?2
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200"
@@ -1489,7 +1505,7 @@ impl Storage {
                 format!(
                     "SELECT {cols}
                      FROM clip_items
-                     WHERE content LIKE ?1 ESCAPE '\\' OR source_name LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
+                     WHERE {like_where}
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200"
                 )
