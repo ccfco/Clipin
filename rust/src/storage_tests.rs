@@ -639,3 +639,33 @@ fn test_search_type_filter_narrows_results() {
     let all = storage.search("term", None).unwrap();
     assert!(all.len() >= only_text.len(), "无过滤应 ≥ 有过滤");
 }
+
+#[test]
+fn test_search_source_name_short_query_like_fallback() {
+    // source_name 匹配的长短查询语义必须一致:FTS(≥3字)搜四列
+    // (content/source_name/ocr_text/alias),LIKE(≤2字)回退分支曾漏 source_name,
+    // 导致"微信"这类 2 字来源 App 名静默无结果而 3 字却能命中。
+    let (tmp, storage) = new_storage_for_search();
+    let item = storage
+        .save_item("完全不相关的内容", &ClipType::Text, Some("com.tencent.xinWeChat"), Some("微信"), None)
+        .unwrap();
+    let ctrl = storage
+        .save_item("另一条不相关内容", &ClipType::Text, Some("com.tencent.WeWork"), Some("WeChat"), None)
+        .unwrap();
+
+    // FTS 路径(≥3 字)按 source_name 命中——既有语义,作对照
+    let fts_hits = storage.search("WeChat", None).unwrap();
+    assert!(fts_hits.iter().any(|h| h.id == ctrl.id), "FTS 路径应按 source_name 命中");
+
+    // LIKE 路径(2 字)必须同样按 source_name 命中:item / list / type_filter 三分支
+    let hits = storage.search("微信", None).unwrap();
+    assert!(hits.iter().any(|h| h.id == item.id), "LIKE 无过滤分支应按 source_name 命中");
+    let list = storage.search_list_items("微信", None).unwrap();
+    assert!(list.iter().any(|l| l.id == item.id), "LIKE list 分支应按 source_name 命中");
+    let filtered = storage.search("微信", Some(&ClipType::Text)).unwrap();
+    assert!(filtered.iter().any(|h| h.id == item.id), "LIKE type_filter 分支应按 source_name 命中");
+    let filtered_list = storage.search_list_items("微信", Some(&ClipType::Text)).unwrap();
+    assert!(filtered_list.iter().any(|l| l.id == item.id), "LIKE list type_filter 分支应按 source_name 命中");
+
+    drop(tmp);
+}

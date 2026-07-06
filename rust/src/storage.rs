@@ -1318,7 +1318,7 @@ impl Storage {
                 format!(
                     "SELECT {cols}
                      FROM clip_items
-                     WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
+                     WHERE (content LIKE ?1 ESCAPE '\\' OR source_name LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200"
@@ -1327,7 +1327,7 @@ impl Storage {
                 format!(
                     "SELECT {cols}
                      FROM clip_items
-                     WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
+                     WHERE content LIKE ?1 ESCAPE '\\' OR source_name LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200"
                 )
@@ -1480,7 +1480,7 @@ impl Storage {
                 format!(
                     "SELECT {cols}
                      FROM clip_items
-                     WHERE (content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
+                     WHERE (content LIKE ?1 ESCAPE '\\' OR source_name LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\')
                        AND clip_type = ?2
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200"
@@ -1489,7 +1489,7 @@ impl Storage {
                 format!(
                     "SELECT {cols}
                      FROM clip_items
-                     WHERE content LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
+                     WHERE content LIKE ?1 ESCAPE '\\' OR source_name LIKE ?1 ESCAPE '\\' OR ocr_text LIKE ?1 ESCAPE '\\' OR alias LIKE ?1 ESCAPE '\\'
                      ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
                      LIMIT 200"
                 )
