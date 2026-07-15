@@ -250,14 +250,20 @@ extension AppDelegate {
 
     func runCleanupAndReload(selectLatest: Bool = false) {
         let cleanup = cleanupService
-        viewModel?.loadItems(selectLatest: selectLatest)
+        // 面板隐藏时禁止刷新列表：showPanel → prepareForLauncherPresentation 每次都会全量
+        // loadItems，隐藏期的刷新是纯浪费；更关键的是它会在不可见的 LazyVStack 上反复跑
+        // 带动画的 diff + 选中跳转 + scrollTo（每次系统级复制一次），动画事务在隐藏窗口上
+        // 无法正常走完，长期积累会把旧行视图孤儿化——表现为"多行同时带选中态残留、重启才消失"。
+        if panel?.isVisible == true {
+            viewModel?.loadItems(selectLatest: selectLatest)
+        }
         Task { @MainActor [weak self] in
             // 自动清理失败需要 log（旧实现 try? 直接吞错），历史膨胀/文件删除失败
             // 长期隐藏的根因都丢了。这里不向用户 toast（自动清理是后台行为），
             // 用户主动清理由 SettingsView 入口自带 notice 路径。
             do {
                 let result = try await cleanup.runNow()
-                if result.totalRemoved > 0 {
+                if result.totalRemoved > 0, self?.panel?.isVisible == true {
                     self?.viewModel?.loadItems()
                 }
             } catch {

@@ -377,7 +377,11 @@ final class ClipboardViewModel: ObservableObject {
             hasMore = false
             return
         }
-        items.append(contentsOf: page.items)
+        // 按 id 去重后再追加：两次翻页之间 DB 可能被改写（粘贴 touchItem 改 created_at、
+        // 新复制插入等），offset 语义随之错位，下一页可能与已加载区间重叠。重复 id 一旦
+        // 进入 ForEach 就是未定义渲染（旧行视图滞留、选中态残留），必须在数据层挡住。
+        let loadedIDs = Set(items.map(\.id))
+        items.append(contentsOf: page.items.filter { !loadedIDs.contains($0.id) })
         totalLoadedFromDB += page.rawCount
         hasMore = page.hasMore
         rebuildSections()

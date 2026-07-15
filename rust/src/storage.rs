@@ -1007,7 +1007,7 @@ impl Storage {
             let filter_val = t.as_str().to_string();
             let sql = format!(
                 "SELECT {} FROM clip_items WHERE clip_type = ?1
-                 ORDER BY is_pinned DESC, created_at DESC
+                 ORDER BY is_pinned DESC, created_at DESC, id DESC
                  LIMIT ?2 OFFSET ?3",
                 Self::item_cols("")
             );
@@ -1017,7 +1017,7 @@ impl Storage {
         } else {
             let sql = format!(
                 "SELECT {} FROM clip_items
-                 ORDER BY is_pinned DESC, created_at DESC
+                 ORDER BY is_pinned DESC, created_at DESC, id DESC
                  LIMIT ?1 OFFSET ?2",
                 Self::item_cols("")
             );
@@ -1131,7 +1131,7 @@ impl Storage {
                     "SELECT {cols}
                      FROM clip_items
                      WHERE clip_type = ?1 AND is_pinned = ?2
-                     ORDER BY is_pinned DESC, created_at DESC
+                     ORDER BY is_pinned DESC, created_at DESC, id DESC
                      LIMIT ?3 OFFSET ?4",
                     cols = Self::list_item_cols("")
                 );
@@ -1148,7 +1148,7 @@ impl Storage {
                     "SELECT {cols}
                      FROM clip_items
                      WHERE clip_type = ?1
-                     ORDER BY is_pinned DESC, created_at DESC
+                     ORDER BY is_pinned DESC, created_at DESC, id DESC
                      LIMIT ?2 OFFSET ?3",
                     cols = Self::list_item_cols("")
                 );
@@ -1163,7 +1163,7 @@ impl Storage {
                     "SELECT {cols}
                      FROM clip_items
                      WHERE is_pinned = ?1
-                     ORDER BY is_pinned DESC, created_at DESC
+                     ORDER BY is_pinned DESC, created_at DESC, id DESC
                      LIMIT ?2 OFFSET ?3",
                     cols = Self::list_item_cols("")
                 );
@@ -1176,7 +1176,7 @@ impl Storage {
                 let sql = format!(
                     "SELECT {cols}
                      FROM clip_items
-                     ORDER BY is_pinned DESC, created_at DESC
+                     ORDER BY is_pinned DESC, created_at DESC, id DESC
                      LIMIT ?1 OFFSET ?2",
                     cols = Self::list_item_cols("")
                 );

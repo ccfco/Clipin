@@ -667,3 +667,69 @@ fn test_search_source_name_short_query_like_fallback() {
     let filtered_list = storage.search_list_items("微信", Some(&ClipType::Text)).unwrap();
     assert!(filtered_list.iter().any(|l| l.id == item.id), "LIKE list type_filter 分支应按 source_name 命中");
 }
+
+#[test]
+fn test_list_pagination_stable_with_equal_created_at() {
+    // 分页 ORDER BY 必须带 id tiebreaker:created_at 相同(备份导入整批同 ms 很常见)时
+    // SQLite 对同值行的顺序无保证,跨页两次独立查询可能重叠/漏项——重复 id 一旦进
+    // SwiftUI ForEach 就是未定义渲染(旧行视图滞留成"选中态残留")。
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+    let same_ts = 1_700_000_000_000_i64;
+    for i in 0..20 {
+        storage
+            .import_item(
+                &format!("同时间戳条目 {i}"),
+                &ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                same_ts,
+                None,
+            )
+            .unwrap();
+    }
+
+    // 以 3 条一页翻完全部,每页是独立查询——校验拼起来无重复且全覆盖
+    let mut seen = std::collections::HashSet::new();
+    let mut offset = 0;
+    loop {
+        let page = storage.get_list_items(3, offset, None).unwrap();
+        if page.is_empty() {
+            break;
+        }
+        for item in &page {
+            assert!(
+                seen.insert(item.id.clone()),
+                "跨页出现重复 id:{}(offset={offset})",
+                item.id
+            );
+        }
+        offset += page.len() as i32;
+    }
+    assert_eq!(seen.len(), 20, "翻页拼接应覆盖全部 20 条,无漏项");
+
+    // 完整 item 分页路径(get_items)同一排序语义,同样校验
+    let mut seen_items = std::collections::HashSet::new();
+    let mut offset = 0;
+    loop {
+        let page = storage.get_items(3, offset, None).unwrap();
+        if page.is_empty() {
+            break;
+        }
+        for item in &page {
+            assert!(
+                seen_items.insert(item.id.clone()),
+                "get_items 跨页出现重复 id:{}(offset={offset})",
+                item.id
+            );
+        }
+        offset += page.len() as i32;
+    }
+    assert_eq!(seen_items.len(), 20, "get_items 翻页应覆盖全部 20 条");
+}

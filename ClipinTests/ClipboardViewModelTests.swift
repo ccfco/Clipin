@@ -193,6 +193,48 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.hasMore)
     }
 
+    func testLoadMoreDeduplicatesWhenDBShiftedBetweenPages() throws {
+        // 翻页间隙 DB 被改写(新复制插入顶部/粘贴 touch 改 created_at)会让 OFFSET 语义错位,
+        // 下一页与已加载区间重叠。重复 id 一旦进 SwiftUI ForEach 就是未定义渲染
+        // (旧行视图滞留成"选中态残留"),loadMoreItems 必须按已有 id 去重。
+        let core = try makeCore()
+        for index in 0..<60 {
+            _ = try core.importItem(
+                content: "item-\(index)",
+                clipType: .text,
+                sourceApp: nil,
+                sourceName: nil,
+                imagePath: nil,
+                isPinned: false,
+                createdAt: Int64(1_000 + index),
+                alias: nil
+            )
+        }
+
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.loadItems(selectLatest: true)
+        XCTAssertEqual(visibleIDs(in: viewModel).count, 50)
+        XCTAssertTrue(viewModel.hasMore)
+
+        // 模拟翻页间隙的新复制:插入 1 条最新条目,所有旧条目 offset 后移 1,
+        // 下一页(offset=50)的第一条就是已加载的旧第 50 条——制造确定性重叠。
+        _ = try core.importItem(
+            content: "new-arrival",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 9_000,
+            alias: nil
+        )
+
+        viewModel.loadMoreItems()
+
+        let ids = visibleIDs(in: viewModel)
+        XCTAssertEqual(Set(ids).count, ids.count, "翻页拼接后不允许出现重复 id")
+    }
+
     func testLauncherLoadingTracksCurrentPreviewNetworkRequest() async throws {
         let viewModel = ClipboardViewModel(core: try makeCore())
 
@@ -249,5 +291,9 @@ final class ClipboardViewModelTests: XCTestCase {
 
     private func visibleContents(in viewModel: ClipboardViewModel) -> [String] {
         viewModel.sections.flatMap(\.items).map(\.preview)
+    }
+
+    private func visibleIDs(in viewModel: ClipboardViewModel) -> [String] {
+        viewModel.sections.flatMap(\.items).map(\.id)
     }
 }
