@@ -226,6 +226,11 @@ final class ClipboardViewModel: ObservableObject {
     private lazy var loadingCoordinator = LauncherLoadingCoordinator(minimumVisibleSeconds: 0.65) { [weak self] visible in
         self?.isLauncherLoading = visible
     }
+    /// launcher 面板当前是否处于呈现状态（showPanel→true / hidePanel→false）。
+    /// loadItems / reloadSelectedItemPayload 的隐藏门禁靠它判定——面板 NSPanel 常驻不销毁，
+    /// 隐藏期驱动不可见视图树 diff 会孤儿化行视图。默认 true：单测与无 AppDelegate 的
+    /// 场景不经过 show/hide 生命周期，不应被门禁挡住。
+    var isLauncherPresented = true
     /// 7s 可撤销删除状态机。删库副作用由 commitDeletion 注入。
     private let pendingDeletionController = PendingDeletionController(window: .seconds(7))
     /// 分页取数 + pinned 展示策略过滤。持 core+settings,init 内构造。
@@ -308,6 +313,13 @@ final class ClipboardViewModel: ObservableObject {
     /// 重新加载列表。所有调用方都希望同步关掉打开中的动作面板（避免用户正在选命令时
     /// 列表脚下变化）。OCR 这类「不需要关 palette」的静默刷新已改走 reloadSelectedItemPayload。
     func loadItems(selectLatest: Bool = false) {
+        // 面板隐藏时禁止刷新：主面板 NSPanel 常驻（hidePanel 只 orderOut，视图树终生
+        // 不销毁），隐藏期在不可见 LazyVStack 上跑带动画的 diff + 选中跳转 + scrollTo，
+        // 动画事务无法正常走完，长期积累会把旧行视图孤儿化（多行选中态残留、重启才消失）。
+        // showPanel → prepareForLauncherPresentation 每次都全量刷新，隐藏期刷新无功能价值。
+        // 门禁收口在此单一入口——新复制、设置变更、7s 删除定时器到点等所有路径统一覆盖，
+        // 不靠调用方逐处加 guard。
+        guard isLauncherPresented else { return }
         if isShowingActions {
             hideActionsPalette()
         }
@@ -393,7 +405,10 @@ final class ClipboardViewModel: ObservableObject {
     /// 专用于 OCR 完成这类「内容字段更新但选中不变」的通知：让 PreviewPane 拿到新的 ocrText，
     /// 而不打断列表 / 重建 sections / 闪 ProgressView。
     private func reloadSelectedItemPayload() {
-        guard let id = selectedItemID,
+        // 同 loadItems 的隐藏门禁：OCR backfill 与面板可见性无关地持续跑，
+        // 隐藏期无需驱动不可见 PreviewPane 重渲染；下次显示时选中刷新自然拉到最新。
+        guard isLauncherPresented,
+              let id = selectedItemID,
               selectedItem?.id == id else { return }
         let core = self.core
         reloadPayloadTask?.cancel()
@@ -897,6 +912,9 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func prepareForLauncherPresentation(targetApp: NSRunningApplication?, selectLatest: Bool) {
+        // 先解除隐藏门禁再 loadItems：showPanel 调用本方法时 panel.isVisible 还是 false，
+        // 门禁不能依赖 NSPanel 状态，必须由 show/hide 生命周期显式驱动。
+        isLauncherPresented = true
         skipNextDebouncedLoad = true
         sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
         searchQuery = ""

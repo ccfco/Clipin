@@ -133,9 +133,7 @@ extension AppDelegate {
         NotificationCenter.default.publisher(for: .clipHistoryDidChange)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                // 面板隐藏时跳过（同 runCleanupAndReload）：下次 showPanel 必然全量 loadItems，
-                // 隐藏窗口上的动画 diff 是行视图孤儿化（选中态残留）的温床。
-                guard self?.panel?.isVisible == true else { return }
+                // 面板隐藏时由 loadItems 内部 isLauncherPresented 门禁统一跳过。
                 self?.viewModel?.loadItems()
             }
             .store(in: &cancellables)

@@ -126,18 +126,24 @@ extension AppDelegate {
                 }
                 if pending.isEmpty { break }
 
+                // 本轮成功写回计数：updateOcrText 持续失败（磁盘满/DB 只读等）时，
+                // getUnprocessedImages 会反复返回同一批（ocr_text 仍为 NULL）——
+                // 整页零成功必须退出循环，否则会对同批图片无限重跑 Vision OCR。
+                // 下次启动自然重试（与 query 失败的退出语义一致）。
+                var writtenThisPage = 0
+
                 for item in pending {
                     guard !Task.isCancelled else { break }
 
                     guard let path = item.imagePath else {
                         // updateOcrText 失败仅意味着这次没标记完成，下次启动会再扫到——
                         // 这里 log 后继续即可，不阻断 backfill。
-                        do { try core.updateOcrText(id: item.id, ocrText: "") }
+                        do { try core.updateOcrText(id: item.id, ocrText: ""); writtenThisPage += 1 }
                         catch { ClipinLog.ocr.error("OCR backfill mark-empty failed id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
                         continue
                     }
                     guard FileManager.default.fileExists(atPath: path) else {
-                        do { try core.updateOcrText(id: item.id, ocrText: "") }
+                        do { try core.updateOcrText(id: item.id, ocrText: ""); writtenThisPage += 1 }
                         catch { ClipinLog.ocr.error("OCR backfill mark-empty failed id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)") }
                         continue
                     }
@@ -149,9 +155,15 @@ extension AppDelegate {
                             NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
                         }
                         totalProcessed += 1
+                        writtenThisPage += 1
                     } catch {
                         ClipinLog.ocr.error("OCR backfill write error id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                     }
+                }
+
+                if writtenThisPage == 0 {
+                    ClipinLog.ocr.error("OCR backfill made no progress on a full page, aborting this session")
+                    break
                 }
             }
 
@@ -250,20 +262,16 @@ extension AppDelegate {
 
     func runCleanupAndReload(selectLatest: Bool = false) {
         let cleanup = cleanupService
-        // 面板隐藏时禁止刷新列表：showPanel → prepareForLauncherPresentation 每次都会全量
-        // loadItems，隐藏期的刷新是纯浪费；更关键的是它会在不可见的 LazyVStack 上反复跑
-        // 带动画的 diff + 选中跳转 + scrollTo（每次系统级复制一次），动画事务在隐藏窗口上
-        // 无法正常走完，长期积累会把旧行视图孤儿化——表现为"多行同时带选中态残留、重启才消失"。
-        if panel?.isVisible == true {
-            viewModel?.loadItems(selectLatest: selectLatest)
-        }
+        // 面板隐藏时的刷新由 loadItems 内部的 isLauncherPresented 门禁统一跳过
+        //（单一真相源，不在调用方逐处判断 panel.isVisible）。
+        viewModel?.loadItems(selectLatest: selectLatest)
         Task { @MainActor [weak self] in
             // 自动清理失败需要 log（旧实现 try? 直接吞错），历史膨胀/文件删除失败
             // 长期隐藏的根因都丢了。这里不向用户 toast（自动清理是后台行为），
             // 用户主动清理由 SettingsView 入口自带 notice 路径。
             do {
                 let result = try await cleanup.runNow()
-                if result.totalRemoved > 0, self?.panel?.isVisible == true {
+                if result.totalRemoved > 0 {
                     self?.viewModel?.loadItems()
                 }
             } catch {

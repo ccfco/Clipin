@@ -971,6 +971,9 @@ impl Storage {
         )?;
         Self::insert_representations_in_tx(&tx, &id, representations)?;
         tx.commit()?;
+        // commit 后必须先释放连接锁再删文件：fs::remove_file 是磁盘 I/O，
+        // 持锁期间主线程的 getListItems/search 全部排队，批量场景会卡 UI。
+        drop(conn);
         Self::remove_image_files(old_image_paths, image_path);
 
         Ok(ClipItem {
@@ -1834,6 +1837,7 @@ impl Storage {
             return Err(ClipinError::NotFound { id: id.to_string() });
         }
         tx.commit()?;
+        drop(conn); // 释放锁再删文件（同 save 路径，避免文件 I/O 持锁阻塞查询）
         Self::remove_image_files(image_paths, None);
         Ok(())
     }
@@ -1895,6 +1899,7 @@ impl Storage {
             ],
         )?;
         tx.commit()?;
+        drop(conn); // 释放锁再删文件（同 save 路径）
         Self::remove_image_files(old_image_paths, image_path);
 
         Ok(ClipItem {
@@ -1955,6 +1960,7 @@ impl Storage {
                             "UPDATE clip_items SET image_path = ?1 WHERE id = ?2",
                             params![restored_path, existing_id],
                         )?;
+                        drop(conn); // 释放锁再删文件（同 save 路径）
                         Self::remove_image_files(old_image_paths, Some(restored_path));
                         return Ok(true);
                     }
@@ -2041,6 +2047,7 @@ impl Storage {
             params![timestamp],
         )?;
         tx.commit()?;
+        drop(conn); // 批量清理可删成百上千 PNG，必须先释放锁（同 save 路径）
         if affected > 0 {
             Self::remove_image_files(image_paths, None);
         }
@@ -2069,6 +2076,7 @@ impl Storage {
             params![keep_latest],
         )?;
         tx.commit()?;
+        drop(conn); // 批量清理可删成百上千 PNG，必须先释放锁（同 save 路径）
         if affected > 0 {
             Self::remove_image_files(image_paths, None);
         }

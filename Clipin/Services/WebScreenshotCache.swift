@@ -37,7 +37,9 @@ final class WebScreenshotCache {
     private var failed: Set<String> = []
     private var failedOrder: [String] = []
     private let maxFailed = 200
-    private var hasPrunedDisk = false
+    /// 上次磁盘过期清理时间（同 FaviconCache：常驻进程按间隔重扫，不做「每进程一次」）。
+    private var lastDiskPrune: Date?
+    private static let diskPruneInterval: TimeInterval = 24 * 3600
 
     /// 渲染视口 16:9 宽图，贴近预览 hero 的横向构图；截到的是页面顶部首屏。
     private nonisolated static let viewportSize = CGSize(width: 1200, height: 675)
@@ -66,8 +68,8 @@ final class WebScreenshotCache {
     /// 取 urlString 的页面截图：内存 → 磁盘 → 实时渲染，三级穿透。
     /// 返回 nil 表示渲染失败/超时/被取消——调用方退化到无图布局。
     func screenshot(for urlString: String) async -> NSImage? {
-        if !hasPrunedDisk {
-            hasPrunedDisk = true
+        if lastDiskPrune.map({ Date().timeIntervalSince($0) > Self.diskPruneInterval }) ?? true {
+            lastDiskPrune = Date()
             Self.disk.pruneExpired()
         }
         if failed.contains(urlString) { return nil }

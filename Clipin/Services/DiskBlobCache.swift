@@ -63,7 +63,8 @@ struct DiskBlobCache: Sendable {
         }
     }
 
-    /// 删除目录内所有超 TTL 的文件。每 session 跑一次（「是否已跑」标志由调用方持有）。
+    /// 删除目录内所有超 TTL 的文件。按间隔周期性跑（「上次清理时间」由调用方持有——
+    /// app 是常驻进程可数周不重启，「每进程一次」会漏掉首扫后新写入的过期文件）。
     func pruneExpired() {
         let dir = dir
         let ttl = ttl

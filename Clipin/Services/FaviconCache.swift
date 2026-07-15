@@ -46,8 +46,10 @@ actor FaviconCache {
         nameFor: { diskName(for: $0) }
     )
 
-    /// 本进程是否已跑过磁盘过期清理。每个 session 跑一次足够，避免每次 icon 调用都遍历目录。
-    private var hasPrunedDisk = false
+    /// 上次磁盘过期清理时间。app 是常驻进程可数周不重启，「每进程一次」会让首扫之后
+    /// 新写入的过期文件一直留到下次重启；改为超过间隔就重扫（仍避免每次 icon 调用都遍历目录）。
+    private var lastDiskPrune: Date?
+    private static let diskPruneInterval: TimeInterval = 24 * 3600
 
     /// favicon 图片下载大小上限 5MB：正常 favicon < 1MB（GitHub 512×512 PNG 约 50KB），
     /// 5MB 足够覆盖极端高分辨率 icon，又能挡住恶意服务器返回的 GB 级"图片炸弹"。
@@ -90,8 +92,8 @@ actor FaviconCache {
         // 进程内首次 icon 调用时启动一次磁盘过期清理（detached 后台跑，不阻塞当前请求）。
         // 旧实现 readDisk 命中 TTL 外只是返回 nil 重新下载，**旧文件本身从不删除**——
         // 长期使用 favicon 目录会随访问过的不同站点无界增长。
-        if !hasPrunedDisk {
-            hasPrunedDisk = true
+        if lastDiskPrune.map({ Date().timeIntervalSince($0) > Self.diskPruneInterval }) ?? true {
+            lastDiskPrune = Date()
             Self.disk.pruneExpired()
         }
         guard let origin = Self.origin(of: url) else { return nil }

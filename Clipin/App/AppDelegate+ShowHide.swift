@@ -81,6 +81,9 @@ extension AppDelegate {
 
     func hidePanel(restorePreviousApp: Bool = true) {
         guard let panel else { return }
+        // 落下隐藏门禁：此后所有 loadItems / reloadSelectedItemPayload（新复制、设置变更、
+        // 7s 删除定时器到点等）在 VM 入口统一跳过，防止在不可见常驻视图树上跑动画 diff。
+        viewModel?.isLauncherPresented = false
         viewModel?.isContinuousPasteEnabled = false
         viewModel?.isInTypingMode = false
         viewModel?.commitRenaming()      // 改名进行中关面板 = 提交（与失焦自动提交一致）
