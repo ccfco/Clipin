@@ -244,6 +244,9 @@ struct MainPanel: View {
             onLoadMore: { viewModel.loadMoreItems() }
         )
         .environmentObject(viewModel)
+        // 每次打开面板整树重建（世代 identity）：清掉常驻 LazyVStack 里可能被打断的
+        // 动画 diff 事务留下的"中毒 cell"（props 冻结的残留行）。见 presentationGeneration 注释。
+        .id(viewModel.presentationGeneration)
     }
 
     private var bottomBar: some View {
@@ -549,7 +552,7 @@ private struct ItemListView: View {
                     ForEach(sections) { section in
                         sectionHeader(section.title)
                         ForEach(section.items, id: \.id) { item in
-                            row(for: item)
+                            row(for: item, in: section)
                         }
                     }
                     // 滚到底时触发加载下一页；hasMore=false 时不渲染，避免重复触发
@@ -570,9 +573,11 @@ private struct ItemListView: View {
             }
             .onChange(of: selection.wrappedValue) { _, newID in
                 hoveredID = nil
-                guard let newID else { return }
+                guard let newID,
+                      let section = sections.first(where: { s in s.items.contains(where: { $0.id == newID }) })
+                else { return }
                 withAnimation(ClipinMotion.selection) {
-                    proxy.scrollTo(newID, anchor: .center)
+                    proxy.scrollTo(Self.rowScrollID(sectionID: section.id, itemID: newID), anchor: .center)
                 }
             }
         }
@@ -590,7 +595,16 @@ private struct ItemListView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func row(for item: ClipListItem) -> some View {
+    /// 行的滚动锚 id：必须带 section 前缀。粘贴 touchItem 会把条目从「昨天」区搬进「今天」区，
+    /// 若显式 .id 只用 item.id，同一 id 会在两个 ForEach 容器间"迁移"——带动画的整列 diff
+    /// 过渡期内新旧两个 cell 短暂共持同一显式 id（重复 identity = 未定义渲染），是常驻
+    /// LazyVStack 里"中毒 cell"（选中态/搜索高亮残留）的触发面。复合 id 让跨区移动
+    /// 退化为两个不同 id 的干净删除+插入。
+    private static func rowScrollID(sectionID: String, itemID: String) -> String {
+        "\(sectionID)|\(itemID)"
+    }
+
+    private func row(for item: ClipListItem, in section: ClipSection) -> some View {
         let number = shortcutIndex[item.id]
         let isSelected = selection.wrappedValue == item.id
         let isHovered = hoveredID == item.id
@@ -611,7 +625,7 @@ private struct ItemListView: View {
         // EquatableView 用 == 拦下未变行的整 body(JSONDecode/AttributedString 全跳过),
         // 每次 ↑↓ 只有旧选中 + 新选中两行真重算。详见 ClipItemRow 的 Equatable 扩展。
         .equatable()
-        .id(item.id)
+        .id(Self.rowScrollID(sectionID: section.id, itemID: item.id))
         // 选中底板填满整列：左 edge 距窗口、右 edge 距预览，均由 contentArea/列间距提供，
         // 不再额外加 listRowOuterInset（去掉旧的「列内距 + 行外距」双层叠加）。
         .background(

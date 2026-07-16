@@ -231,6 +231,12 @@ final class ClipboardViewModel: ObservableObject {
     /// 隐藏期驱动不可见视图树 diff 会孤儿化行视图。默认 true：单测与无 AppDelegate 的
     /// 场景不经过 show/hide 生命周期，不应被门禁挡住。
     var isLauncherPresented = true
+    /// 列表 identity 世代：每次 showPanel（prepareForLauncherPresentation）+1，MainPanel 用
+    /// `.id(presentationGeneration)` 让整个列表视图树随之整体重建。常驻 NSPanel 的 LazyVStack
+    /// 终生不销毁，带动画的整列 diff 事务一旦被打断，可见 cell 的更新通路会被永久切断
+    /// （props 冻结成旧选中态/旧搜索高亮的快照，实测「重启才消失」）；世代重建把恢复点
+    /// 从「重启 app」提前到「每次打开面板」，可见行仅十余行、缩略图有缓存，重建成本可忽略。
+    @Published private(set) var presentationGeneration = 0
     /// 7s 可撤销删除状态机。删库副作用由 commitDeletion 注入。
     private let pendingDeletionController = PendingDeletionController(window: .seconds(7))
     /// 分页取数 + pinned 展示策略过滤。持 core+settings,init 内构造。
@@ -915,6 +921,7 @@ final class ClipboardViewModel: ObservableObject {
         // 先解除隐藏门禁再 loadItems：showPanel 调用本方法时 panel.isVisible 还是 false，
         // 门禁不能依赖 NSPanel 状态，必须由 show/hide 生命周期显式驱动。
         isLauncherPresented = true
+        presentationGeneration &+= 1
         skipNextDebouncedLoad = true
         sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
         searchQuery = ""
