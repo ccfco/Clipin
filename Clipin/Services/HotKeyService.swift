@@ -182,7 +182,13 @@ final class HotKeyService: @unchecked Sendable {
     }
 
     private func handleHotKeyEvent(id: UInt32) {
-        guard id == activeRegistrationID else { return }
+        // 排障打点:热键事件到达 app 的最早时间戳(与 togglePanel/showPanel 的打点对表,
+        // 区分「系统投递慢」还是「app 内呼出链路慢」)。id 不匹配的静默丢弃也要留痕。
+        guard id == activeRegistrationID else {
+            ClipinLog.hotKey.info("热键回调 id 不匹配被丢弃 id=\(id, privacy: .public) active=\(self.activeRegistrationID ?? 0, privacy: .public)")
+            return
+        }
+        ClipinLog.hotKey.info("热键回调到达 id=\(id, privacy: .public) 主线程=\(Thread.isMainThread, privacy: .public)")
         if Thread.isMainThread {
             onToggle?()
         } else {

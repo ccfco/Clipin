@@ -6,13 +6,19 @@ extension AppDelegate {
     // MARK: - Show / Hide
 
     @objc func togglePanel() {
+        // 排障打点:热键到达后走了哪个分支。「面板已可见→隐藏」分支要带上面板所在屏:
+        // 面板可见在另一块屏上时,用户体感是「按了没反应」(实际把看不见的面板关掉了)。
+        ClipinLog.hotKey.info("togglePanel 分支判定 onboarding=\(self.onboardingWindow?.isVisible == true, privacy: .public) panelVisible=\(self.panel?.isVisible == true, privacy: .public) panelScreen=\(self.panel?.screen?.frame.debugDescription ?? "nil", privacy: .public) mouse=\(NSEvent.mouseLocation.debugDescription, privacy: .public)")
         if let onboardingWindow, onboardingWindow.isVisible {
             NSApp.activate(ignoringOtherApps: true)
             onboardingWindow.makeKeyAndOrderFront(nil)
             return
         }
 
-        guard let panel else { return }
+        guard let panel else {
+            ClipinLog.hotKey.error("togglePanel 时 panel 为 nil,热键被静默丢弃")
+            return
+        }
         if panel.isVisible {
             if viewModel?.isContinuousPasteEnabled == true {
                 // 连续粘贴模式下热键不关闭面板，而是夺回键盘焦点
@@ -28,9 +34,14 @@ extension AppDelegate {
     }
 
     @objc func showPanel() {
+        // 排障打点:showPanel 内各段耗时(onboarding 检查含 AXIsProcessTrusted,tccd 拥堵可卡;
+        // prepareForLauncherPresentation 含 loadItems)。日志自带时间戳,分段对表即可定位慢在哪。
+        ClipinLog.hotKey.info("showPanel 开始")
         if presentOnboardingIfRequired() {
+            ClipinLog.hotKey.info("showPanel 转入 onboarding 窗口")
             return
         }
+        ClipinLog.hotKey.info("showPanel 权限/onboarding 检查完成")
 
         guard let panel else { return }
 
@@ -47,11 +58,13 @@ extension AppDelegate {
             targetApp: previousApp,
             selectLatest: true
         )
+        ClipinLog.hotKey.info("showPanel 数据准备完成(loadItems 含在内)")
 
         positionPanelForShow()
 
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        ClipinLog.hotKey.info("showPanel 面板已 orderFront screen=\(panel.screen?.frame.debugDescription ?? "nil", privacy: .public)")
 
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15

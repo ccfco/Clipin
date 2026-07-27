@@ -922,6 +922,13 @@ final class ClipboardViewModel: ObservableObject {
         // 门禁不能依赖 NSPanel 状态，必须由 show/hide 生命周期显式驱动。
         isLauncherPresented = true
         presentationGeneration &+= 1
+        // 呼出关键路径不渲染预览子树(selectItem 的「预览渲染绝不许上导航关键路径」同一铁律,
+        // 延伸到 present):上一会话残留的 selectedItem 若是重预览(如截图 OCR 全文,完整展开的
+        // selectable AttributedString Text),会在 showPanel → makeKeyAndOrderFront 的同步首帧
+        // 布局里被 CoreText 全量测排,主线程卡 0.9~1.5s,体感「按了快捷键好久面板才出来」
+        // (2026-07-27 采样实锤:857/5046 采样落在该布局,CoreText 帧占绝对大头)。置 nil 让
+        // 首帧渲染空预览,本次选中经既有 120ms 去抖落定后再渲染,面板本体即按即出。
+        selectedItem = nil
         skipNextDebouncedLoad = true
         sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
         searchQuery = ""
