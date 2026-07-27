@@ -244,9 +244,6 @@ struct MainPanel: View {
             onLoadMore: { viewModel.loadMoreItems() }
         )
         .environmentObject(viewModel)
-        // 每次打开面板整树重建（世代 identity）：清掉常驻 LazyVStack 里可能被打断的
-        // 动画 diff 事务留下的"中毒 cell"（props 冻结的残留行）。见 presentationGeneration 注释。
-        .id(viewModel.presentationGeneration)
     }
 
     private var bottomBar: some View {
@@ -576,8 +573,16 @@ private struct ItemListView: View {
                 guard let newID,
                       let section = sections.first(where: { s in s.items.contains(where: { $0.id == newID }) })
                 else { return }
-                withAnimation(ClipinMotion.selection) {
-                    proxy.scrollTo(Self.rowScrollID(sectionID: section.id, itemID: newID), anchor: .center)
+                let scrollID = Self.rowScrollID(sectionID: section.id, itemID: newID)
+                // present 刷新驱动的选中变化(打开面板 selectLatest):无动画直达。present 期
+                // 不得存在任何可被「快速关/开」打断的动画事务(防中毒 cell 不变量,Codex review);
+                // 键盘/鼠标导航照常带动画。
+                if vm.isPresentationRefreshInFlight {
+                    proxy.scrollTo(scrollID, anchor: .center)
+                } else {
+                    withAnimation(ClipinMotion.selection) {
+                        proxy.scrollTo(scrollID, anchor: .center)
+                    }
                 }
             }
         }

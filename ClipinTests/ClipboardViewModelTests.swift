@@ -235,9 +235,10 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertEqual(Set(ids).count, ids.count, "翻页拼接后不允许出现重复 id")
     }
 
-    func testPrepareForLauncherPresentationBumpsGenerationAndLiftsGate() throws {
-        // 世代 identity 是"中毒 cell"（残留行）的恢复机制:每次 showPanel 必须 +1 让 MainPanel
-        // 整树重建;同时必须先解除隐藏门禁再 loadItems,否则打开面板时列表是空的。
+    func testPrepareForLauncherPresentationLiftsGateBeforeLoading() throws {
+        // 必须先解除隐藏门禁再 loadItems,否则打开面板时列表是空的(门禁语义,bb81442)。
+        // 世代重建保险丝已撤(改由复合行 id + 门禁 + present 无动画事务三个不变量守护,
+        // 见 prepareForLauncherPresentation 注释),不再断言 generation。
         let core = try makeCore()
         _ = try core.saveItem(
             content: "present me",
@@ -247,17 +248,12 @@ final class ClipboardViewModelTests: XCTestCase {
             imagePath: nil
         )
         let viewModel = ClipboardViewModel(core: core)
-        let initialGeneration = viewModel.presentationGeneration
 
         viewModel.isLauncherPresented = false
         viewModel.prepareForLauncherPresentation(targetApp: nil, selectLatest: true)
 
-        XCTAssertEqual(viewModel.presentationGeneration, initialGeneration + 1)
         XCTAssertTrue(viewModel.isLauncherPresented)
         XCTAssertFalse(viewModel.isEmpty, "解除门禁后 loadItems 必须真的取到数据")
-
-        viewModel.prepareForLauncherPresentation(targetApp: nil, selectLatest: true)
-        XCTAssertEqual(viewModel.presentationGeneration, initialGeneration + 2)
     }
 
     func testLauncherLoadingTracksCurrentPreviewNetworkRequest() async throws {

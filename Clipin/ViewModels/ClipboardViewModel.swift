@@ -231,12 +231,11 @@ final class ClipboardViewModel: ObservableObject {
     /// 隐藏期驱动不可见视图树 diff 会孤儿化行视图。默认 true：单测与无 AppDelegate 的
     /// 场景不经过 show/hide 生命周期，不应被门禁挡住。
     var isLauncherPresented = true
-    /// 列表 identity 世代：每次 showPanel（prepareForLauncherPresentation）+1，MainPanel 用
-    /// `.id(presentationGeneration)` 让整个列表视图树随之整体重建。常驻 NSPanel 的 LazyVStack
-    /// 终生不销毁，带动画的整列 diff 事务一旦被打断，可见 cell 的更新通路会被永久切断
-    /// （props 冻结成旧选中态/旧搜索高亮的快照，实测「重启才消失」）；世代重建把恢复点
-    /// 从「重启 app」提前到「每次打开面板」，可见行仅十余行、缩略图有缓存，重建成本可忽略。
-    @Published private(set) var presentationGeneration = 0
+    /// 「present 刷新在途」:prepareForLauncherPresentation 置起、下一 runloop 拍清除。
+    /// 视图层由状态变更驱动的反应(ItemListView.onChange 的 scrollTo)读它决定走无动画分支
+    /// ——present 期禁一切动画事务是防「中毒 cell」的不变量之一,见该方法注释。
+    /// 非 @Published:只在视图更新过程中被读取,自身不需要驱动渲染。
+    private(set) var isPresentationRefreshInFlight = false
     /// 7s 可撤销删除状态机。删库副作用由 commitDeletion 注入。
     private let pendingDeletionController = PendingDeletionController(window: .seconds(7))
     /// 分页取数 + pinned 展示策略过滤。持 core+settings,init 内构造。
@@ -921,20 +920,30 @@ final class ClipboardViewModel: ObservableObject {
         // 先解除隐藏门禁再 loadItems：showPanel 调用本方法时 panel.isVisible 还是 false，
         // 门禁不能依赖 NSPanel 状态，必须由 show/hide 生命周期显式驱动。
         isLauncherPresented = true
-        presentationGeneration &+= 1
-        // 呼出关键路径不渲染预览子树(selectItem 的「预览渲染绝不许上导航关键路径」同一铁律,
-        // 延伸到 present):上一会话残留的 selectedItem 若是重预览(如截图 OCR 全文,完整展开的
-        // selectable AttributedString Text),会在 showPanel → makeKeyAndOrderFront 的同步首帧
-        // 布局里被 CoreText 全量测排,主线程卡 0.9~1.5s,体感「按了快捷键好久面板才出来」
-        // (2026-07-27 采样实锤:857/5046 采样落在该布局,CoreText 帧占绝对大头)。置 nil 让
-        // 首帧渲染空预览,本次选中经既有 120ms 去抖落定后再渲染,面板本体即按即出。
-        selectedItem = nil
         skipNextDebouncedLoad = true
-        sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
-        searchQuery = ""
-        browseMode = sessionBaseBrowseMode
-        updateTargetApp(targetApp)
-        loadItems(selectLatest: selectLatest)
+        // 标记「present 刷新在途」:本次状态变更驱动的视图反应(如 onChange 里的 scrollTo)
+        // 据此走无动画分支。仅靠下面的 disablesAnimations 事务不够——它只压制隐式动画注入,
+        // 视图层显式 withAnimation 开的是新事务(Codex review Medium):present 期一次可被
+        // 快速关/开打断的滚动动画,正是「中毒 cell」原故障链的触发面。视图更新在本 runloop
+        // 的事务 flush 内完成,下一拍异步清标志即覆盖整个反应窗口。
+        isPresentationRefreshInFlight = true
+        DispatchQueue.main.async { [weak self] in self?.isPresentationRefreshInFlight = false }
+        // present 窗口(面板将可见未可见)的全量刷新必须无动画落地:此刻跑带动画的整列 diff
+        // 是可被打断的动画事务,正是「中毒 cell」(props 冻结的残留行)的腐化机制——无动画
+        // 事务原子应用,不可打断即不可中毒。可见期的正常动画不受影响。选中态残留的另两个
+        // 根因(行 identity 跨 section 迁移、隐藏期 diff)已分别由复合行 id(952f87c)与
+        // isLauncherPresented 门禁(bb81442)根治,故撤掉 .id(世代) 每次打开整树重建的保险丝
+        // ——它让 makeKeyAndOrderFront 的同步首帧布局全量重排(含预览子树),呼出卡
+        // 300~1500ms(2026-07-27 采样实锤),且树常驻时选中未变的预览子树本可零成本复用。
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
+            searchQuery = ""
+            browseMode = sessionBaseBrowseMode
+            updateTargetApp(targetApp)
+            loadItems(selectLatest: selectLatest)
+        }
     }
 
     /// 目标 App 名与图标的唯一写入口,保证二者同源不漂移。

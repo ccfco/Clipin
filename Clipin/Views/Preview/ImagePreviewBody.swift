@@ -13,7 +13,12 @@ struct ImagePreviewBody: View {
         // 旧实现内联 VStack + mask + 自管 contentHeight/scrollViewHeight,现由
         // PreviewFadeFooterContainer 单点收口,所有 preview body 视觉一致(决策见 CLAUDE.md)。
         PreviewFadeFooterContainer(footerEntries: footerEntries) {
-            VStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
+            // LazyVStack(非 VStack)是性能关键:OCR 全文块设计上「默认在折叠线以下、滚动才露出」,
+            // eager 容器却让它参与每次呼出的首帧同步布局——3KB OCR 的 selectable AttributedString
+            // Text 一次全量测排 ~300ms×多轮 proposal,是「按快捷键面板好久才出来」的病灶
+            // (2026-07-27 两轮采样实锤,CoreText 帧占绝对大头)。惰性容器让它滚到视口才实例化,
+            // 首屏布局只含图片区;fade 容器的高度对比用估算高度,行为不变。
+            LazyVStack(alignment: .leading, spacing: ClipinChrome.groupGap) {
                 if let path = item.imagePath {
                     AsyncPreviewImage(path: path, maxHeight: 392) {
                         Label("Image not found", systemImage: "exclamationmark.triangle")
@@ -62,25 +67,88 @@ struct ImagePreviewBody: View {
             // OCR 文本一律完整展开（无折叠 / Show all）：截图 OCR 多是噪声，用
             // secondary 弱化、让图片占视觉重心；正文是自然高度的 SwiftUI Text，
             // 高度交给外层 ScrollView，默认在折叠线以下、滚动才露出。
-            Text(ocrAttributedText(ocr))
-                .font(.system(size: 13))
-                .foregroundStyle(ClipinInk.secondary)
-                .lineSpacing(4)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            OCRSelectableText(ocr: ocr, searchQuery: searchQuery)
         }
         .padding(ClipinChrome.groupGap)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
+
+/// OCR 全文正文,按行分块渲染。
+///
+/// 单个大 `Text` 是性能死角:SwiftUI 的 `Text` **绘制**(ResolvedStyledText.StringDrawing)
+/// 会对整段 attributed 文本重新完整排版,不走度量缓存;面板 orderOut 后 CALayer 备份存储被
+/// 回收,每次呼出都重绘 → 每次呼出全额重付,且成本随 OCR 长度线性涨(3KB ≈ 300ms,更密的
+/// 截图会破秒)——2026-07-27 采样实锤。分块 + 惰性容器让排版/绘制只发生在视口内的块,
+/// 成本与 OCR 总长脱钩(封顶 ≈ 视口内 1~2 块)。「完整展开、可选中」的产品决策保留;
+/// 唯一让步是文本选择以块为界(跨块拖选不连续),整段复制走表头「Copy all」按钮。
+/// 块的 AttributedString 按 (ocr, query) 记忆化:实例稳定,重布局命中度量缓存。
+private struct OCRSelectableText: View {
+    let ocr: String
+    let searchQuery: String
+    /// 每块行数。12 行 ≈ 一个视口高度内 1~2 块在渲,块数少到 ForEach 开销可忽略。
+    private static let linesPerChunk = 12
+    @State private var cache: (key: String, chunks: [AttributedString])?
+
+    var body: some View {
+        LazyVStack(alignment: .leading, spacing: 4) {   // spacing-exempt: 4 = Text lineSpacing,块间距须与行距一致才无缝
+            ForEach(Array(attributedChunks.enumerated()), id: \.offset) { _, chunk in
+                Text(chunk)
+                    .font(.system(size: 13))
+                    .foregroundStyle(ClipinInk.secondary)
+                    .lineSpacing(4)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var attributedChunks: [AttributedString] {
+        let key = "\(searchQuery)\u{1F}\(ocr)"
+        if let cache, cache.key == key { return cache.chunks }
+        let built = Self.chunked(ocr: ocr).map { Self.highlighted(text: $0, searchQuery: searchQuery) }
+        // body 内直接写 @State 会告警;推迟一拍落缓存,本帧用现算值。
+        Task { @MainActor in cache = (key, built) }
+        return built
+    }
+
+    /// 按行分组;OCR 无换行的极端情况(整段一行)按字符数兜底切,保证单块有上界。
+    /// 已知让步(Codex review Low):兜底切分处两个 Text 无法延续同一排版行,会出现原文
+    /// 没有的视觉换行——仅无换行的 2000+ 字符单行才触发(Vision OCR 按行输出,实际难遇),
+    /// 换取成本与 OCR 总长脱钩的硬上界,不为极端 case 放弃封顶。
+    private static func chunked(ocr: String) -> [String] {
+        let lines = ocr.split(separator: "\n", omittingEmptySubsequences: false)
+        var chunks: [String] = []
+        var current: [Substring] = []
+        for line in lines {
+            if line.count > 2000 {
+                if !current.isEmpty { chunks.append(current.joined(separator: "\n")); current = [] }
+                var rest = line[...]
+                while !rest.isEmpty {
+                    let cut = rest.index(rest.startIndex, offsetBy: 2000, limitedBy: rest.endIndex) ?? rest.endIndex
+                    chunks.append(String(rest[..<cut]))
+                    rest = rest[cut...]
+                }
+                continue
+            }
+            current.append(line)
+            if current.count >= linesPerChunk {
+                chunks.append(current.joined(separator: "\n"))
+                current = []
+            }
+        }
+        if !current.isEmpty { chunks.append(current.joined(separator: "\n")) }
+        return chunks
+    }
 
     /// 把 OCR 文本转成 AttributedString，大小写不敏感高亮所有搜索命中。
     /// 命中处提到 primary 前景 + accent 底色，在 secondary 正文里跳出来。
-    private func ocrAttributedText(_ ocr: String) -> AttributedString {
-        var attributed = AttributedString(ocr)
+    private static func highlighted(text: String, searchQuery: String) -> AttributedString {
+        var attributed = AttributedString(text)
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return attributed }
 
-        let ns = ocr as NSString
+        let ns = text as NSString
         var cursor = 0
         while cursor < ns.length {
             let found = ns.range(
@@ -89,7 +157,7 @@ struct ImagePreviewBody: View {
                 range: NSRange(location: cursor, length: ns.length - cursor)
             )
             guard found.location != NSNotFound else { break }
-            if let stringRange = Range(found, in: ocr),
+            if let stringRange = Range(found, in: text),
                let lo = AttributedString.Index(stringRange.lowerBound, within: attributed),
                let hi = AttributedString.Index(stringRange.upperBound, within: attributed) {
                 attributed[lo..<hi].backgroundColor = Color.accentColor.opacity(0.25)
