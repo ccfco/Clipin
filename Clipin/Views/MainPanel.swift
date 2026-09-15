@@ -532,9 +532,8 @@ private struct ItemListView: View {
     let onLoadMore: () -> Void
 
     @State private var hoveredID: String?
-    /// 键盘连按会在一个布局周期内多次推进 selection。macOS 27 对滚动动画未结束时的
-    /// ScrollViewProxy.scrollTo 会丢后续目标，故只让最后一个已落到树上的 target 无动画定位。
-    @State private var pendingSelectionScrollTask: Task<Void, Never>?
+    /// scrollTargetLayout 使用 ForEach 的 item.id；行内部的复合 .id 仅用于跨分组重建。
+    @State private var scrollPosition: String?
     @EnvironmentObject private var vm: ClipboardViewModel
 
     var body: some View {
@@ -546,55 +545,35 @@ private struct ItemListView: View {
     }
 
     private var listContent: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(sections) { section in
-                        sectionHeader(section.title)
-                        ForEach(section.items, id: \.id) { item in
-                            row(for: item, in: section)
-                        }
-                    }
-                    // 滚到底时触发加载下一页；hasMore=false 时不渲染，避免重复触发
-                    if hasMore {
-                        Color.clear.frame(height: 1)
-                            .onAppear { onLoadMore() }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(sections) { section in
+                    sectionHeader(section.title)
+                    ForEach(section.items, id: \.id) { item in
+                        row(for: item, in: section)
                     }
                 }
-                // 仅留底部 inset(末行不贴滚动边)。顶部留白交给首个 section header 的
-                // groupGap 单独表达,避免「列表内距 + header 顶距」再次双层叠加。
-                .padding(.bottom, ClipinChrome.gap)
-            }
-            // launcher 心智:列表是无 chrome 的纯内容流,与动作面板/引导页/预览滚动区
-            // 一致隐藏滚动指示器(否则「始终显示滚动条」系统设置或鼠标用户下会常驻出现)。
-            .scrollIndicators(.never)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Color.clear.frame(height: ClipinChrome.floatingFooterBand)
-            }
-            .onChange(of: selection.wrappedValue) { _, newID in
-                hoveredID = nil
-                guard let newID,
-                      let section = sections.first(where: { s in s.items.contains(where: { $0.id == newID }) })
-                else { return }
-                let scrollID = Self.rowScrollID(sectionID: section.id, itemID: newID)
-                pendingSelectionScrollTask?.cancel()
-                pendingSelectionScrollTask = Task { @MainActor in
-                    // 让 LazyVStack 先完成本轮 identity/layout 更新；同一 runloop 内的新选中会
-                    // 取消此任务，最终只滚到最新项。定位刻意禁动画，不能再落入 macOS 27
-                    // 「滚动中 scrollTo 丢目标」路径。
-                    await Task.yield()
-                    guard !Task.isCancelled else { return }
-                    var transaction = Transaction()
-                    transaction.disablesAnimations = true
-                    withTransaction(transaction) {
-                        proxy.scrollTo(scrollID, anchor: .center)
-                    }
+                // 滚到底时触发加载下一页；hasMore=false 时不渲染，避免重复触发
+                if hasMore {
+                    Color.clear.frame(height: 1)
+                        .onAppear { onLoadMore() }
                 }
             }
-            .onDisappear {
-                pendingSelectionScrollTask?.cancel()
-                pendingSelectionScrollTask = nil
-            }
+            .scrollTargetLayout()
+            // 仅留底部 inset(末行不贴滚动边)。顶部留白交给首个 section header 的
+            // groupGap 单独表达,避免「列表内距 + header 顶距」再次双层叠加。
+            .padding(.bottom, ClipinChrome.gap)
+        }
+        // launcher 心智:列表是无 chrome 的纯内容流,与动作面板/引导页/预览滚动区
+        // 一致隐藏滚动指示器(否则「始终显示滚动条」系统设置或鼠标用户下会常驻出现)。
+        .scrollIndicators(.never)
+        .scrollPosition(id: $scrollPosition, anchor: .center)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: ClipinChrome.floatingFooterBand)
+        }
+        .onChange(of: selection.wrappedValue, initial: true) { _, newID in
+            hoveredID = nil
+            scrollPosition = newID
         }
     }
 
@@ -610,7 +589,7 @@ private struct ItemListView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 行的滚动锚 id：必须带 section 前缀。粘贴 touchItem 会把条目从「昨天」区搬进「今天」区，
+    /// 行的渲染 identity 必须带 section 前缀。粘贴 touchItem 会把条目从「昨天」区搬进「今天」区，
     /// 若显式 .id 只用 item.id，同一 id 会在两个 ForEach 容器间"迁移"——带动画的整列 diff
     /// 过渡期内新旧两个 cell 短暂共持同一显式 id（重复 identity = 未定义渲染），是常驻
     /// LazyVStack 里"中毒 cell"（选中态/搜索高亮残留）的触发面。复合 id 让跨区移动
