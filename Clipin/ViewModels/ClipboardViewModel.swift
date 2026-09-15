@@ -231,11 +231,6 @@ final class ClipboardViewModel: ObservableObject {
     /// 隐藏期驱动不可见视图树 diff 会孤儿化行视图。默认 true：单测与无 AppDelegate 的
     /// 场景不经过 show/hide 生命周期，不应被门禁挡住。
     var isLauncherPresented = true
-    /// 「present 刷新在途」:prepareForLauncherPresentation 置起、下一 runloop 拍清除。
-    /// 视图层由状态变更驱动的反应(ItemListView.onChange 的 scrollTo)读它决定走无动画分支
-    /// ——present 期禁一切动画事务是防「中毒 cell」的不变量之一,见该方法注释。
-    /// 非 @Published:只在视图更新过程中被读取,自身不需要驱动渲染。
-    private(set) var isPresentationRefreshInFlight = false
     /// 7s 可撤销删除状态机。删库副作用由 commitDeletion 注入。
     private let pendingDeletionController = PendingDeletionController(window: .seconds(7))
     /// 分页取数 + pinned 展示策略过滤。持 core+settings,init 内构造。
@@ -921,13 +916,6 @@ final class ClipboardViewModel: ObservableObject {
         // 门禁不能依赖 NSPanel 状态，必须由 show/hide 生命周期显式驱动。
         isLauncherPresented = true
         skipNextDebouncedLoad = true
-        // 标记「present 刷新在途」:本次状态变更驱动的视图反应(如 onChange 里的 scrollTo)
-        // 据此走无动画分支。仅靠下面的 disablesAnimations 事务不够——它只压制隐式动画注入,
-        // 视图层显式 withAnimation 开的是新事务(Codex review Medium):present 期一次可被
-        // 快速关/开打断的滚动动画,正是「中毒 cell」原故障链的触发面。视图更新在本 runloop
-        // 的事务 flush 内完成,下一拍异步清标志即覆盖整个反应窗口。
-        isPresentationRefreshInFlight = true
-        DispatchQueue.main.async { [weak self] in self?.isPresentationRefreshInFlight = false }
         // present 窗口(面板将可见未可见)的全量刷新必须无动画落地:此刻跑带动画的整列 diff
         // 是可被打断的动画事务,正是「中毒 cell」(props 冻结的残留行)的腐化机制——无动画
         // 事务原子应用,不可打断即不可中毒。可见期的正常动画不受影响。选中态残留的另两个

@@ -532,6 +532,9 @@ private struct ItemListView: View {
     let onLoadMore: () -> Void
 
     @State private var hoveredID: String?
+    /// 键盘连按会在一个布局周期内多次推进 selection。macOS 27 对滚动动画未结束时的
+    /// ScrollViewProxy.scrollTo 会丢后续目标，故只让最后一个已落到树上的 target 无动画定位。
+    @State private var pendingSelectionScrollTask: Task<Void, Never>?
     @EnvironmentObject private var vm: ClipboardViewModel
 
     var body: some View {
@@ -574,16 +577,23 @@ private struct ItemListView: View {
                       let section = sections.first(where: { s in s.items.contains(where: { $0.id == newID }) })
                 else { return }
                 let scrollID = Self.rowScrollID(sectionID: section.id, itemID: newID)
-                // present 刷新驱动的选中变化(打开面板 selectLatest):无动画直达。present 期
-                // 不得存在任何可被「快速关/开」打断的动画事务(防中毒 cell 不变量,Codex review);
-                // 键盘/鼠标导航照常带动画。
-                if vm.isPresentationRefreshInFlight {
-                    proxy.scrollTo(scrollID, anchor: .center)
-                } else {
-                    withAnimation(ClipinMotion.selection) {
+                pendingSelectionScrollTask?.cancel()
+                pendingSelectionScrollTask = Task { @MainActor in
+                    // 让 LazyVStack 先完成本轮 identity/layout 更新；同一 runloop 内的新选中会
+                    // 取消此任务，最终只滚到最新项。定位刻意禁动画，不能再落入 macOS 27
+                    // 「滚动中 scrollTo 丢目标」路径。
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
                         proxy.scrollTo(scrollID, anchor: .center)
                     }
                 }
+            }
+            .onDisappear {
+                pendingSelectionScrollTask?.cancel()
+                pendingSelectionScrollTask = nil
             }
         }
     }
