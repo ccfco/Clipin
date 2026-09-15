@@ -37,6 +37,16 @@ final class KeyboardNavigationScrollTests: XCTestCase {
         }
         let scroll = try XCTUnwrap(scrollViews(host).first { $0.frame.width < 350 })
         let initial = scroll.contentView.bounds.origin.y
+        // 第八行仍在初始视口内；选择不能为了居中而移动整张列表。
+        for _ in 0..<7 {
+            vm.selectNext()
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertEqual(scroll.contentView.bounds.origin.y, initial, accuracy: 1,
+                       "Selecting an already visible row must not scroll")
+        vm.selectFirst()
+        try await Task.sleep(for: .milliseconds(400))
         for _ in 0..<25 {
             vm.selectNext()
             try await Task.sleep(for: .milliseconds(25))
@@ -50,12 +60,15 @@ final class KeyboardNavigationScrollTests: XCTestCase {
         XCTAssertGreaterThan(scroll.contentView.bounds.origin.y, middle)
         vm.selectFirst()
         try await Task.sleep(for: .milliseconds(400))
-        XCTAssertLessThanOrEqual(scroll.contentView.bounds.origin.y, initial + 1)
+        // 最小滚动允许首行上方的分组标题移出视口，不要求回到内容原点。
+        let firstItemOffset = scroll.contentView.bounds.origin.y
+        XCTAssertLessThan(firstItemOffset, middle)
         for _ in 0..<25 { vm.selectNext() }
         try await Task.sleep(for: .milliseconds(400))
         XCTAssertGreaterThan(scroll.contentView.bounds.origin.y, initial + 200)
         for _ in 0..<25 { vm.selectPrev() }
         try await Task.sleep(for: .milliseconds(400))
-        XCTAssertLessThanOrEqual(scroll.contentView.bounds.origin.y, initial + 1)
+        XCTAssertEqual(scroll.contentView.bounds.origin.y, firstItemOffset, accuracy: 1,
+                       "Repeated navigation to the first item must return to the same viewport")
     }
 }
