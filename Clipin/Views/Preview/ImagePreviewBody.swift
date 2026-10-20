@@ -226,10 +226,19 @@ struct AsyncPreviewImage<Placeholder: View>: View {
     var body: some View {
         Group {
             if let loaded {
-                Image(decorative: loaded, scale: 1, orientation: .up)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: maxHeight)
+                ZStack {
+                    Image(decorative: loaded, scale: 1, orientation: .up)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                    // 与图片同 aspectRatio + fit，覆盖层 bounds 才与图片显示区域重合，
+                    // Live Text 的选区坐标才能落准。
+                    LiveTextOverlay(image: loaded, identity: path)
+                        .aspectRatio(
+                            CGFloat(loaded.width) / CGFloat(max(loaded.height, 1)),
+                            contentMode: .fit
+                        )
+                }
+                .frame(maxWidth: .infinity, maxHeight: maxHeight)
             } else if let lowResPlaceholder {
                 // 低清占位：medium 插值让放大不至于硬块状；它是过渡态，清晰图就绪即换。
                 Image(decorative: lowResPlaceholder, scale: 1, orientation: .up)
