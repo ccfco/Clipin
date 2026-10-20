@@ -76,6 +76,15 @@ extension AppDelegate {
         startAppSwitchObserver()
     }
 
+    /// App Intent / 外部入口：打开面板并预填搜索词。
+    /// 必须在 showPanel 之后设置——prepareForLauncherPresentation 会重置查询与筛选。
+    func showPanel(searching query: String) {
+        showPanel()
+        guard !query.isEmpty else { return }
+        viewModel?.searchQuery = query
+        NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+    }
+
     func presentOnboardingIfRequired() -> Bool {
         let permission = PermissionManager.shared
         // 呼出路径只做节流检查：2s 内已查过就复用缓存，避免每次 ⌘⇧V 都走 tccd IPC。

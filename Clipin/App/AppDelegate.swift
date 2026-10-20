@@ -109,6 +109,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var panel: ClipinPanel?
     var settingsWindow: NSWindow?
     var translationWindow: NSWindow?
+    /// App Intent 通知观察者（app 生命周期内常驻，无需移除）。
+    var intentObservers: [NSObjectProtocol] = []
     var updateReminderWindow: NSWindow?
     let appState = AppState.shared
     let settings = SettingsStore.shared
@@ -198,6 +200,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupMenuBar()
         setupPanel()
+        setupIntentObservers()
         loadSavedPanelPosition()
         startMonitoring()
         setupHotKey()

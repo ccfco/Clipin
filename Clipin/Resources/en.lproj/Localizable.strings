@@ -476,3 +476,13 @@
 "There is no text to translate." = "There is no text to translate.";
 "Couldn't detect the source language." = "Couldn't detect the source language.";
 "Translation failed. Check that the language pair is available in System Settings." = "Translation failed. Check that the language pair is available in System Settings.";
+
+/* App Intents */
+"Open the Clipin clipboard launcher." = "Open the Clipin clipboard launcher.";
+"Search Clipin History" = "Search Clipin History";
+"Open Clipin with a search query already filled in." = "Open Clipin with a search query already filled in.";
+"Query" = "Query";
+"Get Latest Clipboard Item" = "Get Latest Clipboard Item";
+"Return the most recent clipboard item as plain text. Images return their OCR text, or their file path when no text was recognized." = "Return the most recent clipboard item as plain text. Images return their OCR text, or their file path when no text was recognized.";
+"Clipin history is empty." = "Clipin history is empty.";
+"Latest Item" = "Latest Item";

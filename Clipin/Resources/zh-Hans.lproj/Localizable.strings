@@ -476,3 +476,13 @@
 "There is no text to translate." = "没有可翻译的文字。";
 "Couldn't detect the source language." = "无法识别源语言。";
 "Translation failed. Check that the language pair is available in System Settings." = "翻译失败。请在系统设置中确认该语言对已可用。";
+
+/* App Intents */
+"Open the Clipin clipboard launcher." = "打开 Clipin 剪贴板面板。";
+"Search Clipin History" = "搜索 Clipin 历史";
+"Open Clipin with a search query already filled in." = "打开 Clipin 并预填搜索词。";
+"Query" = "搜索词";
+"Get Latest Clipboard Item" = "获取最新剪贴板内容";
+"Return the most recent clipboard item as plain text. Images return their OCR text, or their file path when no text was recognized." = "以纯文本返回最近一条剪贴板内容。图片返回识别出的文字；没有文字时返回文件路径。";
+"Clipin history is empty." = "Clipin 历史为空。";
+"Latest Item" = "最新内容";

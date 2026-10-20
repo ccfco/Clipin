@@ -6,6 +6,21 @@ import Sparkle
 extension AppDelegate {
     // MARK: - Panel
 
+    /// App Intent 入口。Intent 在 app 进程内执行，通过通知把 UI 动作交回主线程；
+    /// 通知在 applicationDidFinishLaunching 里注册，早于任何 Shortcuts 调用。
+    func setupIntentObservers() {
+        let center = NotificationCenter.default
+        intentObservers = [
+            center.addObserver(forName: .clipinIntentOpenRequested, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor in self?.showPanel() }
+            },
+            center.addObserver(forName: .clipinIntentSearchRequested, object: nil, queue: .main) { [weak self] note in
+                let query = note.object as? String ?? ""
+                Task { @MainActor in self?.showPanel(searching: query) }
+            },
+        ]
+    }
+
     func setupPanel() {
         let vm = ClipboardViewModel(core: appState.core)
         vm.onPasteRequested = { [weak self] item in
