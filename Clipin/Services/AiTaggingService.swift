@@ -18,6 +18,16 @@ actor AiTaggingService {
 
     private var isRunning = false
     private var pendingKick = false
+    /// 失败条目短时冷却：生成失败（guardrail 拒绝、模型报错）的 id 在 TTL 内不再尝试。
+    /// 失败条目保持 ai_tags = NULL 以便未来重试，但不能每次 kick 都重新调用模型——
+    /// 否则一批被永久拒绝的内容会随每次复制反复触发全量推理。
+    /// 冷却只在内存中，重启后清空，给临时性故障一个恢复机会。
+    private var failedUntil: [String: Date] = [:]
+    private static let failureCooldown: TimeInterval = 60 * 60
+    private static let maxFailedEntries = 2_000
+    /// 连续失败达到该值说明模型当前不健康（而非单条内容问题），结束本轮。
+    /// 失败项已进入冷却，下次 kick 会跳过它们继续处理后面的条目。
+    private static let maxConsecutiveFailures = 20
 
     /// 当前机器是否可用：设备支持且 Apple Intelligence 已开启、模型就绪。
     nonisolated static var isAvailable: Bool {
@@ -50,6 +60,8 @@ actor AiTaggingService {
     private func processPendingItems(core: ClipinCore) async {
         var processed = 0
         var cursor: (createdAt: Int64, id: String)?
+        // 计数必须跨页累计：每页只有 10 条，放在页内永远达不到阈值。
+        var consecutiveFailures = 0
         while !Task.isCancelled {
             let pending: [TaggingCandidate]
             do {
@@ -67,7 +79,18 @@ actor AiTaggingService {
             for item in pending {
                 if Task.isCancelled { return }
                 cursor = (item.createdAt, item.id)
-                guard let tags = await Self.generateTags(for: item) else { continue }
+                if let until = failedUntil[item.id], until > .now { continue }
+                guard let tags = await Self.generateTags(for: item) else {
+                    recordFailure(item.id)
+                    consecutiveFailures += 1
+                    if consecutiveFailures >= Self.maxConsecutiveFailures {
+                        ClipinLog.aiTags.error("Tag backfill paused after \(consecutiveFailures, privacy: .public) consecutive failures")
+                        return
+                    }
+                    continue
+                }
+                consecutiveFailures = 0
+                failedUntil.removeValue(forKey: item.id)
                 do {
                     try core.updateAiTags(id: item.id, aiTags: tags.joined(separator: ", "))
                     processed += 1
@@ -85,6 +108,14 @@ actor AiTaggingService {
         if processed > 0 {
             ClipinLog.aiTags.notice("Tag backfill complete: \(processed, privacy: .public) item(s) tagged")
         }
+    }
+
+    private func recordFailure(_ id: String) {
+        // 粗粒度上限：数据结构只服务于"别反复烧模型"，超限时整体清空即可。
+        if failedUntil.count >= Self.maxFailedEntries {
+            failedUntil.removeAll()
+        }
+        failedUntil[id] = Date().addingTimeInterval(Self.failureCooldown)
     }
 
     /// 生成一条标签；nil = 本次失败（保持未处理），[] = 内容没有可提取标签（写空串哨兵）。
