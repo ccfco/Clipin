@@ -2137,8 +2137,16 @@ impl Storage {
         let mut removed = 0;
         for entry in entries.flatten() {
             let path = entry.path();
-            // 只处理 image_dir 顶层的 PNG（不递归子目录）
-            if path.extension().and_then(|s| s.to_str()) != Some("png") {
+            // 只处理 image_dir 顶层的图片文件（不递归子目录）。图片可能保留
+            // 原始编码（jpg/heic/heif），不能只扫 png，否则这些孤儿永远不会被回收。
+            let ext = path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_ascii_lowercase());
+            if !matches!(
+                ext.as_deref(),
+                Some("png" | "jpg" | "jpeg" | "heic" | "heif" | "tiff" | "tif")
+            ) {
                 continue;
             }
             let path_str = path.to_string_lossy().into_owned();

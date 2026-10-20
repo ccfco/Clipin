@@ -1,4 +1,6 @@
 import AppKit
+import ImageIO
+import UniformTypeIdentifiers
 
 /// file 类型写剪贴板失败时的失败原因，供调用方区分文案语义。
 /// 不改 writeToClipboard 的 Bool 签名——失败原因是诊断信息，不影响主控制流，
@@ -12,8 +14,56 @@ enum FilePasteFailureReason {
     case writeRejected
 }
 
+/// 图片粘贴的后台预取产物。主线程拿到后只做 NSPasteboard 写入，
+/// 不再读文件、解码、编码 TIFF——大图（数 MB）这段在主线程实测可占 50~200ms。
+/// data/uti 是原始落盘编码（PNG/JPEG/HEIC 等），tiffData 是给旧消费方的兼容副本。
+struct ImagePastePayload: Sendable {
+    let data: Data
+    let uti: String
+    let tiffData: Data?
+}
+
 /// 模拟粘贴 — 写回剪贴板 + CGEvent 模拟 Cmd+V
 enum PasteService {
+    /// 后台准备图片粘贴产物。用 ImageIO 而不是 NSImage：CGImageSource/Destination
+    /// 是线程安全的，可以在 detached task 里跑；NSImage 的惰性解码不适合跨线程。
+    nonisolated static func loadImagePayload(_ item: ClipItem) -> ImagePastePayload? {
+        guard let path = item.imagePath,
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        return ImagePastePayload(
+            data: data,
+            uti: uti(forImagePath: path),
+            tiffData: tiffData(fromImageData: data)
+        )
+    }
+
+    /// 落盘扩展名 → pasteboard UTI。与 ClipboardMonitor.prepareImageBytes 的映射保持一致：
+    /// 存储层保留什么编码，回放时就按什么编码写剪贴板，避免多一次转码。
+    nonisolated static func uti(forImagePath path: String) -> String {
+        switch URL(fileURLWithPath: path).pathExtension.lowercased() {
+        case "jpg", "jpeg": return UTType.jpeg.identifier
+        case "heic": return UTType.heic.identifier
+        case "heif": return UTType.heif.identifier
+        case "tiff", "tif": return UTType.tiff.identifier
+        default: return UTType.png.identifier
+        }
+    }
+
+    /// 任意图片编码 → TIFF。旧方式走 NSImage.tiffRepresentation；这里用 ImageIO
+    /// 保证后台线程安全，且能直接读 JPEG/HEIC/PNG。
+    nonisolated private static func tiffData(fromImageData data: Data) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output, UTType.tiff.identifier as CFString, 1, nil
+        ) else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
+    }
     /// 将 ClipItem 写回剪贴板，成功返回 true
     @discardableResult
     static func writeToClipboard(_ item: ClipItem) -> Bool {
@@ -34,13 +84,14 @@ enum PasteService {
     static func writeAllRepresentations(
         _ item: ClipItem,
         representations: [ClipRepresentation],
+        imagePayload: ImagePastePayload? = nil,
         to pasteboard: NSPasteboard = .general
     ) -> Bool {
         switch item.clipType {
         case .text, .url:
             return writeTextOrURL(item, representations: representations, to: pasteboard)
         case .image:
-            return writeImage(item, representations: representations, to: pasteboard)
+            return writeImage(item, representations: representations, payload: imagePayload, to: pasteboard)
         case .file:
             return writeFile(item, representations: representations, to: pasteboard)
         }
@@ -80,20 +131,35 @@ enum PasteService {
     private static func writeImage(
         _ item: ClipItem,
         representations: [ClipRepresentation],
+        payload: ImagePastePayload?,
         to pasteboard: NSPasteboard
     ) -> Bool {
-        guard let path = item.imagePath,
-              let pngData = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
-            return false
+        // payload 由后台预取；未提供时保留同步 fallback（performCopy 等未走预取路径）。
+        let data: Data
+        let primaryUTI: String
+        let tiffPayload: Data?
+        if let payload {
+            data = payload.data
+            primaryUTI = payload.uti
+            tiffPayload = payload.tiffData
+        } else {
+            guard let path = item.imagePath,
+                  let fileData = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+                return false
+            }
+            data = fileData
+            primaryUTI = uti(forImagePath: path)
+            tiffPayload = tiffData(fromImageData: fileData)
         }
-        let pbItem = NSPasteboardItem()
-        guard pbItem.setData(pngData, forType: .png) else { return false }
-        var writtenTypes: Set<NSPasteboard.PasteboardType> = [.png]
 
-        // 补 TIFF：从 PNG bytes 通过 NSImage 转 TIFF。失败容忍——主载体 PNG 已就位，
-        // 多挂一种 UTI 是为了兼容旧 TIFF-only 消费方，不应让整体写入失败。
-        if let image = NSImage(data: pngData), let tiffData = image.tiffRepresentation,
-           pbItem.setData(tiffData, forType: .tiff) {
+        let pbItem = NSPasteboardItem()
+        let primaryType = NSPasteboard.PasteboardType(primaryUTI)
+        guard pbItem.setData(data, forType: primaryType) else { return false }
+        var writtenTypes: Set<NSPasteboard.PasteboardType> = [primaryType]
+
+        // 补 TIFF：旧 Photoshop / IM apps 仅识别 TIFF，单 PNG/JPEG 会让这类消费方读不到图。
+        // 编码失败容忍——主载体已就位，不应让整体写入失败。
+        if let tiffPayload, pbItem.setData(tiffPayload, forType: .tiff) {
             writtenTypes.insert(.tiff)
         }
 

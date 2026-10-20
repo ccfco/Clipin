@@ -110,8 +110,10 @@ enum ArchiveService {
         var archiveItems: [ArchiveItem] = []
         archiveItems.reserveCapacity(snapshot.count)
         var skippedCount = 0
-        // 同 image hash 在 zip 内只写一份（用户多次复制同一张图天然 dedup）
-        var writtenImageHashes = Set<String>()
+        // 同 image 内容 hash 在 zip 内只写一份（用户多次复制同一张图天然 dedup）。
+        // key 用「hash.ext」而不是纯 hash：同一内容理论上可能以不同扩展名落盘（手动改名等），
+        // 只用 hash 去重会让 manifest 的 imageExt 与实际写入的文件名不一致。
+        var writtenImageFiles = Set<String>()
 
         for entry in snapshot {
             try Task.checkCancellation()
@@ -136,8 +138,13 @@ enum ArchiveService {
                 try Task.checkCancellation()
 
                 let hash = sha256Hex(of: imageData)
-                if writtenImageHashes.insert(hash).inserted {
-                    let dst = imagesDir.appendingPathComponent("\(hash).png")
+                // v4：保留原始编码（PNG/JPEG/HEIC 等），文件名带真实扩展名。
+                // 旧版硬编码 <hash>.png 会把 JPEG 字节命名成 .png，导入回放时按扩展名
+                // 选 UTI 会错配。
+                let ext = Self.imageFileExtension(for: imagePath)
+                let fileName = "\(hash).\(ext)"
+                if writtenImageFiles.insert(fileName).inserted {
+                    let dst = imagesDir.appendingPathComponent(fileName)
                     try imageData.write(to: dst, options: .atomic)
                 }
 
@@ -150,6 +157,7 @@ enum ArchiveService {
                     createdAt: item.createdAt,
                     imageDataBase64: nil,   // v3 不再 inline，改 imageHash 指向 zip 内文件
                     imageHash: hash,
+                    imageExt: ext,
                     representations: archiveReps,
                     alias: item.alias
                 ))
@@ -165,6 +173,7 @@ enum ArchiveService {
                 createdAt: item.createdAt,
                 imageDataBase64: nil,
                 imageHash: nil,
+                imageExt: nil,
                 representations: archiveReps,
                 alias: item.alias
             ))
@@ -172,13 +181,13 @@ enum ArchiveService {
 
         // manifest.json minified：体积主要是 items 数组，prettyPrinted 会让体积翻倍且无可读性收益
         let archive = ClipboardArchive(
-            schemaVersion: 3,
+            schemaVersion: 4,
             format: "clipin.clipboard-archive",
             // formatURL 历史上指向一个并不存在的 ccfco/Clipin-archive-format 仓库；移除写入
             // 但解码字段保留 Optional，让老 archive 能正常导入
             formatURL: nil,
             exportedAt: Date(),
-            summary: ArchiveSummary(itemCount: archiveItems.count, imageCount: writtenImageHashes.count),
+            summary: ArchiveSummary(itemCount: archiveItems.count, imageCount: writtenImageFiles.count),
             items: archiveItems
         )
         let encoder = JSONEncoder()
@@ -371,6 +380,9 @@ enum ArchiveService {
 
             let imagePath: String?
             if clipType == .image {
+                // v4 起 manifest 记录真实扩展名；旧备份没有该字段 → 回退 png。
+                // 白名单收窄同时防住路径穿越（hash 已校验，ext 也不允许任意字符串）。
+                let ext = Self.normalizedImageExtension(item.imageExt)
                 let imageData: Data?
                 switch imageSource {
                 case .inlineBase64:
@@ -381,7 +393,7 @@ enum ArchiveService {
                     // 出 staging；② standardizedFileURL 后再核对 path 仍以 dir 为前缀，
                     // 任何路径逃逸都失败成 nil → skippedMissingImageCount。
                     if let hash = item.imageHash, isValidSHA256Hex(hash) {
-                        let candidate = dir.appendingPathComponent("\(hash).png").standardizedFileURL
+                        let candidate = dir.appendingPathComponent("\(hash).\(ext)").standardizedFileURL
                         let dirStandard = dir.standardizedFileURL.path
                         if candidate.path.hasPrefix(dirStandard) {
                             imageData = try? Data(contentsOf: candidate)
@@ -396,7 +408,7 @@ enum ArchiveService {
                     skippedMissingImageCount += 1
                     continue
                 }
-                let dst = imageDirURL.appendingPathComponent(UUID().uuidString + ".png")
+                let dst = imageDirURL.appendingPathComponent(UUID().uuidString + "." + ext)
                 try data.write(to: dst, options: .atomic)
                 imagePath = dst.path
             } else {
@@ -488,6 +500,29 @@ enum ArchiveService {
         return s.unicodeScalars.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
     }
 
+    /// 落盘图片扩展名 → 备份内扩展名。未知/无扩展名回退 png（旧数据兼容）。
+    private static func imageFileExtension(for path: String) -> String {
+        switch URL(fileURLWithPath: path).pathExtension.lowercased() {
+        case "jpg", "jpeg": return "jpg"
+        case "heic": return "heic"
+        case "heif": return "heif"
+        case "tiff", "tif": return "tiff"
+        default: return "png"
+        }
+    }
+
+    /// 导入时把 manifest 的 imageExt 收窄到白名单；旧备份/异常值回退 png。
+    /// 白名单同时挡住路径穿越（ext 参与拼路径）。
+    private static func normalizedImageExtension(_ raw: String?) -> String {
+        switch raw?.lowercased() {
+        case "jpg", "jpeg": return "jpg"
+        case "heic": return "heic"
+        case "heif": return "heif"
+        case "tiff": return "tiff"
+        default: return "png"
+        }
+    }
+
     /// 扫描 staging 树，发现任何 symlink 立即抛 malformedArchive。
     /// 必须在所有文件读取之前调用，否则恶意 symlink 已经能读到敏感内容。
     private static func rejectSymlinksInStaging(_ stagingRoot: URL) throws {
@@ -564,8 +599,10 @@ private struct ArchiveItem: Codable, Sendable {
     let createdAt: Int64
     /// v1/v2 only：图片以 base64 inline 嵌入。v3 不再使用，改 imageHash 指向 zip 内文件。
     let imageDataBase64: String?
-    /// v3 only：图片字节 SHA256 hex，对应 zip 内 `images/<hash>.png`。
+    /// v3 only：图片字节 SHA256 hex，对应 zip 内 `images/<hash>.<ext>`。
     let imageHash: String?
+    /// v4 only：图片原始扩展名（png/jpg/heic/heif/tiff）。旧 archive 没有该字段 → png。
+    let imageExt: String?
     /// v2 起：多 UTI representations。v1 archive 没有该字段，Optional 保证向后兼容解码。
     let representations: [ArchiveRepresentation]?
     /// v2.1 起：用户别名。旧 archive 没有该字段，Optional 保证向后兼容解码。

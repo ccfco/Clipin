@@ -492,7 +492,7 @@ final class ClipboardMonitor: ObservableObject {
         // 触发两轮 loadItems + runCleanupAndReload（列表重载与清理都跑两遍）。
     }
 
-    /// 共享的图片入库后处理：PNG 落地 → DB 入库 → 尺寸读写 → 通知 → OCR。
+    /// 共享的图片入库后处理：原始编码落地 → DB 入库 → 尺寸读写 → 通知 → OCR。
     /// 由 imageLazy（pasteboard 直挂 image bytes）和 imageFromFile（file-url 升级）两个 case 复用，
     /// 仅"原始 bytes 来源"不同，落地后流程完全一致，避免 ~30 行重复。
     /// nonisolated 因为调用方在 detached task 内运行；唯一的主线程依赖（notifyNewItem）
@@ -506,15 +506,10 @@ final class ClipboardMonitor: ObservableObject {
         core: ClipinCore
     ) async throws {
         let imageDir = core.imageDir()
-        let filename = UUID().uuidString + ".png"
+        let (bytes, ext) = try Self.prepareImageBytes(rawData, sourceUTI: sourceUTI)
+        let filename = UUID().uuidString + "." + ext
         let path = (imageDir as NSString).appendingPathComponent(filename)
-        // PNG 原始字节已是目标落盘格式：直接写，省掉一次全尺寸解码 + 重新编码。
-        // 截图与浏览器复制图片经常直接给 PNG，原图可达数十 MB，解码峰值内存同量级；
-        // 这一步在采集后台任务里，省下的是 CPU 和瞬时内存，不是磁盘体积。
-        // 其他格式（TIFF/JPEG/HEIC）仍转 PNG：单一落盘格式让粘贴回放、OCR、
-        // 缩略图、备份四条路径都不必按扩展名分叉。
-        let pngData = sourceUTI == "public.png" ? rawData : try Self.makePNGData(from: rawData)
-        try pngData.write(to: URL(fileURLWithPath: path), options: .atomic)
+        try bytes.write(to: URL(fileURLWithPath: path), options: .atomic)
         let coreReps = auxReps.map { ClipRepresentation(uti: $0.uti, data: $0.data) }
         let saved = try core.saveItemWithRepresentations(
             content: "image",
@@ -580,6 +575,29 @@ final class ClipboardMonitor: ObservableObject {
             return false
         }
         return true
+    }
+
+    /// 决定图片落盘字节与扩展名。能无损保留原始编码就保留：JPEG/HEIC 照片转 PNG
+    /// 体积会放大 5~10 倍（每条历史一份），同时拖慢备份、缩略图与 OCR 读取。
+    /// TIFF 体积过大且剪贴板来源常是截图，统一转 PNG；未知格式同理回退 PNG。
+    /// 保留前先确认 ImageIO 能解析容器头部，避免把损坏字节原样写进历史。
+    nonisolated private static func prepareImageBytes(
+        _ rawData: Data,
+        sourceUTI: String
+    ) throws -> (Data, String) {
+        let preservedExt: String?
+        switch sourceUTI {
+        case "public.png": preservedExt = "png"
+        case "public.jpeg": preservedExt = "jpg"
+        case "public.heic": preservedExt = "heic"
+        case "public.heif": preservedExt = "heif"
+        default: preservedExt = nil
+        }
+        if let ext = preservedExt,
+           CGImageSourceCreateWithData(rawData as CFData, nil) != nil {
+            return (rawData, ext)
+        }
+        return (try Self.makePNGData(from: rawData), "png")
     }
 
     nonisolated private static func makePNGData(from data: Data) throws -> Data {

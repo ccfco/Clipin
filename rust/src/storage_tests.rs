@@ -288,6 +288,31 @@ fn test_reconcile_orphan_attachments_deletes_aged_orphans() {
     assert!(!aged.exists(), "孤儿 PNG 应已清理");
 }
 
+/// 图片保留原始编码后落盘是 jpg/heic 等扩展名，孤儿清理必须同样覆盖，
+/// 否则这些文件永远不会被回收（此前只扫 .png）。
+#[test]
+fn test_reconcile_orphan_attachments_deletes_non_png_orphans() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images");
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let img_dir_str = img_dir.to_string_lossy().to_string();
+    let storage = Storage::new(&db_path, &img_dir_str).unwrap();
+
+    let orphan_jpg = img_dir.join("orphan.jpg");
+    let orphan_heic = img_dir.join("orphan.HEIC");
+    let unrelated = img_dir.join("notes.json");
+    std::fs::write(&orphan_jpg, b"jpg").unwrap();
+    std::fs::write(&orphan_heic, b"heic").unwrap();
+    std::fs::write(&unrelated, b"{}").unwrap();
+
+    let removed = storage.reconcile_orphan_attachments(0).unwrap();
+    assert_eq!(removed, 2, "jpg/heic 孤儿都应被清理");
+    assert!(!orphan_jpg.exists(), "孤儿 JPG 应已清理");
+    assert!(!orphan_heic.exists(), "扩展名大小写不敏感，孤儿 HEIC 应已清理");
+    assert!(unrelated.exists(), "非图片文件不属于清理范围");
+}
+
 #[test]
 fn test_reconcile_orphan_attachments_keeps_referenced_files() {
     let tmp = tempfile::tempdir().unwrap();

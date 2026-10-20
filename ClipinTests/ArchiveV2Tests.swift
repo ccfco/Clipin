@@ -82,6 +82,45 @@ final class ArchiveV2Tests: XCTestCase {
         XCTAssertEqual(importedBytes, originalBytes)
     }
 
+    /// v4：备份内图片文件名带真实扩展名，导入后落盘扩展名与字节都保持一致。
+    /// 旧实现硬编码 <hash>.png，JPEG/HEIC 字节被命名成 .png，回放时按扩展名选 UTI 会错配。
+    func testV4RoundtripPreservesImageExtension() async throws {
+        let tmpDir = try makeTmpDir()
+        let imagesDir = tmpDir.appendingPathComponent("images", isDirectory: true)
+        try FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+        let core = try ClipinCore(dbPath: tmpDir.appendingPathComponent("db").path,
+                                  imageDir: imagesDir.path)
+
+        let originalBytes = Data((0..<1024).map { UInt8($0 & 0xff) })
+        let originalImageURL = imagesDir.appendingPathComponent("orig.jpg")
+        try originalBytes.write(to: originalImageURL)
+
+        _ = try core.saveItem(
+            content: "image",
+            clipType: .image,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: originalImageURL.path
+        )
+
+        let archiveURL = tmpDir.appendingPathComponent("img-v4.clipin.zip")
+        _ = try await ArchiveService.writeArchive(to: archiveURL, core: core)
+
+        let tmpDir2 = try makeTmpDir()
+        let imagesDir2 = tmpDir2.appendingPathComponent("images", isDirectory: true)
+        try FileManager.default.createDirectory(at: imagesDir2, withIntermediateDirectories: true)
+        let core2 = try ClipinCore(dbPath: tmpDir2.appendingPathComponent("db").path,
+                                   imageDir: imagesDir2.path)
+        let result = try await ArchiveService.importArchive(from: archiveURL, core: core2)
+        XCTAssertEqual(result.importedCount, 1)
+        XCTAssertEqual(result.skippedMissingImageCount, 0)
+
+        let items = try core2.getItems(limit: 10, offset: 0, typeFilter: .image)
+        let importedPath = try XCTUnwrap(items.first?.imagePath)
+        XCTAssertEqual(URL(fileURLWithPath: importedPath).pathExtension.lowercased(), "jpg")
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: importedPath)), originalBytes)
+    }
+
     func testPreviousArchiveURLDerivation() {
         let base = URL(fileURLWithPath: "/tmp/foo/clipin-backup.clipin.zip")
         XCTAssertEqual(

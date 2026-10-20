@@ -51,11 +51,43 @@ extension AppDelegate {
             return
         }
 
+        if item.clipType == .image {
+            performImagePaste(item, representations: representations)
+            return
+        }
+
         guard PasteService.writeAllRepresentations(item, representations: representations) else {
             monitor?.resume()
             viewModel?.showNotice(NSLocalizedString(Self.pasteFailureMessageKey(for: item), comment: ""), style: .error)
             return
         }
+        finishPaste(item, representations: representations)
+    }
+
+    /// 图片粘贴：读盘 + TIFF 编码下沉后台，主线程只做 pasteboard 写入与模拟粘贴。
+    /// 大图（数 MB）这段在主线程实测可占 50~200ms，是 Return 后"面板卡一下"的来源。
+    private func performImagePaste(_ item: ClipItem, representations: [ClipRepresentation]) {
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let payload = PasteService.loadImagePayload(item)
+            await MainActor.run {
+                guard let self else { return }
+                guard let payload,
+                      PasteService.writeAllRepresentations(
+                        item, representations: representations, imagePayload: payload) else {
+                    self.monitor?.resume()
+                    self.viewModel?.showNotice(
+                        NSLocalizedString(Self.pasteFailureMessageKey(for: item), comment: ""),
+                        style: .error
+                    )
+                    return
+                }
+                self.finishPaste(item, representations: representations)
+            }
+        }
+    }
+
+    /// 粘贴成功后的公共收尾：计数、富文本提示、模拟 Cmd+V。
+    private func finishPaste(_ item: ClipItem, representations: [ClipRepresentation]) {
         incrementPasteCountAsync(item.id)
 
         // 富文本首次粘贴的教育提示：告诉用户额外格式被保留。
