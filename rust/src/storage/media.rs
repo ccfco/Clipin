@@ -340,16 +340,36 @@ impl Storage {
         Ok(removed)
     }
 
+    /// 缓存 file 类型里可解码的图片附件。扩展名决定回放/预览时的 UTI，
+    /// 因此保留原始编码（JPEG/HEIC 转 PNG 会放大 5~10 倍磁盘占用）。
+    pub fn write_attachment(
+        &self,
+        item_id: &str,
+        index: i32,
+        bytes: &[u8],
+        ext: &str,
+    ) -> Result<String, ClipinError> {
+        // 白名单收窄：ext 参与拼文件名，沿路径穿越同样被挡住
+        let ext = match ext.to_ascii_lowercase().as_str() {
+            "png" | "jpg" | "jpeg" | "heic" | "heif" | "tiff" | "tif" => {
+                ext.to_ascii_lowercase()
+            }
+            _ => "png".to_string(),
+        };
+        fs::create_dir_all(&self.image_dir)?;
+        let filename = format!("{item_id}_{index}.{ext}");
+        let path = Path::new(&self.image_dir).join(filename);
+        fs::write(&path, bytes)?;
+        Ok(path.to_string_lossy().to_string())
+    }
+
+    /// 兼容入口：历史调用方（测试/非图片附件）按 PNG 落盘。
     pub fn write_attachment_png(
         &self,
         item_id: &str,
         index: i32,
         bytes: &[u8],
     ) -> Result<String, ClipinError> {
-        fs::create_dir_all(&self.image_dir)?;
-        let filename = format!("{item_id}_{index}.png");
-        let path = Path::new(&self.image_dir).join(filename);
-        fs::write(&path, bytes)?;
-        Ok(path.to_string_lossy().to_string())
+        self.write_attachment(item_id, index, bytes, "png")
     }
 }

@@ -456,11 +456,16 @@ final class ClipboardMonitor: ObservableObject {
         for (index, url) in urls.enumerated() where Self.isImageFileURL(url) {
             do {
                 let rawData = try Data(contentsOf: url)
-                let pngData = try Self.makePNGData(from: rawData)
-                cachedPaths[index] = try core.writeAttachmentPng(
+                // 与图片采集同口径：JPEG/HEIC 保留原编码，TIFF/未知格式才转 PNG。
+                let (bytes, ext) = try Self.prepareImageBytes(
+                    rawData,
+                    sourceUTI: PasteService.uti(forImagePath: url.path)
+                )
+                cachedPaths[index] = try core.writeAttachment(
                     itemId: itemID,
                     index: Int32(index),
-                    bytes: pngData
+                    bytes: bytes,
+                    ext: ext
                 )
             } catch {
                 ClipinLog.monitor.error("Failed to cache image file attachment \(url.path, privacy: .private): \(error.localizedDescription, privacy: .public)")

@@ -86,6 +86,17 @@ impl ClipinCore {
     }
 
     /// 把图片附件 bytes 写入 imageDir，返回可持久化到 attachment_paths 的 PNG 路径。
+    /// 缓存 file 类型条目里的图片附件（保留原始编码）。ext 走白名单，未知回退 png。
+    pub fn write_attachment(
+        &self,
+        item_id: String,
+        index: i32,
+        bytes: Vec<u8>,
+        ext: String,
+    ) -> Result<String, ClipinError> {
+        self.storage.write_attachment(&item_id, index, &bytes, &ext)
+    }
+
     pub fn write_attachment_png(
         &self,
         item_id: String,
@@ -1482,6 +1493,21 @@ mod tests {
     }
 
     #[test]
+    fn test_write_attachment_preserves_extension() {
+        let (core, _img_dir) = setup_core_with_image_dir();
+
+        let jpg = core
+            .write_attachment("item-1".into(), 0, b"jpeg-bytes".to_vec(), "JPG".into())
+            .unwrap();
+        assert!(jpg.ends_with("item-1_0.jpg"), "扩展名应归一化为小写");
+
+        // 白名单外的扩展名必须回退 png，不能借 ext 拼出任意文件名
+        let evil = core
+            .write_attachment("item-2".into(), 0, b"x".to_vec(), "../evil".into())
+            .unwrap();
+        assert!(evil.ends_with("item-2_0.png"), "非白名单扩展名应回退 png");
+    }
+
     fn test_write_attachment_png_uses_image_dir() {
         let (core, img_dir) = setup_core_with_image_dir();
 
