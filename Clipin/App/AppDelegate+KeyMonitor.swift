@@ -102,6 +102,14 @@ extension AppDelegate {
         setShortcutHintVisible(false)
     }
 
+    /// 为历史条目补跑语义标签（仅处理 ai_tags IS NULL 且有足够文本的条目）。
+    /// 与 OCR backfill 并行：图片只有 OCR 完成后才进入候选，服务自身幂等可重复触发。
+    func backfillSemanticTags() {
+        guard settings.aiTaggingEnabled else { return }
+        let core = appState.core
+        Task { await AiTaggingService.shared.kick(core: core) }
+    }
+
     /// 为历史图片补跑 OCR（仅处理 ocr_text 为 NULL 的条目，分页直到处理完毕）
     /// 使用 .background 优先级串行处理，不影响 UI 和正常的新图片 OCR；
     /// Task 存储在 backfillTask 供 applicationWillTerminate 取消

@@ -210,6 +210,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         updateReminder.start()
         _ = autoBackupService  // 确保备份服务在 App 启动时立即初始化，不依赖设置窗口打开
         backfillOcrForExistingImages()
+        backfillSemanticTags()
         backfillImageDimensionsForExistingImages()
         reconcileOrphanAttachments()
         // QA 自截图钩子(语义见 QAFlags)。用 showPanel() 而非 togglePanel():

@@ -250,7 +250,27 @@ impl Storage {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
-    /// ClipItem 的 15 列投影,顺序必须与 row_to_item 的 ordinal 0..=14 一一对应。
+    /// 语义标签 backfill 专用：ai_tags IS NULL（未处理）且文本足够生成标签的条目。
+    /// 图片要等 OCR 完成（ocr_text 非 NULL）才进入候选，否则只能拿 "image" 占位文案。
+    /// 无标签的条目写入空串而非留在 NULL，避免每轮 backfill 反复扫到同一批。
+    pub fn get_untagged_items(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM clip_items
+             WHERE ai_tags IS NULL
+               AND (
+                   (clip_type != 'image' AND length(trim(content)) >= 8)
+                   OR (clip_type = 'image' AND ocr_text IS NOT NULL AND length(trim(ocr_text)) >= 8)
+               )
+             ORDER BY created_at ASC
+             LIMIT ?1",
+            Self::item_cols("")
+        ))?;
+        let rows = stmt.query_map(params![limit], Self::row_to_item)?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    /// ClipItem 的 16 列投影,顺序必须与 row_to_item 的 ordinal 0..=15 一一对应。
     /// 改列顺序 = 同步改本函数 + row_to_item 两处,别处不再手抄。
     /// prefix: "" (裸列:浏览/LIKE/get_item) 或 "ci." (JOIN clip_fts 时消歧)。
     /// FTS 分支的 `, clip_fts.rank` 由调用点自行 format! 追加,不在此函数内。
@@ -259,6 +279,7 @@ impl Storage {
             "id", "content", "clip_type", "source_app", "source_name",
             "is_pinned", "created_at", "image_path", "char_count", "copy_count",
             "first_copied_at", "ocr_text", "paste_count", "alias", "attachment_paths",
+            "ai_tags",
         ]
         .iter()
         .map(|c| format!("{prefix}{c}"))
@@ -280,7 +301,7 @@ impl Storage {
         )
     }
 
-    /// ClipItem 行解码:ordinal 0..=14 必须与 item_cols 的列顺序逐位对应。
+    /// ClipItem 行解码:ordinal 0..=15 必须与 item_cols 的列顺序逐位对应。
     /// 改列顺序只动 item_cols + 本函数两处,各 SELECT 全由 item_cols 派生不再手抄。
     pub(super) fn row_to_item(row: &rusqlite::Row) -> rusqlite::Result<ClipItem> {
         let clip_type_str: String = row.get(2)?;
@@ -301,13 +322,15 @@ impl Storage {
             paste_count: row.get(12)?,
             alias: row.get(13)?,
             attachment_paths: row.get(14)?,
+            ai_tags: row.get(15)?,
         })
     }
 
     pub(super) fn row_to_item_search_hit(row: &rusqlite::Row) -> rusqlite::Result<SearchHit<ClipItem>> {
         Ok(SearchHit {
             item: Self::row_to_item(row)?,
-            raw_rank: row.get(15)?,
+            // item 投影占 0..=15，FTS rank 永远追加在数据列之后。
+            raw_rank: row.get(16)?,
         })
     }
 

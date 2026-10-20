@@ -542,6 +542,8 @@ final class ClipboardMonitor: ObservableObject {
             if !ocrText.isEmpty {
                 NotificationCenter.default.post(name: .clipboardItemOcrUpdated, object: nil)
             }
+            // 图片要等 OCR 落库后才进入标签候选，这里再踢一次（幂等）。
+            await requestAiTagging()
         } catch {
             if case ClipinError.NotFound = error {
                 ClipinLog.ocr.info("OCR result discarded: item \(itemId, privacy: .public) was replaced by dedup")
@@ -628,6 +630,14 @@ final class ClipboardMonitor: ObservableObject {
     private func notifyNewItem() {
         NotificationCenter.default.post(name: .clipHistoryItemSaved, object: nil)
         onNewItem?()
+        requestAiTagging()
+    }
+
+    /// 新条目入库后让标签流水线感知。幂等且异步：不阻塞采集，模型不可用/开关关闭时零开销。
+    @MainActor
+    private func requestAiTagging() {
+        guard settings.aiTaggingEnabled else { return }
+        Task { await AiTaggingService.shared.kick(core: core) }
     }
 }
 

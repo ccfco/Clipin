@@ -19,7 +19,8 @@ final class PasteServiceRepresentationTests: XCTestCase {
             firstCopiedAt: 0,
             ocrText: nil,
             pasteCount: 0,
-            alias: nil
+            alias: nil,
+            aiTags: nil
         )
     }
 

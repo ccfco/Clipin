@@ -78,6 +78,9 @@ impl Storage {
         if from_version < 12 {
             Self::migrate_to_v12(&self.conn())?;
         }
+        if from_version < 13 {
+            Self::migrate_to_v13(&self.conn())?;
+        }
         Ok(())
     }
 
@@ -442,6 +445,55 @@ impl Storage {
             conn.execute_batch("ALTER TABLE clip_items ADD COLUMN attachment_paths TEXT;")?;
         }
         conn.execute_batch("PRAGMA user_version = 12;")?;
+        Ok(())
+    }
+
+    fn migrate_to_v13(conn: &Connection) -> Result<(), ClipinError> {
+        // Apple Intelligence 语义标签列。可空 TEXT：NULL = 未生成，'' = 已处理但无标签。
+        // 列必须进 FTS（同 v11 的 alias），否则标签命中无法参与搜索召回。
+        let has_ai_tags: bool = conn
+            .prepare("PRAGMA table_info(clip_items)")?
+            .query_map([], |row| row.get::<_, String>(1))?
+            .any(|n| n.as_deref() == Ok("ai_tags"));
+        if !has_ai_tags {
+            conn.execute_batch("ALTER TABLE clip_items ADD COLUMN ai_tags TEXT;")?;
+        }
+
+        conn.execute_batch(
+            "DROP TRIGGER IF EXISTS clip_items_ai;
+             DROP TRIGGER IF EXISTS clip_items_ad;
+             DROP TRIGGER IF EXISTS clip_items_au;
+             DROP TABLE   IF EXISTS clip_fts;
+
+             CREATE VIRTUAL TABLE clip_fts USING fts5(
+                 content, source_name, ocr_text, alias, ai_tags, pinyin_flat, pinyin_initials,
+                 content='clip_items', content_rowid='rowid', tokenize='trigram'
+             );
+
+             CREATE TRIGGER clip_items_ai AFTER INSERT ON clip_items BEGIN
+                 INSERT INTO clip_fts(rowid,content,source_name,ocr_text,alias,ai_tags,pinyin_flat,pinyin_initials)
+                 VALUES(new.rowid,new.content,new.source_name,new.ocr_text,new.alias,new.ai_tags,new.pinyin_flat,new.pinyin_initials);
+             END;
+
+             CREATE TRIGGER clip_items_ad AFTER DELETE ON clip_items BEGIN
+                 INSERT INTO clip_fts(clip_fts,rowid,content,source_name,ocr_text,alias,ai_tags,pinyin_flat,pinyin_initials)
+                 VALUES('delete',old.rowid,old.content,old.source_name,old.ocr_text,old.alias,old.ai_tags,old.pinyin_flat,old.pinyin_initials);
+             END;
+
+             CREATE TRIGGER clip_items_au
+             AFTER UPDATE OF content, source_name, ocr_text, alias, ai_tags, pinyin_flat, pinyin_initials
+             ON clip_items BEGIN
+                 INSERT INTO clip_fts(clip_fts,rowid,content,source_name,ocr_text,alias,ai_tags,pinyin_flat,pinyin_initials)
+                 VALUES('delete',old.rowid,old.content,old.source_name,old.ocr_text,old.alias,old.ai_tags,old.pinyin_flat,old.pinyin_initials);
+                 INSERT INTO clip_fts(rowid,content,source_name,ocr_text,alias,ai_tags,pinyin_flat,pinyin_initials)
+                 VALUES(new.rowid,new.content,new.source_name,new.ocr_text,new.alias,new.ai_tags,new.pinyin_flat,new.pinyin_initials);
+             END;
+
+             INSERT INTO clip_fts(rowid,content,source_name,ocr_text,alias,ai_tags,pinyin_flat,pinyin_initials)
+             SELECT rowid,content,source_name,ocr_text,alias,ai_tags,pinyin_flat,pinyin_initials FROM clip_items;
+
+             PRAGMA user_version = 13;",
+        )?;
         Ok(())
     }
 

@@ -208,6 +208,8 @@ struct PreviewPane: View, Equatable {
         if let pinned = pinnedBadge(for: item) {
             entries.append(PreviewRailEntry(item: pinned))
         }
+        // 语义标签是内容级识别结果，和 OCR 同属"这条内容还能怎么被理解"，排在元数据之前。
+        entries.append(contentsOf: aiTagBadges(for: item).map(PreviewRailEntry.init))
         entries.append(contentsOf: metricBadges(for: item).map(PreviewRailEntry.init))
         if let formats = formatsBadge(for: item) {
             entries.append(PreviewRailEntry(item: formats))
@@ -431,6 +433,25 @@ struct PreviewPane: View, Equatable {
             systemImage: "doc.richtext",
             helpText: NSLocalizedString("preview.metadata.formats", comment: "Formats label in preview metadata")
         )
+    }
+
+    /// 语义标签最多展示 3 个：rail 是单行辅助信息，再多会挤掉时间/用量等元数据。
+    /// 标签本身已进 FTS，完整集合仍可通过搜索命中，UI 无需穷举。
+    private func aiTagBadges(for item: ClipItem) -> [PreviewBadgeItem] {
+        guard let raw = item.aiTags, !raw.isEmpty else { return [] }
+        let tags = raw
+            .components(separatedBy: CharacterSet(charactersIn: ",，、"))
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .prefix(3)
+        return tags.enumerated().map { index, tag in
+            PreviewBadgeItem(
+                id: "ai-tag-\(index)",
+                title: tag,
+                systemImage: "sparkles",
+                helpText: NSLocalizedString("preview.metadata.semanticTag", comment: "")
+            )
+        }
     }
 
     private func ocrBadge(for item: ClipItem) -> PreviewBadgeItem? {

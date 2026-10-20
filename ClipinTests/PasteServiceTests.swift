@@ -28,7 +28,8 @@ final class PasteServiceTests: XCTestCase {
             firstCopiedAt: 0,
             ocrText: nil,
             pasteCount: 0,
-            alias: nil
+            alias: nil,
+            aiTags: nil
         )
 
         XCTAssertFalse(PasteService.writeToClipboard(missingImage))
@@ -55,7 +56,8 @@ final class PasteServiceTests: XCTestCase {
             firstCopiedAt: 0,
             ocrText: nil,
             pasteCount: 0,
-            alias: nil
+            alias: nil,
+            aiTags: nil
         )
 
         XCTAssertFalse(PasteService.writeAsPlainText(emptyFileSelection))
@@ -82,7 +84,8 @@ final class PasteServiceTests: XCTestCase {
             firstCopiedAt: 0,
             ocrText: nil,
             pasteCount: 0,
-            alias: nil
+            alias: nil,
+            aiTags: nil
         )
 
         XCTAssertFalse(PasteService.writeToClipboard(missingFile))
@@ -118,7 +121,8 @@ final class PasteServiceTests: XCTestCase {
             firstCopiedAt: 0,
             ocrText: nil,
             pasteCount: 0,
-            alias: nil
+            alias: nil,
+            aiTags: nil
         )
 
         XCTAssertFalse(PasteService.writeToClipboard(partialSelection))

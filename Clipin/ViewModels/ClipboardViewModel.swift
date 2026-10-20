@@ -245,6 +245,7 @@ final class ClipboardViewModel: ObservableObject {
     private(set) var shortcutIndexByID: [String: Int] = [:]
     private var debounce: AnyCancellable?
     private var ocrSubscription: AnyCancellable?
+    private var aiTagsSubscription: AnyCancellable?
     private var settingsSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
     // OCR 静默刷新当前 payload 的任务句柄：必须可被 selectItem 取消，否则 A→B→A 快切时
@@ -307,6 +308,11 @@ final class ClipboardViewModel: ObservableObject {
         // 走 reloadSelectedItemPayload 专路：仅在选中图片时重 getItem 拉最新 ocr_text。
         ocrSubscription = NotificationCenter.default
             .publisher(for: .clipboardItemOcrUpdated)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.reloadSelectedItemPayload() }
+        // 语义标签同样是「内容字段更新、选中不变」，复用同一条静默刷新路径。
+        aiTagsSubscription = NotificationCenter.default
+            .publisher(for: .clipboardItemAiTagsUpdated)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.reloadSelectedItemPayload() }
         settingsSubscription = settings.$pinnedItemsPresentation

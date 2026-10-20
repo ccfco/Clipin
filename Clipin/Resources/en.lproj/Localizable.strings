@@ -455,3 +455,11 @@
 "This item has no HTML formatting." = "This item has no HTML formatting.";
 "This item has no RTF formatting." = "This item has no RTF formatting.";
 "Space to preview · arrow keys flip through items in the preview" = "Space to preview · arrow keys flip through items in the preview";
+
+/* Apple Intelligence semantic tags */
+"Apple Intelligence" = "Apple Intelligence";
+"Semantic tags for search" = "Semantic tags for search";
+"Apple Intelligence tags each item with a few keywords on-device, so related content is found even when the wording differs. Nothing leaves your Mac." = "Apple Intelligence tags each item with a few keywords on-device, so related content is found even when the wording differs. Nothing leaves your Mac.";
+"Apple Intelligence is not available" = "Apple Intelligence is not available";
+"Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags." = "Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags.";
+"preview.metadata.semanticTag" = "Semantic tag";

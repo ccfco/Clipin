@@ -248,6 +248,16 @@ impl ClipinCore {
         self.storage.get_unprocessed_images(limit)
     }
 
+    /// 写入 Apple Intelligence 语义标签（空串 = 已处理但无标签，与 NULL 区分）
+    pub fn update_ai_tags(&self, id: String, ai_tags: String) -> Result<(), ClipinError> {
+        self.storage.update_ai_tags(&id, &ai_tags)
+    }
+
+    /// 获取尚未生成语义标签且有足够文本的条目，用于 backfill
+    pub fn get_untagged_items(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
+        self.storage.get_untagged_items(limit)
+    }
+
     /// 写入图片像素尺寸（图片保存后异步调用）
     pub fn update_image_dimensions(
         &self,

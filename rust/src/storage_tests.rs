@@ -9,7 +9,7 @@ fn test_fresh_db_is_version_1() {
     std::fs::create_dir_all(&img_dir).unwrap();
 
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 12, "新建数据库应为 v12");
+    assert_eq!(storage.schema_version(), 13, "新建数据库应为 v13");
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn test_existing_v0_migrates_to_v1() {
 
     // Storage::new 应自动 migrate 到 v1
     let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 12, "旧数据库应 migrate 到 v12");
+    assert_eq!(storage.schema_version(), 13, "旧数据库应 migrate 到 v13");
 
     // 数据表应已创建
     let conn = storage.conn.lock().unwrap();
@@ -55,7 +55,7 @@ fn test_migration_is_idempotent() {
 
     // 第二次 open 不应出错
     let s2 = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(s2.schema_version(), 12);
+    assert_eq!(s2.schema_version(), 13);
 }
 
 #[test]
@@ -86,10 +86,10 @@ fn test_v8_adds_browse_indexes_and_narrows_fts_update_trigger() {
             |r| r.get(0),
         )
         .unwrap();
-    // v8 收窄了 clip_items_au 的 UPDATE OF 列集；v11 重建 FTS 时在该列集追加了 alias。
-    // 此处断言的是当前 head schema 的触发器形态，故跟随 v11 的列集。
+    // v8 收窄了 clip_items_au 的 UPDATE OF 列集；v11 追加 alias、v13 追加 ai_tags。
+    // 此处断言的是当前 head schema 的触发器形态，故跟随最新列集。
     assert!(trigger_sql.contains(
-        "AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initials"
+        "AFTER UPDATE OF content, source_name, ocr_text, alias, ai_tags, pinyin_flat, pinyin_initials"
     ));
 }
 
@@ -165,7 +165,7 @@ fn test_v10_migration_is_reentrant() {
     }
     // 列还在、版本回到 9 → migrate_to_v10 必须跳过 ALTER；随后继续跑 v11/v12 到 head。
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 12);
+    assert_eq!(storage.schema_version(), 13);
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn test_v11_adds_alias_column_and_rebuilds_fts() {
     std::fs::create_dir_all(&img_dir).unwrap();
 
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 12);
+    assert_eq!(storage.schema_version(), 13);
 
     let conn = storage.conn.lock().unwrap();
 
@@ -209,7 +209,7 @@ fn test_v11_adds_alias_column_and_rebuilds_fts() {
         .unwrap();
     assert!(
         trigger_sql.contains(
-            "AFTER UPDATE OF content, source_name, ocr_text, alias, pinyin_flat, pinyin_initials"
+            "AFTER UPDATE OF content, source_name, ocr_text, alias, ai_tags, pinyin_flat, pinyin_initials"
         ),
         "clip_items_au 应在 UPDATE OF 列集里包含 alias"
     );
@@ -249,7 +249,7 @@ fn test_v12_migration_is_reentrant() {
     }
     // 列还在、版本回到 11 → migrate_to_v12 必须跳过 ALTER
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 12);
+    assert_eq!(storage.schema_version(), 13);
 }
 
 #[test]
@@ -757,4 +757,155 @@ fn test_list_pagination_stable_with_equal_created_at() {
         offset += page.len() as i32;
     }
     assert_eq!(seen_items.len(), 20, "get_items 翻页应覆盖全部 20 条");
+}
+
+#[test]
+fn test_ai_tags_participate_in_search() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+    let item = storage
+        .save_item("some unrelated body", &ClipType::Text, None, None, None)
+        .unwrap();
+    storage.update_ai_tags(&item.id, "发票, 报销单").unwrap();
+
+    // 2 字走 LIKE 回退，3 字走 FTS —— 两条路径都必须命中 ai_tags。
+    let like_hits = storage.search("发票", None).unwrap();
+    assert_eq!(like_hits.len(), 1, "LIKE 回退应命中 ai_tags");
+    let fts_hits = storage.search("报销单", None).unwrap();
+    assert_eq!(fts_hits.len(), 1, "FTS 应命中 ai_tags");
+
+    // 列表搜索路径同样覆盖
+    let list_hits = storage.search_list_items("发票", None).unwrap();
+    assert_eq!(list_hits.len(), 1, "列表搜索应命中 ai_tags");
+}
+
+#[test]
+fn test_get_untagged_items_eligibility_and_sentinel() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+    // 太短的文本不进入候选（模型没有足够上下文）
+    let short = storage
+        .save_item("hi", &ClipType::Text, None, None, None)
+        .unwrap();
+    // 长文本进入候选
+    let long = storage
+        .save_item("quarterly budget spreadsheet", &ClipType::Text, None, None, None)
+        .unwrap();
+
+    let pending = storage.get_untagged_items(10).unwrap();
+    assert_eq!(pending.len(), 1, "只有足够长的条目应进入候选");
+    assert_eq!(pending[0].id, long.id);
+
+    // 写入空串 = 已处理但无标签，不能再次进入候选
+    storage.update_ai_tags(&long.id, "").unwrap();
+    assert!(
+        storage.get_untagged_items(10).unwrap().is_empty(),
+        "空标签哨兵必须阻止重复处理"
+    );
+
+    // 短文本始终停留在 NULL（不满足长度门槛），同样不会被扫到
+    let still_pending = storage.get_untagged_items(10).unwrap();
+    assert!(still_pending.is_empty());
+    let _ = short;
+}
+
+#[test]
+fn test_get_untagged_items_waits_for_image_ocr() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+    let img_path = tmp.path().join("shot.png");
+    std::fs::write(&img_path, b"not-a-real-png").unwrap();
+    let image = storage
+        .save_item("image", &ClipType::Image, None, None, Some(img_path.to_str().unwrap()))
+        .unwrap();
+
+    // OCR 未完成：图片不应进入标签候选
+    assert!(storage.get_untagged_items(10).unwrap().is_empty());
+
+    // OCR 完成后进入候选
+    storage
+        .update_ocr_text(&image.id, "invoice total 128.00 CNY")
+        .unwrap();
+    let pending = storage.get_untagged_items(10).unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, image.id);
+}
+
+#[test]
+fn test_dedup_preserves_ai_tags() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+    let first = storage
+        .save_item("release checklist", &ClipType::Text, None, None, None)
+        .unwrap();
+    storage.update_ai_tags(&first.id, "release, checklist").unwrap();
+
+    // 同内容再次复制：hash 相同 → 标签是派生结果，必须随条目保留
+    let second = storage
+        .save_item("release checklist", &ClipType::Text, None, None, None)
+        .unwrap();
+    assert_eq!(second.ai_tags.as_deref(), Some("release, checklist"));
+    assert_eq!(second.copy_count, 2);
+}
+
+#[test]
+fn test_v13_adds_ai_tags_column_and_indexes_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+    assert_eq!(storage.schema_version(), 13);
+    let conn = storage.conn.lock().unwrap();
+
+    let has_ai_tags: bool = conn
+        .prepare("PRAGMA table_info(clip_items)")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(1))
+        .unwrap()
+        .any(|name| name.as_deref() == Ok("ai_tags"));
+    assert!(has_ai_tags, "clip_items 应有 ai_tags 列");
+
+    let fts_sql: String = conn
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='clip_fts'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(fts_sql.contains("ai_tags"), "clip_fts 应索引 ai_tags");
+}
+
+#[test]
+fn test_v13_migration_is_reentrant() {
+    // 模拟「v13 的 ALTER 已提交、user_version 还没推进就崩溃」：列已存在、版本回到 12。
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+
+    Storage::new(&db_path, &img_dir).unwrap();
+    {
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch("PRAGMA user_version = 12;").unwrap();
+    }
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+    assert_eq!(storage.schema_version(), 13);
 }

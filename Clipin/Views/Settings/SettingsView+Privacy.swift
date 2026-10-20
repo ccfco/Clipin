@@ -17,6 +17,31 @@ extension SettingsView {
             )
         }
 
+        Section("Apple Intelligence") {
+            toggleRow(
+                "Semantic tags for search",
+                "Apple Intelligence tags each item with a few keywords on-device, so related content is found even when the wording differs. Nothing leaves your Mac.",
+                isOn: Binding(
+                    get: { settings.aiTaggingEnabled },
+                    set: { newValue in
+                        settings.aiTaggingEnabled = newValue
+                        // 打开开关立即补跑历史，否则要等下一次剪贴板事件才生效
+                        if newValue { AiTaggingService.shared.kick(core: core) }
+                    }
+                )
+            )
+            .disabled(!AiTaggingService.isAvailable)
+
+            if !AiTaggingService.isAvailable {
+                calloutRow(
+                    systemImage: "sparkles",
+                    tint: .secondary,
+                    title: Text("Apple Intelligence is not available"),
+                    description: Text("Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags.")
+                )
+            }
+        }
+
         Section("Filtering") {
             toggleRow(
                 "Filter out drag-and-drop and app-generated clipboard writes",

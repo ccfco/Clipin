@@ -7,4 +7,6 @@ extension Notification.Name {
     static let clipinPreviewVisibilityDidChange = Notification.Name("ClipinPreviewVisibilityDidChange")
     static let clipinPreviewSelectionDidChange = Notification.Name("ClipinPreviewSelectionDidChange")
     static let clipboardItemOcrUpdated = Notification.Name("ClipboardItemOcrUpdated")
+    /// 语义标签写回完成（选中项内容字段更新，但列表顺序不变）。
+    static let clipboardItemAiTagsUpdated = Notification.Name("ClipboardItemAiTagsUpdated")
 }

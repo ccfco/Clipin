@@ -38,6 +38,9 @@ enum ClipinLog {
     /// 图片 OCR 文本识别（Vision Framework）+ 历史回填。
     static let ocr = Logger(subsystem: subsystem, category: "ocr")
 
+    /// Apple Intelligence 语义标签生成与历史回填。
+    static let aiTags = Logger(subsystem: subsystem, category: "aiTags")
+
     /// 图片尺寸读取与历史回填。
     static let imageDimensions = Logger(subsystem: subsystem, category: "imageDimensions")
 

@@ -455,3 +455,11 @@
 "This item has no HTML formatting." = "该条目没有 HTML 格式。";
 "This item has no RTF formatting." = "该条目没有 RTF 格式。";
 "Space to preview · arrow keys flip through items in the preview" = "空格预览 · 预览中可用方向键翻看上下条";
+
+/* Apple Intelligence semantic tags */
+"Apple Intelligence" = "Apple Intelligence";
+"Semantic tags for search" = "搜索语义标签";
+"Apple Intelligence tags each item with a few keywords on-device, so related content is found even when the wording differs. Nothing leaves your Mac." = "Apple Intelligence 会在本机为每条内容生成几个关键词，即使措辞不同也能搜到相关内容。内容不会离开你的 Mac。";
+"Apple Intelligence is not available" = "Apple Intelligence 当前不可用";
+"Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags." = "请在系统设置中开启 Apple Intelligence，Clipin 才能在本机生成语义标签。";
+"preview.metadata.semanticTag" = "语义标签";

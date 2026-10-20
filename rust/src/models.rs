@@ -49,6 +49,9 @@ pub struct ClipItem {
     pub paste_count: i32,
     /// 用户自定义别名（显示名）。None 表示未命名，列表回退到内容兜底预览。
     pub alias: Option<String>,
+    /// Apple Intelligence 生成的语义标签（逗号分隔），异步写入并纳入搜索。
+    /// None = 尚未生成；空串 = 已处理但无可用标签（两条语义必须区分，否则会无限重跑）。
+    pub ai_tags: Option<String>,
 }
 
 /// 列表使用的轻量摘要记录，避免长文本拖慢整个面板

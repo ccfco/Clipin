@@ -126,6 +126,7 @@ impl Storage {
                 is_pinned: existing.is_pinned,
                 alias: existing.alias,
                 ocr_text: existing.ocr_text,
+                ai_tags: existing.ai_tags,
             },
             None => PreservedItemState {
                 first_copied_at: now,
@@ -134,6 +135,7 @@ impl Storage {
                 is_pinned: false,
                 alias: None,
                 ocr_text: None,
+                ai_tags: None,
             },
         };
 
@@ -153,8 +155,8 @@ impl Storage {
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         tx.execute(
             "INSERT INTO clip_items
-             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,paste_count,pinyin_flat,pinyin_initials,alias,attachment_paths,ocr_text)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,paste_count,pinyin_flat,pinyin_initials,alias,attachment_paths,ocr_text,ai_tags)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
             params![
                 id,
                 content,
@@ -174,6 +176,7 @@ impl Storage {
                 preserved.alias,
                 attachment_paths,
                 preserved.ocr_text.as_deref(),
+                preserved.ai_tags.as_deref(),
             ],
         )?;
         Self::insert_representations_in_tx(&tx, &id, representations)?;
@@ -199,6 +202,7 @@ impl Storage {
             ocr_text: preserved.ocr_text,
             paste_count: preserved.paste_count,
             alias: preserved.alias,
+            ai_tags: preserved.ai_tags,
         })
     }
 
@@ -207,6 +211,20 @@ impl Storage {
         let affected = conn.execute(
             "UPDATE clip_items SET ocr_text = ?1 WHERE id = ?2",
             params![ocr_text, id],
+        )?;
+        if affected == 0 {
+            return Err(ClipinError::NotFound { id: id.to_string() });
+        }
+        Ok(())
+    }
+
+    /// 写入 Apple Intelligence 语义标签。空串表示「已处理但无可用标签」，
+    /// 与 NULL（未处理）区分，防止 backfill 对同一批无标签条目无限重跑。
+    pub fn update_ai_tags(&self, id: &str, ai_tags: &str) -> Result<(), ClipinError> {
+        let conn = self.conn();
+        let affected = conn.execute(
+            "UPDATE clip_items SET ai_tags = ?1 WHERE id = ?2",
+            params![ai_tags, id],
         )?;
         if affected == 0 {
             return Err(ClipinError::NotFound { id: id.to_string() });
@@ -425,6 +443,7 @@ impl Storage {
             ocr_text: None,
             paste_count: 0,
             alias: alias.map(String::from),
+            ai_tags: None,
         })
     }
 

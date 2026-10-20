@@ -31,7 +31,7 @@ impl Storage {
     /// 与 migration 仍需单独同步）。曾因 LIKE 分支手写 4 份列清单漂移漏掉
     /// source_name，收口后此类漂移结构性消除。
     const SEARCHABLE_TEXT_COLS: &'static [&'static str] =
-        &["content", "source_name", "ocr_text", "alias"];
+        &["content", "source_name", "ocr_text", "alias", "ai_tags"];
 
     fn build_search_query(query: &str) -> SearchQuery {
         let raw = query.trim().to_string();

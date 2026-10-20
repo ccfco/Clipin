@@ -21,6 +21,8 @@ pub(super) struct PreservedItemState {
     /// OCR 是异步的，用户很可能在识别完成前后重复复制同一张图；丢掉 ocr_text
     /// 会让新条目搜不到图片里的文字，直到下次启动 backfill 才补回来。
     pub(super) ocr_text: Option<String>,
+    /// 语义标签是 content/OCR 的派生结果，同 hash 重新复制时原样保留。
+    pub(super) ai_tags: Option<String>,
 }
 
 impl Storage {
@@ -163,7 +165,7 @@ impl Storage {
         hash: &str,
     ) -> Result<Option<PreservedItemState>, ClipinError> {
         conn.query_row(
-            "SELECT first_copied_at, copy_count, paste_count, is_pinned, alias, ocr_text
+            "SELECT first_copied_at, copy_count, paste_count, is_pinned, alias, ocr_text, ai_tags
              FROM clip_items
              WHERE hash = ?1",
             params![hash],
@@ -177,6 +179,7 @@ impl Storage {
                     is_pinned: row.get(3)?,
                     alias: row.get(4)?,
                     ocr_text: row.get(5)?,
+                    ai_tags: row.get(6)?,
                 })
             },
         )
