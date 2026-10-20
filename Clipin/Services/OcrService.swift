@@ -1,3 +1,4 @@
+import Foundation
 import Vision
 
 /// 基于 Apple Vision Framework 的 OCR 服务
@@ -12,24 +13,27 @@ actor OcrService {
 
     func recognizeText(at imagePath: String) async -> String {
         let url = URL(fileURLWithPath: imagePath)
-        let request = VNRecognizeTextRequest()
+        // Vision 的 Swift 原生 API（macOS 15+）：ImageRequestHandler.perform 本身是
+        // async，识别在框架内部线程执行，不再像 VNImageRequestHandler 那样同步占住
+        // actor 的 executor。结果直接由返回值给出，没有 completion 双路径。
+        var request = RecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = true
-        // VNImageRequestHandler.perform 是同步调用；这里直接在返回后读取 results，
-        // 避免 completion + catch 两条路径重复 resume continuation 导致 OCR 后台线程崩溃。
-        request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+        request.recognitionLanguages = [
+            Locale.Language(identifier: "zh-Hans"),
+            Locale.Language(identifier: "zh-Hant"),
+            Locale.Language(identifier: "en-US"),
+        ]
 
-        let handler = VNImageRequestHandler(url: url, options: [:])
+        let handler = ImageRequestHandler(url)
         do {
-            try handler.perform([request])
+            let observations = try await handler.perform(request)
+            return observations
+                .compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n")
         } catch {
             ClipinLog.ocr.error("OCR perform error: \(error.localizedDescription, privacy: .public)")
             return ""
         }
-
-        return request.results?
-            .compactMap { $0.topCandidates(1).first?.string }
-            .joined(separator: "\n")
-            ?? ""
     }
 }
