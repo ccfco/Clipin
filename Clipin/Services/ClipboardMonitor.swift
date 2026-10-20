@@ -50,7 +50,8 @@ final class ClipboardMonitor: ObservableObject {
     /// `nonisolated(unsafe)`：这两个值和 stateLock 是同一组手工加锁的状态，
     /// 所有读写都已在锁内完成。Swift 的 actor 隔离无法表达「跨线程 + NSLock」，
     /// 用 nonisolated(unsafe) 把保证责任显式落到这里，避免把整个轮询路径搬上主线程。
-    private nonisolated(unsafe) let stateLock = NSLock()
+    /// stateLock 本身是 Sendable，无需标注。
+    private let stateLock = NSLock()
     private nonisolated(unsafe) var lastChangeCount: Int
     private nonisolated(unsafe) var isPaused = false
     /// 持有所有正在跑的 persist task，stop() 时统一取消。
