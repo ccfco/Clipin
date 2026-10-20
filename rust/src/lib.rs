@@ -358,7 +358,10 @@ impl ClipinCore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, path::PathBuf};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
 
     fn setup_core_with_image_dir() -> (Arc<ClipinCore>, PathBuf) {
         let tmp = tempfile::tempdir().unwrap();
@@ -378,7 +381,7 @@ mod tests {
         setup_core_with_image_dir().0
     }
 
-    fn write_image(dir: &PathBuf, name: &str, bytes: &[u8]) -> String {
+    fn write_image(dir: &Path, name: &str, bytes: &[u8]) -> String {
         let path = dir.join(name);
         fs::write(&path, bytes).unwrap();
         path.to_string_lossy().to_string()
@@ -1519,6 +1522,7 @@ mod tests {
         assert!(evil.ends_with("item-2_0.png"), "非白名单扩展名应回退 png");
     }
 
+    #[test]
     fn test_write_attachment_png_uses_image_dir() {
         let (core, img_dir) = setup_core_with_image_dir();
 
