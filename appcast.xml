@@ -3,12 +3,25 @@
     <channel>
         <title>Clipin</title>
         <item>
+            <title>0.1.21</title>
+            <pubDate>Tue, 20 Oct 2026 14:36:39 +0800</pubDate>
+            <sparkle:version>121</sparkle:version>
+            <sparkle:shortVersionString>0.1.21</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.21/Clipin-0.1.21.zip" length="5739463" type="application/octet-stream" sparkle:edSignature="qs9R1lbux8BbAinHGzMCCbuf9RzcDb2BjZnH24jTXKUTwHzeqKO98f+EsZhHpUX232TaxZYZmCxppJyOwFAIBw=="/>
+            <sparkle:deltas>
+                <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.21/Clipin121-120.delta" sparkle:deltaFrom="120" length="1211202" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="XhTGQ9isrGhEhbrRue/R92CSvaGUExPyqbNUXzTJZcptH3IWItFk986IYfnd9e/d9W6pHZ3gQ1dYBm04layNBA=="/>
+                <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.21/Clipin121-119.delta" sparkle:deltaFrom="119" length="1228030" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="sagKPflMzctN39dGc/v3CZVsrw1QoPMmaluNQkMRXdZt0jvBdTN98TAseOM6tD5bq+gih+NJzJFBj0aKD47yDQ=="/>
+                <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.21/Clipin121-118.0.delta" sparkle:deltaFrom="118.0" length="1239630" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="bZdO+c5JoLRpeTN0fHLya5ERdlOZzrMU8urz2UaCviznpRoqEN1lp5pA7KB2dmW41de3sZ/joWd5S0LdNaHMCQ=="/>
+            </sparkle:deltas>
+        </item>
+        <item>
             <title>0.1.20</title>
             <pubDate>Tue, 28 Jul 2026 09:09:31 +0800</pubDate>
             <sparkle:version>120</sparkle:version>
             <sparkle:shortVersionString>0.1.20</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.20/Clipin-0.1.20.zip" length="5623868" type="application/octet-stream" sparkle:edSignature="l4RI0L6Gz7Lv5KHu3xSGT68H5QKW5Rc2tMsz/nmi28w8sUPc/wKAjbKqYbkcwJGkP8WlN/Pg9cFi1F9QbzVcDg=="/>
+            <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.21/Clipin-0.1.20.zip" length="5623868" type="application/octet-stream" sparkle:edSignature="l4RI0L6Gz7Lv5KHu3xSGT68H5QKW5Rc2tMsz/nmi28w8sUPc/wKAjbKqYbkcwJGkP8WlN/Pg9cFi1F9QbzVcDg=="/>
             <sparkle:deltas>
                 <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.20/Clipin120-119.delta" sparkle:deltaFrom="119" length="440346" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="mkQ/F1F2/E6DW601QV+wuYC1diRPvRfEOd07NvA8QYCnaApDrwchFxS7cPtQXExyW1nh84gDSUC8017U8AAhDg=="/>
                 <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.20/Clipin120-118.0.delta" sparkle:deltaFrom="118.0" length="493734" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="pYH6HXn0gARv7mZ2bmzfoxMTHu2sW49DbdiZ3p97gJY9vfkC/psldS1ITEbKAATfFWvGbyzVjCM0pDrUwZMJDA=="/>
@@ -20,18 +33,10 @@
             <sparkle:version>119</sparkle:version>
             <sparkle:shortVersionString>0.1.19</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.20/Clipin-0.1.19.zip" length="5614625" type="application/octet-stream" sparkle:edSignature="BB33RrcAgGb+t6f853ohB1yxq5Vsxg6OzhVp1suJ7mqj1He/WnkF/am0HKO+KbisyaFnsa3exW4fCqUkEI2ABA=="/>
+            <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.21/Clipin-0.1.19.zip" length="5614625" type="application/octet-stream" sparkle:edSignature="BB33RrcAgGb+t6f853ohB1yxq5Vsxg6OzhVp1suJ7mqj1He/WnkF/am0HKO+KbisyaFnsa3exW4fCqUkEI2ABA=="/>
             <sparkle:deltas>
                 <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.19/Clipin119-118.0.delta" sparkle:deltaFrom="118.0" length="358526" type="application/octet-stream" sparkle:deltaFromSparkleExecutableSize="977616" sparkle:deltaFromSparkleLocales="de,he,ar,el,ja,fa,uk" sparkle:edSignature="AlVHE3kAtQVDaEczXLE/KrcVihG1/vPO3O1gVKAFvxec/Rc/Uk2nDw3xLFijpLk2UBurZ8kf5XYZ63vY7yisCQ=="/>
             </sparkle:deltas>
-        </item>
-        <item>
-            <title>0.1.18</title>
-            <pubDate>Thu, 02 Jul 2026 13:50:03 +0800</pubDate>
-            <sparkle:version>118.0</sparkle:version>
-            <sparkle:shortVersionString>0.1.18</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/ccfco/Clipin/releases/download/v0.1.20/Clipin-0.1.18.zip" length="5614408" type="application/octet-stream" sparkle:edSignature="ZygC4DwBvOY2VHpRT+TnJF0eEk9vieE7mKx3c0wap01oPyVBRpHL6syoeSudnJdBCNw1n4s8qxwnjSemxfoYCw=="/>
         </item>
     </channel>
 </rss>
