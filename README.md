@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/macOS-15.0%2B-blue" alt="macOS 15.0+">
+  <img src="https://img.shields.io/badge/macOS-26.0%2B-blue" alt="macOS 26.0+">
   <img src="https://img.shields.io/badge/Apple%20Silicon-arm64-blueviolet" alt="Apple Silicon arm64">
   <img src="https://img.shields.io/badge/Rust-stable-orange" alt="Rust stable">
   <img src="https://img.shields.io/badge/Swift-6.0-red" alt="Swift 6.0">
-  <img src="https://img.shields.io/badge/version-0.1.11-brightgreen" alt="v0.1.11">
+  <img src="https://img.shields.io/badge/version-0.1.20-brightgreen" alt="v0.1.20">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License">
 </p>
 
@@ -88,7 +88,7 @@
 
 ### 源码构建
 
-需要：Apple Silicon Mac、Rust stable、Xcode 16+、[xcodegen](https://github.com/yonaskolb/XcodeGen)
+需要：Apple Silicon Mac、Rust stable、Xcode 26+、[xcodegen](https://github.com/yonaskolb/XcodeGen)
 
 ```bash
 git clone https://github.com/ccfco/Clipin.git

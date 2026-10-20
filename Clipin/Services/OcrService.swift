@@ -2,8 +2,15 @@ import Vision
 
 /// 基于 Apple Vision Framework 的 OCR 服务
 /// 支持中英文识别，accurate 模式，无第三方依赖
-enum OcrService {
-    static func recognizeText(at imagePath: String) async -> String {
+///
+/// actor 串行化：accurate 模式单张图识别可达数百毫秒到数秒。新图片采集
+/// （ClipboardMonitor）与历史 backfill（AppDelegate）是两条独立入口，若各自并发
+/// 多个 Vision 请求，CPU 会被瞬时占满、内存峰值同步放大，拖慢前台渲染。
+/// OCR 不在交互关键路径上，串行化只拉长批量图片的完成时间，换来可预期的资源占用。
+actor OcrService {
+    static let shared = OcrService()
+
+    func recognizeText(at imagePath: String) async -> String {
         let url = URL(fileURLWithPath: imagePath)
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate

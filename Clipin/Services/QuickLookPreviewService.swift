@@ -140,8 +140,12 @@ extension QuickLookPreviewService: QLPreviewPanelDelegate {
 
     func previewPanelWillClose(_ panel: QLPreviewPanel!) {
         Task { @MainActor [weak self] in
-            self?.clearPreviewSession()
-            self?.setPreviewVisibility(false)
+            guard let self else { return }
+            // 关闭回调可能晚于下一次 present（用户 Esc 关掉后立刻再按 Space）：
+            // 面板已经重新可见时不能再清 session，否则新预览会变成空白。
+            guard !self.isQuickLookOnScreen else { return }
+            self.clearPreviewSession()
+            self.setPreviewVisibility(false)
         }
     }
 }

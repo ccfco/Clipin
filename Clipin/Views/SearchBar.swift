@@ -139,7 +139,12 @@ private struct InterceptingTextFieldView: NSViewRepresentable {
 
         func controlTextDidChange(_ obj: Notification) {
             guard let f = obj.object as? NSTextField else { return }
-            parent.text = currentText(for: f)
+            // 与 fieldEditorTextDidChange 去重：IME 组词期间两条通知都会到达，
+            // 无条件赋值会让同一个字符触发两次 binding 更新、把 150ms 搜索去抖重置两次。
+            let newText = currentText(for: f)
+            if newText != parent.text {
+                parent.text = newText
+            }
         }
 
         func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {

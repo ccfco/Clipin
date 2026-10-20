@@ -39,9 +39,20 @@ final class ClipboardMonitor: ObservableObject {
 
     private let core: ClipinCore
     private let settings: SettingsStore
-    private var timer: Timer?
-    private var lastChangeCount: Int
-    private var isPaused = false
+    /// 轮询在后台队列执行：500ms 主线程 Timer 会让常驻 app 每秒醒两次主线程，
+    /// 即使剪贴板几小时没变化也照醒。后台队列只读 changeCount，变化才 hop 主线程，
+    /// 主线程唤醒次数从「固定 2 次/秒」降到「实际复制时 1 次」。
+    /// NSPasteboard 只在这一处后台访问，且只碰 changeCount 这个标量；
+    /// 其余 pasteboard 读取仍全部在主线程，把跨线程面收敛到最小。
+    private let pollQueue = DispatchQueue(label: "com.ccfco.Clipin.clipboard-poll", qos: .utility)
+    private var pollTimer: DispatchSourceTimer?
+    /// isPaused / lastChangeCount 同时被主线程（pause/resume/init）和轮询队列访问。
+    /// `nonisolated(unsafe)`：这两个值和 stateLock 是同一组手工加锁的状态，
+    /// 所有读写都已在锁内完成。Swift 的 actor 隔离无法表达「跨线程 + NSLock」，
+    /// 用 nonisolated(unsafe) 把保证责任显式落到这里，避免把整个轮询路径搬上主线程。
+    private nonisolated(unsafe) let stateLock = NSLock()
+    private nonisolated(unsafe) var lastChangeCount: Int
+    private nonisolated(unsafe) var isPaused = false
     /// 持有所有正在跑的 persist task，stop() 时统一取消。
     /// 旧实现 Task.detached 启动后没有持有引用，监控停止/进程退出时正在跑的图片 OCR
     /// 仍会继续 Vision 调用并发通知，破坏 launcher 关闭后"什么都不再变"的语义。
@@ -55,17 +66,27 @@ final class ClipboardMonitor: ObservableObject {
     }
 
     func start() {
-        guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: Self.pollingInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.checkClipboard()
-            }
+        guard pollTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: pollQueue)
+        // leeway 100ms：允许系统合并唤醒，常驻进程省电；对「复制后立即唤起」的
+        // 体感无影响（主线程只在 changeCount 真的变了才被叫醒）。
+        timer.schedule(
+            deadline: .now() + Self.pollingInterval,
+            repeating: Self.pollingInterval,
+            leeway: .milliseconds(100)
+        )
+        // 显式 @Sendable：不标注时闭包会继承 start() 的 @MainActor 隔离，
+        // 在轮询队列执行时会触发 "dispatch_assert_queue" 运行时断言（实测崩溃）。
+        timer.setEventHandler { @Sendable [weak self] in
+            self?.pollOnBackground()
         }
+        timer.resume()
+        pollTimer = timer
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        pollTimer?.cancel()
+        pollTimer = nil
         let pending = inflightPersists
         inflightPersists.removeAll()
         pending.forEach { $0.cancel() }
@@ -73,24 +94,52 @@ final class ClipboardMonitor: ObservableObject {
 
     /// 暂停监控（粘贴时用，避免把自己写入的内容又存一遍）
     func pause() {
+        stateLock.lock()
         isPaused = true
+        stateLock.unlock()
     }
 
     /// 恢复监控，跳过暂停期间的变化
     func resume() {
-        lastChangeCount = NSPasteboard.general.changeCount
+        // 先在锁外读 pasteboard（跨进程 IPC，不占用轮询队列的状态锁），再原子落状态。
+        let current = NSPasteboard.general.changeCount
+        stateLock.lock()
+        lastChangeCount = current
         isPaused = false
+        stateLock.unlock()
     }
 
     var onNewItem: (() -> Void)?
 
-    private func checkClipboard() {
-        guard !isPaused else { return }
+    /// 后台轮询：只读 changeCount，变化时把具体处理交回主线程。
+    /// 主线程已经通过 resume() 对齐过 lastChangeCount，这里的重复更新是安全的。
+    nonisolated private func pollOnBackground() {
+        stateLock.lock()
+        let paused = isPaused
+        stateLock.unlock()
+        guard !paused else { return }
 
+        let currentCount = NSPasteboard.general.changeCount
+
+        stateLock.lock()
+        let changed = currentCount != lastChangeCount
+        if changed { lastChangeCount = currentCount }
+        stateLock.unlock()
+
+        guard changed else { return }
+        Task { @MainActor [weak self] in
+            self?.checkClipboard(changeCount: currentCount)
+        }
+    }
+
+    private func checkClipboard(changeCount currentCount: Int) {
+        guard !isPaused else { return }
+        // 后台已经确认 changeCount 变了；主线程不再重复读，避免两次读取之间
+        // 又被别的 app 改写时把「不是本次变化」的内容记进来。
         let pasteboard = NSPasteboard.general
-        let currentCount = pasteboard.changeCount
-        guard currentCount != lastChangeCount else { return }
-        lastChangeCount = currentCount
+        // 后台判定与主线程处理之间用户可能又复制了一次：当前 pasteboard 已不是
+        // 后台看到的那一版。本次直接放弃，下一次轮询会按新 changeCount 处理最新内容。
+        guard pasteboard.changeCount == currentCount else { return }
 
         guard shouldPersistContents(of: pasteboard) else { return }
 
@@ -153,6 +202,9 @@ final class ClipboardMonitor: ObservableObject {
         // 自引用 box：task body 完成时回主线程从 inflightPersists 移除自己，避免集合无限增长。
         // 用 Box<Task?> 是因为 Task 创建时还没拿到自身引用——先建 box、Task 内闭包持有 box、
         // Task 创建后写入 box，闭包 defer 时通过 box 拿到 task 引用。
+        // `finished` 兜住反向竞态：极快的任务可能在 box.task 赋值前就跑到 defer，
+        // 此时拿不到 task 会漏移除，集合随复制次数单调增长（常驻数周即泄漏）。
+        // defer 与赋值都在主线程串行，finished 由双方检查即可闭合两种顺序。
         let box = TaskBox()
         let task = Task.detached(priority: .utility) { [weak self] in
             defer {
@@ -162,6 +214,7 @@ final class ClipboardMonitor: ObservableObject {
                 // 一次普通的 MainActor 任务调度。
                 let monitor = self
                 Task { @MainActor in
+                    box.finished = true
                     guard let task = box.task else { return }
                     monitor?.inflightPersists.remove(task)
                 }
@@ -204,7 +257,11 @@ final class ClipboardMonitor: ObservableObject {
                     // 后台任务里 hop 回 main 拉 pasteboard data + 辅助 reps：
                     // 必须在单次 hop 内一起读，确保 image bytes 和 file-url/html 等
                     // 都来自同一个 pasteboard 快照，否则中间用户又复制别的会割裂
-                    struct ImageSnapshot { let data: Data; let reps: [ClipboardRepresentation] }
+                    struct ImageSnapshot {
+                        let data: Data
+                        let uti: String
+                        let reps: [ClipboardRepresentation]
+                    }
                     let snapshot: ImageSnapshot? = await MainActor.run {
                         let pb = NSPasteboard.general
                         // 用户已经又复制了别的内容，捕获到的快照已过期，丢弃
@@ -212,17 +269,18 @@ final class ClipboardMonitor: ObservableObject {
                         // 已按 per-item 结构判定为 image，却读不出任何真实图片 bytes：异常路径，
                         // 不静默吞（CLAUDE.md 不兜底红线）。无 bytes 无法落库、也无 file-url 可降级，
                         // 只能丢弃本条，但必须留痕便于排查（如 AirDrop promised data 延迟实体化）。
-                        guard let imageData = Self.readImageData(from: pb) else {
+                        guard let image = Self.readImageData(from: pb) else {
                             ClipinLog.monitor.error("判定为 image 但 pasteboard 读不出图片 bytes，丢弃本条 (changeCount=\(capturedChangeCount, privacy: .public))")
                             return nil
                         }
                         let auxReps = ClipboardRepresentationExtractor.extractAuxiliary(from: pb, primaryClipType: .image)
-                        return ImageSnapshot(data: imageData, reps: auxReps)
+                        return ImageSnapshot(data: image.data, uti: image.uti, reps: auxReps)
                     }
                     guard let snapshot else { return }
                     if Task.isCancelled { return }
                     try await self?.persistImage(
                         rawData: snapshot.data,
+                        sourceUTI: snapshot.uti,
                         sourceApp: sourceApp,
                         sourceName: sourceName,
                         auxReps: snapshot.reps,
@@ -240,6 +298,10 @@ final class ClipboardMonitor: ObservableObject {
         }
         box.task = task
         inflightPersists.insert(task)
+        // 任务若在赋值前已跑完 defer（见上），这里补一次移除。
+        if box.finished {
+            inflightPersists.remove(task)
+        }
     }
 
     private func shouldPersistContents(of pasteboard: NSPasteboard) -> Bool {
@@ -340,17 +402,19 @@ final class ClipboardMonitor: ObservableObject {
         return Self.isImageContentType(type)
     }
 
-    /// 从 pasteboard 读出真实图片 bytes(排除 icns)。逐 item 读：含 file-url 的文件项只挂 icns 时
-    /// 读不出图，只有截图项 / 自带真实图片的图片文件项能命中。PNG/TIFF 优先(macOS 原生，无需
-    /// 重编码)，其余格式(jpeg/heic/gif/webp 等)由 makePNGData 用 CGImageSource 统一兜底转 PNG。
-    nonisolated private static func readImageData(from pasteboard: NSPasteboard) -> Data? {
+    /// 从 pasteboard 读出真实图片 bytes(排除 icns)，连同其 UTI 一起返回——调用方
+    /// 用 UTI 判断能否跳过「解码再重编码」直接落盘。逐 item 读：含 file-url 的文件项
+    /// 只挂 icns 时读不出图，只有截图项 / 自带真实图片的图片文件项能命中。
+    /// PNG/TIFF 优先(macOS 原生格式)，其余格式(jpeg/heic/gif/webp 等)由
+    /// makePNGData 用 CGImageSource 统一兜底转 PNG。
+    nonisolated private static func readImageData(from pasteboard: NSPasteboard) -> (data: Data, uti: String)? {
         let preferred: [NSPasteboard.PasteboardType] = [.png, .tiff]
         for item in pasteboard.pasteboardItems ?? [] {
             for type in preferred where item.types.contains(type) && Self.isRealImageType(type) {
-                if let data = item.data(forType: type) { return data }
+                if let data = item.data(forType: type) { return (data, type.rawValue) }
             }
             for type in item.types where Self.isRealImageType(type) {
-                if let data = item.data(forType: type) { return data }
+                if let data = item.data(forType: type) { return (data, type.rawValue) }
             }
         }
         return nil
@@ -424,7 +488,8 @@ final class ClipboardMonitor: ObservableObject {
             representations: coreReps
         )
         dbSaved = true  // DB 写入成功，defer 不再清理
-        await self.notifyNewItem()
+        // 通知由 persist() 的公共路径统一发出：这里再发一次会让每次文件复制
+        // 触发两轮 loadItems + runCleanupAndReload（列表重载与清理都跑两遍）。
     }
 
     /// 共享的图片入库后处理：PNG 落地 → DB 入库 → 尺寸读写 → 通知 → OCR。
@@ -434,6 +499,7 @@ final class ClipboardMonitor: ObservableObject {
     /// 通过 await 跨 actor 调用——ClipboardMonitor 整体是 @MainActor 类，await 自动 hop。
     nonisolated private func persistImage(
         rawData: Data,
+        sourceUTI: String,
         sourceApp: String?,
         sourceName: String?,
         auxReps: [ClipboardRepresentation],
@@ -442,7 +508,12 @@ final class ClipboardMonitor: ObservableObject {
         let imageDir = core.imageDir()
         let filename = UUID().uuidString + ".png"
         let path = (imageDir as NSString).appendingPathComponent(filename)
-        let pngData = try Self.makePNGData(from: rawData)
+        // PNG 原始字节已是目标落盘格式：直接写，省掉一次全尺寸解码 + 重新编码。
+        // 截图与浏览器复制图片经常直接给 PNG，原图可达数十 MB，解码峰值内存同量级；
+        // 这一步在采集后台任务里，省下的是 CPU 和瞬时内存，不是磁盘体积。
+        // 其他格式（TIFF/JPEG/HEIC）仍转 PNG：单一落盘格式让粘贴回放、OCR、
+        // 缩略图、备份四条路径都不必按扩展名分叉。
+        let pngData = sourceUTI == "public.png" ? rawData : try Self.makePNGData(from: rawData)
         try pngData.write(to: URL(fileURLWithPath: path), options: .atomic)
         let coreReps = auxReps.map { ClipRepresentation(uti: $0.uti, data: $0.data) }
         let saved = try core.saveItemWithRepresentations(
@@ -469,7 +540,7 @@ final class ClipboardMonitor: ObservableObject {
 
         // OCR 在同一后台 Task 内串行执行，完成后二次刷新显示文字
         let itemId = saved.id
-        let ocrText = await OcrService.recognizeText(at: path)
+        let ocrText = await OcrService.shared.recognizeText(at: path)
         if Task.isCancelled { return }
         do {
             try core.updateOcrText(id: itemId, ocrText: ocrText)
@@ -549,7 +620,9 @@ private enum ClipboardMonitorError: Error {
 
 /// 给 Task body 一个延迟回填 task 引用的容器：Task 创建时拿不到自己的 handle，
 /// 但 body defer 时需要它来从 inflightPersists 移除——typed box 避开循环引用陷阱。
+/// `finished` 与 task 的赋值时序互补，闭合「任务先完成、handle 后写入」的竞态。
 @MainActor
 private final class TaskBox {
     var task: Task<Void, Never>?
+    var finished = false
 }

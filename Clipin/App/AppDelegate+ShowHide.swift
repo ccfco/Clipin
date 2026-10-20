@@ -78,7 +78,8 @@ extension AppDelegate {
 
     func presentOnboardingIfRequired() -> Bool {
         let permission = PermissionManager.shared
-        permission.checkNow()
+        // 呼出路径只做节流检查：2s 内已查过就复用缓存，避免每次 ⌘⇧V 都走 tccd IPC。
+        permission.checkNowIfStale()
 
         guard settings.shouldShowOnboarding(
             core: appState.core,
@@ -169,9 +170,7 @@ extension AppDelegate {
         // 任意点恰好属于一块屏；visibleFrame 间有菜单栏/Dock 缝隙会误判归属。
         if let saved = savedPanelOrigin {
             if target.frame.contains(saved) {
-                isProgrammaticMove = true
-                panel.setFrameOrigin(saved)
-                isProgrammaticMove = false
+                setPanelOriginProgrammatically(saved)
                 return
             }
             // 记忆位置不属于任何现存屏幕（旧屏已拔）才清除；仅是跨屏时保留，
@@ -188,7 +187,21 @@ extension AppDelegate {
         let y = max(f.minY, min(centerY - size.height / 2, f.maxY - size.height))
         isProgrammaticMove = true
         panel.setFrameOrigin(NSPoint(x: x, y: y))
-        isProgrammaticMove = false
+        // 清除延后一个 run loop：NSWindow 的 windowDidMove 可能在 setFrameOrigin 之后
+        // 异步投递，同步复位会让这次程序化居中当成用户拖拽，写进记忆位置。
+        DispatchQueue.main.async { [weak self] in
+            self?.isProgrammaticMove = false
+        }
+    }
+
+    /// 程序化移动面板并把「忽略 windowDidMove」的窗口延后一个 run loop。
+    /// 与跨屏居中同一套语义，集中一处避免两处各写一次旗标。
+    private func setPanelOriginProgrammatically(_ origin: NSPoint) {
+        isProgrammaticMove = true
+        panel?.setFrameOrigin(origin)
+        DispatchQueue.main.async { [weak self] in
+            self?.isProgrammaticMove = false
+        }
     }
 
     /// 应用启动时从 UserDefaults 恢复面板位置（仅当"跨重启记忆"开启时）。

@@ -250,7 +250,10 @@ final class ClipboardViewModel: ObservableObject {
     // OCR 静默刷新当前 payload 的任务句柄：必须可被 selectItem 取消，否则 A→B→A 快切时
     // 它会与新 loadItemTask 并发加载同一 id，后完成者把旧快照盖到新结果上。
     private var reloadPayloadTask: Task<Void, Never>?
-    private var skipNextDebouncedLoad = false
+    private var skipDebounceSnapshot: (query: String, mode: LauncherBrowseMode)?
+    /// 异步搜索世代号。每次 loadItems 递增；搜索结果落地前比对，过期结果直接丢弃，
+    /// 防止「A 查询晚于 B 返回」把 B 的结果覆盖掉。
+    private var searchGeneration = 0
     private var sessionBaseBrowseMode: LauncherBrowseMode
     private var previewTask: Task<Void, Never>?
 
@@ -287,12 +290,16 @@ final class ClipboardViewModel: ObservableObject {
                 self?.settings.recordLastLauncherBrowseMode(mode)
             })
             .debounce(for: .milliseconds(150), scheduler: RunLoop.main)
-            .sink { [weak self] _, _ in
+            .sink { [weak self] query, mode in
                 guard let self else { return }
-                if self.skipNextDebouncedLoad {
-                    self.skipNextDebouncedLoad = false
+                // 只跳过「程序化设置的组合值」本身。用布尔会把用户在 150ms 内
+                // 输入的第一次搜索一并吞掉：组合值已经变了，但布尔仍为 true。
+                if let skip = self.skipDebounceSnapshot,
+                   skip.query == query, skip.mode == mode {
+                    self.skipDebounceSnapshot = nil
                     return
                 }
+                self.skipDebounceSnapshot = nil
                 self.loadItems()
             }
         // OCR 完成后只刷新当前选中预览：ClipListItem 不含 ocr_text，列表渲染不依赖 OCR；
@@ -327,6 +334,11 @@ final class ClipboardViewModel: ObservableObject {
         let currentSelectionID = selectLatest ? nil : selectedItemID
         totalLoadedFromDB = 0
 
+        // 每次 load 都推进世代：上一轮异步搜索结果回来时必须能判断自己已过期。
+        // 浏览分支也推进，防止「浏览结果已落地、更早的搜索才返回」把它覆盖回去。
+        searchGeneration &+= 1
+        let generation = searchGeneration
+
         let excludingID = pendingDeletionController.pendingID
         if searchQuery.isEmpty {
             do {
@@ -343,31 +355,67 @@ final class ClipboardViewModel: ObservableObject {
                 hasMore = false
                 showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
             }
-        } else {
-            do {
+            rebuildSections()
+
+            let nextID: String?
+            if let currentSelectionID,
+               items.contains(where: { $0.id == currentSelectionID }) {
+                nextID = currentSelectionID
+            } else {
+                nextID = flatOrder.first?.id
+            }
+            selectItem(id: nextID)
+            return
+        }
+
+        // 搜索走后台：FTS/LIKE 随历史增长会变慢，同步在主线程会让每次输入停住一帧以上。
+        // 主线程只负责取配置快照（typeFilter）和应用结果；SQL 与排序都在 detached 里。
+        // 查询结果落地前若世代替换或面板已隐藏，直接丢弃——不能驱动不可见视图树 diff。
+        let query = searchQuery
+        let mode = browseMode
+        let typeFilter = browsePageLoader.effectiveTypeFilter(query: query, browseMode: mode)
+        let core = self.core
+        Task { [weak self] in
+            let result: Result<[ClipListItem], Error> = await Task.detached(priority: .userInitiated) {
+                do { return .success(try core.searchListItems(query: query, typeFilter: typeFilter)) }
+                catch { return .failure(error) }
+            }.value
+            guard let self,
+                  generation == self.searchGeneration,
+                  self.isLauncherPresented else { return }
+
+            switch result {
+            case .success(let results):
+                // visible() 读 settings.pinnedItemsPresentation，必须在主线程应用。
+                self.items = self.browsePageLoader.visible(
+                    results, query: query, browseMode: mode, excludingID: excludingID)
+                self.hasMore = false
+            case .failure(let error):
                 // Rust 端搜索 SQL/FTS 故障不能 ?? [] 静默退化成"无结果"——用户根本
                 // 无法分辨"真的没匹配"和"DB 坏了"。失败时显式 notice，方便察觉异常。
-                let results = try core.searchListItems(
-                    query: searchQuery,
-                    typeFilter: browsePageLoader.effectiveTypeFilter(query: searchQuery, browseMode: browseMode))
-                items = browsePageLoader.visible(results, query: searchQuery, browseMode: browseMode, excludingID: excludingID)
-            } catch {
                 ClipinLog.viewModel.error("searchListItems failed: \(error.localizedDescription, privacy: .public)")
-                items = []
-                showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
+                self.items = []
+                self.hasMore = false
+                self.showNotice(NSLocalizedString("Item could not be read.", comment: ""), style: .error)
             }
-            hasMore = false
-        }
-        rebuildSections()
+            self.rebuildSections()
 
-        let nextID: String?
-        if let currentSelectionID,
-           items.contains(where: { $0.id == currentSelectionID }) {
-            nextID = currentSelectionID
-        } else {
-            nextID = flatOrder.first?.id
+            // 查询期间用户可能已在旧列表上继续导航：优先保留「当前仍有效」的选中，
+            // 其次回到发起查询时的选中，最后落到首条。不能用旧的捕获值无条件覆盖。
+            let nextID: String?
+            if !selectLatest,
+               let current = self.selectedItemID,
+               self.items.contains(where: { $0.id == current }) {
+                nextID = current
+            } else if !selectLatest,
+                      let currentSelectionID,
+                      self.items.contains(where: { $0.id == currentSelectionID }) {
+                nextID = currentSelectionID
+            } else {
+                nextID = self.flatOrder.first?.id
+            }
+            self.selectItem(id: nextID)
         }
-        selectItem(id: nextID)
     }
 
     /// 滚到底时加载下一页，追加到 items 并重建 sections（不重置选中状态）
@@ -904,7 +952,9 @@ final class ClipboardViewModel: ObservableObject {
     @discardableResult
     func clearActiveQueryAndFilters() -> Bool {
         guard hasActiveFilter else { return false }
-        skipNextDebouncedLoad = true
+        // 记录要跳过的组合值（空查询 + 会话默认浏览模式），而不是一个布尔——
+        // 用户在 debounce 窗口内接着输入时组合值不同，必须放行。
+        skipDebounceSnapshot = (query: "", mode: sessionBaseBrowseMode)
         searchQuery = ""
         browseMode = sessionBaseBrowseMode
         loadItems()
@@ -915,7 +965,7 @@ final class ClipboardViewModel: ObservableObject {
         // 先解除隐藏门禁再 loadItems：showPanel 调用本方法时 panel.isVisible 还是 false，
         // 门禁不能依赖 NSPanel 状态，必须由 show/hide 生命周期显式驱动。
         isLauncherPresented = true
-        skipNextDebouncedLoad = true
+        skipDebounceSnapshot = nil
         // present 窗口(面板将可见未可见)的全量刷新必须无动画落地:此刻跑带动画的整列 diff
         // 是可被打断的动画事务,正是「中毒 cell」(props 冻结的残留行)的腐化机制——无动画
         // 事务原子应用,不可打断即不可中毒。可见期的正常动画不受影响。选中态残留的另两个
@@ -927,6 +977,7 @@ final class ClipboardViewModel: ObservableObject {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
+            skipDebounceSnapshot = (query: "", mode: sessionBaseBrowseMode)
             searchQuery = ""
             browseMode = sessionBaseBrowseMode
             updateTargetApp(targetApp)

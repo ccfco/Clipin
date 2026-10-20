@@ -120,9 +120,17 @@ final class ClipboardViewModelTests: XCTestCase {
     }
 
     func testPinnedOnlyPresentationLoadsHiddenRegularItemsWithoutSkippingOverflow() throws {
-        let previousPresentation = SettingsStore.shared.pinnedItemsPresentation
-        SettingsStore.shared.pinnedItemsPresentation = .pinnedOnlyView
-        defer { SettingsStore.shared.pinnedItemsPresentation = previousPresentation }
+        // 必须用独立 suite：测试宿主里 production SettingsStore.shared 已被
+        // AppDelegate / AutoBackupService 订阅，直接改它会触发真实服务的 sink
+        // （CLAUDE.md：测试禁止碰 .shared / .standard）。
+        let suiteName = "ClipinViewModelTests-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Could not create isolated UserDefaults suite")
+            return
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let settings = SettingsStore(defaults: defaults)
+        settings.pinnedItemsPresentation = .pinnedOnlyView
 
         let core = try makeCore()
         for index in 0..<51 {
@@ -150,7 +158,7 @@ final class ClipboardViewModelTests: XCTestCase {
             )
         }
 
-        let viewModel = ClipboardViewModel(core: core)
+        let viewModel = ClipboardViewModel(core: core, settings: settings)
         viewModel.loadItems(selectLatest: true)
 
         XCTAssertEqual(visibleContents(in: viewModel).count, 50)
@@ -295,6 +303,86 @@ final class ClipboardViewModelTests: XCTestCase {
 
         XCTAssertNotNil(viewModel.selectedItemID, "loadItems(selectLatest:) 应已选中最新条目")
         XCTAssertFalse(viewModel.isLauncherLoading, "本地读不该点亮顶部流光")
+    }
+
+    // MARK: - 异步搜索
+
+    /// 搜索查询下沉后台后，loadItems 立即返回、结果异步落地。
+    /// 断言最终可见列表收敛到匹配项，锁的是行为而不是线程调度。
+    func testSearchAppliesResultsAfterBackgroundQuery() async throws {
+        let core = try makeCore()
+        _ = try core.importItem(
+            content: "alpha target",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 2_000,
+            alias: nil
+        )
+        _ = try core.importItem(
+            content: "beta noise",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 1_000,
+            alias: nil
+        )
+
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.loadItems(selectLatest: true)
+
+        viewModel.searchQuery = "target"
+        viewModel.loadItems()
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline, visibleContents(in: viewModel) != ["alpha target"] {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(visibleContents(in: viewModel), ["alpha target"])
+    }
+
+    /// 连续输入时旧查询可能晚于新查询返回：世代替换后旧结果必须被丢弃，
+    /// 不能让列表倒退回上一个查询词的结果。
+    func testLatestSearchGenerationWins() async throws {
+        let core = try makeCore()
+        _ = try core.importItem(
+            content: "alpha item",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 2_000,
+            alias: nil
+        )
+        _ = try core.importItem(
+            content: "beta item",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 1_000,
+            alias: nil
+        )
+
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.loadItems(selectLatest: true)
+
+        viewModel.searchQuery = "alpha"
+        viewModel.loadItems()
+        viewModel.searchQuery = "beta"
+        viewModel.loadItems()
+
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline, visibleContents(in: viewModel) != ["beta item"] {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(visibleContents(in: viewModel), ["beta item"])
     }
 
     private func makeCore() throws -> ClipinCore {

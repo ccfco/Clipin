@@ -148,7 +148,7 @@ extension AppDelegate {
                         continue
                     }
 
-                    let text = await OcrService.recognizeText(at: path)
+                    let text = await OcrService.shared.recognizeText(at: path)
                     do {
                         try core.updateOcrText(id: item.id, ocrText: text)
                         if !text.isEmpty {

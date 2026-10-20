@@ -123,6 +123,13 @@ enum ZipArchiver {
                     ))
                 }
                 do {
+                    // 取消可能发生在 withTaskCancellationHandler 安装之后、run() 之前：
+                    // 此时 isRunning 还是 false，onCancel 的 terminate 不会命中，
+                    // 不在这里拦截会让 zip/unzip 进程在取消后继续跑完整任务。
+                    if Task.isCancelled {
+                        continuation.resume(throwing: ZipError.cancelled)
+                        return
+                    }
                     try task.run()
                 } catch {
                     // run 失败：terminationHandler 不会触发，直接 resume
