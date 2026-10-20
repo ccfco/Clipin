@@ -463,3 +463,16 @@
 "Apple Intelligence is not available" = "Apple Intelligence is not available";
 "Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags." = "Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags.";
 "preview.metadata.semanticTag" = "Semantic tag";
+
+/* Translation panel */
+"Translate" = "Translate";
+"Original" = "Original";
+"Translation" = "Translation";
+"Copy" = "Copy";
+"Translating…" = "Translating…";
+"Auto-detect" = "Auto-detect";
+"System language" = "System language";
+"Showing first 5,000 characters" = "Showing first 5,000 characters";
+"There is no text to translate." = "There is no text to translate.";
+"Couldn't detect the source language." = "Couldn't detect the source language.";
+"Translation failed. Check that the language pair is available in System Settings." = "Translation failed. Check that the language pair is available in System Settings.";

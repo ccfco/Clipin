@@ -463,3 +463,16 @@
 "Apple Intelligence is not available" = "Apple Intelligence 当前不可用";
 "Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags." = "请在系统设置中开启 Apple Intelligence，Clipin 才能在本机生成语义标签。";
 "preview.metadata.semanticTag" = "语义标签";
+
+/* Translation panel */
+"Translate" = "翻译";
+"Original" = "原文";
+"Translation" = "译文";
+"Copy" = "复制";
+"Translating…" = "翻译中…";
+"Auto-detect" = "自动检测";
+"System language" = "系统语言";
+"Showing first 5,000 characters" = "仅显示前 5,000 个字符";
+"There is no text to translate." = "没有可翻译的文字。";
+"Couldn't detect the source language." = "无法识别源语言。";
+"Translation failed. Check that the language pair is available in System Settings." = "翻译失败。请在系统设置中确认该语言对已可用。";

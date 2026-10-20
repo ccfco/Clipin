@@ -386,6 +386,18 @@ struct ActionPalette: View {
 // MARK: - ActionPaletteBuilder
 
 struct ActionPaletteBuilder {
+    /// 翻译只对有实际文字的内容有意义：图片看 OCR，file 是路径 JSON。
+    private static func canTranslate(_ item: ClipItem) -> Bool {
+        switch item.clipType {
+        case .text, .url:
+            return !item.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .image:
+            return !(item.ocrText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .file:
+            return false
+        }
+    }
+
     @MainActor
     static func actions(for viewModel: ClipboardViewModel) -> [PaletteAction] {
         var list: [PaletteAction] = []
@@ -422,6 +434,12 @@ struct ActionPaletteBuilder {
             if viewModel.canPreviewSelectedItem {
                 list.append(PaletteAction("Preview", systemImage: "eye", shortcut: .preview, section: .primary, restoresSearchFocus: false) {
                     _ = viewModel.previewSelected()
+                })
+            }
+
+            if let item = viewModel.currentSelectedItem(), Self.canTranslate(item) {
+                list.append(PaletteAction("Translate", systemImage: "translate") {
+                    viewModel.translateSelected()
                 })
             }
 

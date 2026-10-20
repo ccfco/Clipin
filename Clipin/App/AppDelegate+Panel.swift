@@ -20,6 +20,9 @@ extension AppDelegate {
         vm.onCopyRequested = { [weak self] item in
             self?.performCopy(item)
         }
+        vm.onTranslateRequested = { [weak self] item in
+            self?.openTranslationWindow(for: item)
+        }
         vm.onCloseRequested = { [weak self] in
             self?.hidePanel()
         }

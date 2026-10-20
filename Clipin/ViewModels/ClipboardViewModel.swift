@@ -276,6 +276,7 @@ final class ClipboardViewModel: ObservableObject {
     var onPastePlainRequested: ((ClipItem) -> Void)?
     var onPasteRepresentationRequested: ((ClipItem, String) -> Void)?
     var onCopyRequested: ((ClipItem) -> Void)?
+    var onTranslateRequested: ((ClipItem) -> Void)?
     var onCloseRequested: (() -> Void)?
     var onOpenSettingsRequested: (() -> Void)?
 
@@ -1159,6 +1160,12 @@ final class ClipboardViewModel: ObservableObject {
             }
             return nil
         }
+    }
+
+    /// 动作面板「Translate」入口：交给 AppDelegate 打开翻译窗口。
+    func translateSelected() {
+        guard let item = currentSelectedItem() else { return }
+        onTranslateRequested?(item)
     }
 
     func currentSelectedItem() -> ClipItem? {

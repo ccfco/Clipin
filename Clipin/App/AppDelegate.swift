@@ -108,6 +108,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var panel: ClipinPanel?
     var settingsWindow: NSWindow?
+    var translationWindow: NSWindow?
     var updateReminderWindow: NSWindow?
     let appState = AppState.shared
     let settings = SettingsStore.shared
