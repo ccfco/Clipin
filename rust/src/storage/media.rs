@@ -292,8 +292,10 @@ impl Storage {
             })?;
             for row in rows {
                 let (image_path, attachment_paths) = row?;
-                if let Some(p) = image_path {
-                    if !p.is_empty() { referenced.insert(p); }
+                if let Some(p) = image_path
+                    && !p.is_empty()
+                {
+                    referenced.insert(p);
                 }
                 for p in Self::attachment_paths_from_json(attachment_paths) {
                     if !p.is_empty() { referenced.insert(p); }
@@ -328,10 +330,11 @@ impl Storage {
             let path_str = path.to_string_lossy().into_owned();
             if referenced.contains(&path_str) { continue; }
             // mtime 保护：太新的文件可能正在 in-flight 采集
-            if let (Some(cutoff), Ok(meta)) = (cutoff, entry.metadata()) {
-                if let Ok(modified) = meta.modified() {
-                    if modified > cutoff { continue; }
-                }
+            if let (Some(cutoff), Ok(meta)) = (cutoff, entry.metadata())
+                && let Ok(modified) = meta.modified()
+                && modified > cutoff
+            {
+                continue;
             }
             if fs::remove_file(&path).is_ok() {
                 removed += 1;
