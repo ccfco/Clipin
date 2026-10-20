@@ -977,6 +977,28 @@ mod tests {
     }
 
     #[test]
+    fn test_dedup_preserves_ocr_text() {
+        // 图片 OCR 是异步的，用户很可能在识别完成前后重复复制同一张图。
+        // 去重删除旧行时必须把 ocr_text 带到新行，否则图片里的文字从搜索里消失，
+        // 直到下次启动 backfill 才补回来。
+        let core = setup_core();
+
+        let first = core
+            .save_item("image".into(), ClipType::Image, None, None, None)
+            .unwrap();
+        core.update_ocr_text(first.id, "识别出的文字".into()).unwrap();
+
+        let second = core
+            .save_item("image".into(), ClipType::Image, None, None, None)
+            .unwrap();
+        assert_eq!(second.ocr_text.as_deref(), Some("识别出的文字"));
+
+        let items = core.get_items(10, 0, None).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].ocr_text.as_deref(), Some("识别出的文字"));
+    }
+
+    #[test]
     fn test_import_distinct_images_do_not_collide() {
         let (core, img_dir) = setup_core_with_image_dir();
         let first_path = write_image(&img_dir, "import-1.png", b"image-one");

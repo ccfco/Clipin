@@ -43,6 +43,10 @@ struct PreservedItemState {
     paste_count: i32,
     is_pinned: bool,
     alias: Option<String>,
+    /// 同一 hash 的重新复制（图片 OCR 完成后再次复制同一张图）必须保留识别结果：
+    /// OCR 是异步的，用户很可能在识别完成前后重复复制同一张图；丢掉 ocr_text
+    /// 会让新条目搜不到图片里的文字，直到下次启动 backfill 才补回来。
+    ocr_text: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -704,7 +708,7 @@ impl Storage {
         hash: &str,
     ) -> Result<Option<PreservedItemState>, ClipinError> {
         conn.query_row(
-            "SELECT first_copied_at, copy_count, paste_count, is_pinned, alias
+            "SELECT first_copied_at, copy_count, paste_count, is_pinned, alias, ocr_text
              FROM clip_items
              WHERE hash = ?1",
             params![hash],
@@ -717,6 +721,7 @@ impl Storage {
                     paste_count: row.get(2)?,
                     is_pinned: row.get(3)?,
                     alias: row.get(4)?,
+                    ocr_text: row.get(5)?,
                 })
             },
         )
@@ -921,6 +926,7 @@ impl Storage {
                 paste_count: existing.paste_count,
                 is_pinned: existing.is_pinned,
                 alias: existing.alias,
+                ocr_text: existing.ocr_text,
             },
             None => PreservedItemState {
                 first_copied_at: now,
@@ -928,6 +934,7 @@ impl Storage {
                 paste_count: 0,
                 is_pinned: false,
                 alias: None,
+                ocr_text: None,
             },
         };
 
@@ -947,8 +954,8 @@ impl Storage {
             .unwrap_or_else(|| Uuid::new_v4().to_string());
         tx.execute(
             "INSERT INTO clip_items
-             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,paste_count,pinyin_flat,pinyin_initials,alias,attachment_paths)
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+             (id,content,clip_type,source_app,source_name,is_pinned,created_at,image_path,char_count,hash,copy_count,first_copied_at,paste_count,pinyin_flat,pinyin_initials,alias,attachment_paths,ocr_text)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
             params![
                 id,
                 content,
@@ -967,6 +974,7 @@ impl Storage {
                 pinyin_initials,
                 preserved.alias,
                 attachment_paths,
+                preserved.ocr_text.as_deref(),
             ],
         )?;
         Self::insert_representations_in_tx(&tx, &id, representations)?;
@@ -989,7 +997,7 @@ impl Storage {
             char_count,
             copy_count: preserved.copy_count,
             first_copied_at: preserved.first_copied_at,
-            ocr_text: None,
+            ocr_text: preserved.ocr_text,
             paste_count: preserved.paste_count,
             alias: preserved.alias,
         })
