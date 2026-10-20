@@ -264,9 +264,20 @@ impl ClipinCore {
         self.storage.update_ai_tags(&id, &ai_tags)
     }
 
-    /// 获取尚未生成语义标签且有足够文本的条目，用于 backfill
-    pub fn get_untagged_items(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
-        self.storage.get_untagged_items(limit)
+    /// 获取语义标签生成候选（轻量投影 + 游标分页），用于 backfill
+    pub fn get_tagging_candidates(
+        &self,
+        limit: i32,
+        after_created_at: Option<i64>,
+        after_id: Option<String>,
+    ) -> Result<Vec<TaggingCandidate>, ClipinError> {
+        self.storage
+            .get_tagging_candidates(limit, after_created_at, after_id.as_deref())
+    }
+
+    /// 最近一次入库的条目（按 created_at，不受置顶影响）
+    pub fn get_latest_item(&self) -> Result<Option<ClipItem>, ClipinError> {
+        self.storage.get_latest_item()
     }
 
     /// 写入图片像素尺寸（图片保存后异步调用）

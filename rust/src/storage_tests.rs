@@ -784,7 +784,7 @@ fn test_ai_tags_participate_in_search() {
 }
 
 #[test]
-fn test_get_untagged_items_eligibility_and_sentinel() {
+fn test_tagging_candidates_eligibility_and_sentinel() {
     let tmp = tempfile::tempdir().unwrap();
     let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
     let img_dir = tmp.path().join("images").to_string_lossy().to_string();
@@ -800,25 +800,25 @@ fn test_get_untagged_items_eligibility_and_sentinel() {
         .save_item("quarterly budget spreadsheet", &ClipType::Text, None, None, None)
         .unwrap();
 
-    let pending = storage.get_untagged_items(10).unwrap();
+    let pending = storage.get_tagging_candidates(10, None, None).unwrap();
     assert_eq!(pending.len(), 1, "只有足够长的条目应进入候选");
     assert_eq!(pending[0].id, long.id);
 
     // 写入空串 = 已处理但无标签，不能再次进入候选
     storage.update_ai_tags(&long.id, "").unwrap();
     assert!(
-        storage.get_untagged_items(10).unwrap().is_empty(),
+        storage.get_tagging_candidates(10, None, None).unwrap().is_empty(),
         "空标签哨兵必须阻止重复处理"
     );
 
     // 短文本始终停留在 NULL（不满足长度门槛），同样不会被扫到
-    let still_pending = storage.get_untagged_items(10).unwrap();
+    let still_pending = storage.get_tagging_candidates(10, None, None).unwrap();
     assert!(still_pending.is_empty());
     let _ = short;
 }
 
 #[test]
-fn test_get_untagged_items_waits_for_image_ocr() {
+fn test_tagging_candidates_wait_for_image_ocr() {
     let tmp = tempfile::tempdir().unwrap();
     let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
     let img_dir = tmp.path().join("images").to_string_lossy().to_string();
@@ -832,13 +832,13 @@ fn test_get_untagged_items_waits_for_image_ocr() {
         .unwrap();
 
     // OCR 未完成：图片不应进入标签候选
-    assert!(storage.get_untagged_items(10).unwrap().is_empty());
+    assert!(storage.get_tagging_candidates(10, None, None).unwrap().is_empty());
 
     // OCR 完成后进入候选
     storage
         .update_ocr_text(&image.id, "invoice total 128.00 CNY")
         .unwrap();
-    let pending = storage.get_untagged_items(10).unwrap();
+    let pending = storage.get_tagging_candidates(10, None, None).unwrap();
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].id, image.id);
 }
@@ -908,4 +908,106 @@ fn test_v13_migration_is_reentrant() {
     }
     let storage = Storage::new(&db_path, &img_dir).unwrap();
     assert_eq!(storage.schema_version(), 13);
+}
+
+#[test]
+fn test_tagging_candidates_are_lightweight_and_cursor_advances() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+    let long = "字".repeat(5_000);
+    let first = storage.save_item(&long, &ClipType::Text, None, None, None).unwrap();
+    let second = storage
+        .save_item("second item with enough text", &ClipType::Text, None, None, None)
+        .unwrap();
+    let third = storage
+        .save_item("third item with enough text", &ClipType::Text, None, None, None)
+        .unwrap();
+    storage.set_alias(&first.id, Some("预算")).unwrap();
+
+    let page = storage.get_tagging_candidates(2, None, None).unwrap();
+    assert_eq!(page.len(), 2);
+    // 长文本必须被截到 2000 字符，不能整行拷贝
+    assert_eq!(page[0].text.chars().count(), 2_000);
+    assert_eq!(page[0].alias.as_deref(), Some("预算"));
+
+    let last = page.last().unwrap();
+    let next = storage
+        .get_tagging_candidates(2, Some(last.created_at), Some(&last.id))
+        .unwrap();
+    assert_eq!(next.len(), 1, "游标之后应只剩第三条");
+    assert_eq!(next[0].id, third.id);
+    assert!(next.iter().all(|c| c.id != second.id && c.id != first.id));
+}
+
+#[test]
+fn test_derived_input_changes_invalidate_ai_tags() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+    let item = storage
+        .save_item("original content with words", &ClipType::Text, None, None, None)
+        .unwrap();
+    storage.update_ai_tags(&item.id, "original").unwrap();
+    storage
+        .update_content(&item.id, "rewritten content with words", &ClipType::Text)
+        .unwrap();
+    assert_eq!(
+        storage.get_item(&item.id).unwrap().ai_tags, None,
+        "编辑内容后旧标签必须失效"
+    );
+
+    storage.update_ai_tags(&item.id, "rewritten").unwrap();
+    storage.set_alias(&item.id, Some("新别名")).unwrap();
+    assert_eq!(
+        storage.get_item(&item.id).unwrap().ai_tags, None,
+        "改别名后旧标签必须失效"
+    );
+
+    let img_path = tmp.path().join("shot.png");
+    std::fs::write(&img_path, b"not-a-real-png").unwrap();
+    let image = storage
+        .save_item("image", &ClipType::Image, None, None, Some(img_path.to_str().unwrap()))
+        .unwrap();
+    storage.update_ai_tags(&image.id, "invoice").unwrap();
+    storage.update_ocr_text(&image.id, "invoice total 128").unwrap();
+    assert_eq!(
+        storage.get_item(&image.id).unwrap().ai_tags, None,
+        "重写 OCR 后旧标签必须失效"
+    );
+
+    // 失效后重新进入候选，证明 backfill 能补回
+    assert!(
+        storage
+            .get_tagging_candidates(10, None, None)
+            .unwrap()
+            .iter()
+            .any(|c| c.id == item.id)
+    );
+}
+
+#[test]
+fn test_get_latest_item_ignores_pinned_order() {
+    let tmp = tempfile::tempdir().unwrap();
+    let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
+    let img_dir = tmp.path().join("images").to_string_lossy().to_string();
+    std::fs::create_dir_all(&img_dir).unwrap();
+    let storage = Storage::new(&db_path, &img_dir).unwrap();
+
+    let old = storage
+        .import_item("pinned old", &ClipType::Text, None, None, None, true, 1_000, None)
+        .unwrap();
+    let new = storage
+        .import_item("fresh new", &ClipType::Text, None, None, None, false, 2_000, None)
+        .unwrap();
+
+    // 浏览路径是 pinned 优先，"最新"语义必须绕过它
+    assert_eq!(storage.get_items(1, 0, None).unwrap()[0].id, old.id);
+    assert_eq!(storage.get_latest_item().unwrap().unwrap().id, new.id);
 }

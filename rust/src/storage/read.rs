@@ -250,24 +250,71 @@ impl Storage {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
-    /// 语义标签 backfill 专用：ai_tags IS NULL（未处理）且文本足够生成标签的条目。
+    /// 语义标签 backfill 候选：ai_tags IS NULL（未处理）且文本足够生成标签的条目。
     /// 图片要等 OCR 完成（ocr_text 非 NULL）才进入候选，否则只能拿 "image" 占位文案。
-    /// 无标签的条目写入空串而非留在 NULL，避免每轮 backfill 反复扫到同一批。
-    pub fn get_untagged_items(&self, limit: i32) -> Result<Vec<ClipItem>, ClipinError> {
+    /// 只投影 id/created_at + 前 2000 字符 + alias：标签用不到全文，长文本条目
+    /// （单条可达数 MB）不应整行跨 UniFFI 拷进内存。
+    ///
+    /// cursor (after_created_at, after_id) 用于单轮内越过失败的条目：
+    /// 生成失败的条目保持 NULL，若不推进游标会永远卡在同一页、饿死更新条目。
+    pub fn get_tagging_candidates(
+        &self,
+        limit: i32,
+        after_created_at: Option<i64>,
+        after_id: Option<&str>,
+    ) -> Result<Vec<TaggingCandidate>, ClipinError> {
         let conn = self.conn();
-        let mut stmt = conn.prepare(&format!(
-            "SELECT {} FROM clip_items
-             WHERE ai_tags IS NULL
+        let body = "substr(CASE WHEN clip_type = 'image' THEN COALESCE(ocr_text, '') ELSE content END, 1, 2000)";
+        let eligibility = "ai_tags IS NULL
                AND (
                    (clip_type != 'image' AND length(trim(content)) >= 8)
                    OR (clip_type = 'image' AND ocr_text IS NOT NULL AND length(trim(ocr_text)) >= 8)
-               )
-             ORDER BY created_at ASC
-             LIMIT ?1",
+               )";
+        let map = |row: &rusqlite::Row| {
+            Ok(TaggingCandidate {
+                id: row.get(0)?,
+                created_at: row.get(1)?,
+                text: row.get(2)?,
+                alias: row.get(3)?,
+            })
+        };
+        let rows = match (after_created_at, after_id) {
+            (Some(created_at), Some(id)) => {
+                let mut stmt = conn.prepare(&format!(
+                    "SELECT id, created_at, {body}, alias FROM clip_items
+                     WHERE {eligibility}
+                       AND (created_at > ?1 OR (created_at = ?1 AND id > ?2))
+                     ORDER BY created_at ASC, id ASC
+                     LIMIT ?3"
+                ))?;
+                stmt.query_map(params![created_at, id, limit], map)?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+            }
+            _ => {
+                let mut stmt = conn.prepare(&format!(
+                    "SELECT id, created_at, {body}, alias FROM clip_items
+                     WHERE {eligibility}
+                     ORDER BY created_at ASC, id ASC
+                     LIMIT ?1"
+                ))?;
+                stmt.query_map(params![limit], map)?
+                    .collect::<rusqlite::Result<Vec<_>>>()?
+            }
+        };
+        Ok(rows)
+    }
+
+    /// 最近一次复制/入库的条目（按 created_at，不受 pin 影响）。
+    /// 浏览排序是 is_pinned DESC，置顶旧条目会排在最新条目之前；
+    /// "取最新剪贴板内容"这类外部语义必须走这里。
+    pub fn get_latest_item(&self) -> Result<Option<ClipItem>, ClipinError> {
+        let conn = self.conn();
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM clip_items ORDER BY created_at DESC, id DESC LIMIT 1",
             Self::item_cols("")
         ))?;
-        let rows = stmt.query_map(params![limit], Self::row_to_item)?;
-        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        let mut rows = stmt.query_map([], Self::row_to_item)?;
+        Ok(rows.next().transpose()?)
     }
 
     /// ClipItem 的 16 列投影,顺序必须与 row_to_item 的 ordinal 0..=15 一一对应。

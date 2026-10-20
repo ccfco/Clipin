@@ -208,8 +208,9 @@ impl Storage {
 
     pub fn update_ocr_text(&self, id: &str, ocr_text: &str) -> Result<(), ClipinError> {
         let conn = self.conn();
+        // OCR 是标签的输入之一：重写识别结果必须让旧标签失效，由 backfill 重新生成。
         let affected = conn.execute(
-            "UPDATE clip_items SET ocr_text = ?1 WHERE id = ?2",
+            "UPDATE clip_items SET ocr_text = ?1, ai_tags = NULL WHERE id = ?2",
             params![ocr_text, id],
         )?;
         if affected == 0 {
@@ -252,8 +253,11 @@ impl Storage {
             None => content,
         };
         let (pinyin_flat, pinyin_initials) = compute_pinyin(&pinyin_source);
+        // 别名参与标签输入：改名后旧标签失效，由 backfill 重新生成。
         conn.execute(
-            "UPDATE clip_items SET alias = ?1, pinyin_flat = ?2, pinyin_initials = ?3 WHERE id = ?4",
+            "UPDATE clip_items
+             SET alias = ?1, pinyin_flat = ?2, pinyin_initials = ?3, ai_tags = NULL
+             WHERE id = ?4",
             params![normalized, pinyin_flat, pinyin_initials, id],
         )?;
         Ok(())
@@ -288,9 +292,11 @@ impl Storage {
 
         let tx = conn.transaction()?;
         let affected = tx.execute(
+            // 内容变了，旧语义标签必然失效：置 NULL 让 backfill 重新生成，
+            // 否则搜索会继续命中已不存在于内容里的旧标签。
             "UPDATE clip_items
              SET content = ?1, clip_type = ?2, hash = ?3, char_count = ?4,
-                 pinyin_flat = ?5, pinyin_initials = ?6
+                 pinyin_flat = ?5, pinyin_initials = ?6, ai_tags = NULL
              WHERE id = ?7",
             params![
                 new_content,

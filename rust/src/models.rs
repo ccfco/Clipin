@@ -78,6 +78,17 @@ pub struct ClipListItem {
     pub alias: Option<String>,
 }
 
+/// 语义标签生成的轻量候选：只带标签需要的前 2000 字符与别名，
+/// 避免把整段长文本（剪贴板单条可达数 MB）跨 UniFFI 拷进内存。
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct TaggingCandidate {
+    pub id: String,
+    pub created_at: i64,
+    /// 正文前 2000 字符（图片取 OCR 文本）。
+    pub text: String,
+    pub alias: Option<String>,
+}
+
 /// 错误类型
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum ClipinError {
