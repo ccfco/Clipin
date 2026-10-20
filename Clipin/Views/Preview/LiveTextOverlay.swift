@@ -58,6 +58,8 @@ struct LiveTextOverlay: NSViewRepresentable {
                     view?.analysis = analysis
                 } catch {
                     // 分析失败只意味着没有可选文字；图片本身仍正常显示，不打扰用户。
+                    // 复位 identity，让同一张图下次更新时还能重试一次。
+                    if analyzedIdentity == identity { analyzedIdentity = nil }
                     ClipinLog.app.debug("Live Text analysis skipped: \(error.localizedDescription, privacy: .public)")
                 }
             }
