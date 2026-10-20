@@ -312,10 +312,17 @@ final class ClipboardViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.reloadSelectedItemPayload() }
         // 语义标签同样是「内容字段更新、选中不变」，复用同一条静默刷新路径。
+        // 回填会逐条写标签：只刷新「正被选中的那一条」，否则几百条回填会反复
+        // 重渲染无关预览（selectedItemRevision 每次赋值都会递增）。
         aiTagsSubscription = NotificationCenter.default
             .publisher(for: .clipboardItemAiTagsUpdated)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.reloadSelectedItemPayload() }
+            .sink { [weak self] note in
+                guard let self,
+                      let id = note.object as? String,
+                      id == self.selectedItemID else { return }
+                self.reloadSelectedItemPayload()
+            }
         settingsSubscription = settings.$pinnedItemsPresentation
             .dropFirst()
             .receive(on: RunLoop.main)
@@ -750,6 +757,8 @@ final class ClipboardViewModel: ObservableObject {
         guard !unchanged else { return }
         do {
             try core.setAlias(id: id, alias: trimmed.isEmpty ? nil : trimmed)
+            // 存储层已把 ai_tags 置 NULL（别名参与标签输入），这里补一次回填。
+            requestAiTaggingAfterDerivedInputChange()
             loadItems()
             showNotice(NSLocalizedString("Renamed.", comment: ""), style: .success)
         } catch {
@@ -816,6 +825,8 @@ final class ClipboardViewModel: ObservableObject {
         }
         do {
             try core.updateContent(id: id, newContent: contentToSave, newType: newType)
+            // 存储层已把 ai_tags 置 NULL（内容变了旧标签必失效），这里补一次回填。
+            requestAiTaggingAfterDerivedInputChange()
             // 写库成功后才退出编辑态——失败时保留 draft 与编辑器，用户输入不丢、可重试。
             editingContentItemID = nil
             editingContentDraft.text = ""
@@ -831,6 +842,12 @@ final class ClipboardViewModel: ObservableObject {
     func cancelEditContent() {
         editingContentItemID = nil
         editingContentDraft.text = ""
+    }
+
+    /// 内容/别名变更会让旧语义标签失效（存储层置 NULL 后），补一次幂等回填。
+    private func requestAiTaggingAfterDerivedInputChange() {
+        guard settings.aiTaggingEnabled else { return }
+        Task { await AiTaggingService.shared.kick(core: core) }
     }
 
     func openSelected() {

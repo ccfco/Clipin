@@ -26,7 +26,7 @@ extension SettingsView {
                     set: { newValue in
                         settings.aiTaggingEnabled = newValue
                         // 打开开关立即补跑历史，否则要等下一次剪贴板事件才生效
-                        if newValue { AiTaggingService.shared.kick(core: core) }
+                        if newValue { Task { await AiTaggingService.shared.kick(core: core) } }
                     }
                 )
             )

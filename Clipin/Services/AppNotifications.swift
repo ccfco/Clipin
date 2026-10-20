@@ -11,6 +11,8 @@ extension Notification.Name {
     static let clipboardItemAiTagsUpdated = Notification.Name("ClipboardItemAiTagsUpdated")
     /// App Intent：打开 launcher。
     static let clipinIntentOpenRequested = Notification.Name("ClipinIntentOpenRequested")
+    /// OCR 历史回填结束（图片此时才具备生成语义标签的输入）。
+    static let clipinOcrBackfillFinished = Notification.Name("ClipinOcrBackfillFinished")
     /// App Intent：打开 launcher 并带上搜索词（object 为 String）。
     static let clipinIntentSearchRequested = Notification.Name("ClipinIntentSearchRequested")
 }

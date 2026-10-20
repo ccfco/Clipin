@@ -178,6 +178,9 @@ extension AppDelegate {
             if totalProcessed > 0 {
                 ClipinLog.ocr.notice("OCR backfill complete: \(totalProcessed, privacy: .public) image(s) processed")
             }
+            // 图片的标签候选要求 OCR 非 NULL；标签回填可能在本轮之前就已跑完，
+            // 这里补一次 kick，让刚 OCR 完的历史图片进入标签流水线。
+            NotificationCenter.default.post(name: .clipinOcrBackfillFinished, object: nil)
         }
     }
 

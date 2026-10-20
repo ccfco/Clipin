@@ -43,36 +43,43 @@ actor AiTaggingService {
         } while pendingKick
     }
 
-    /// 分页处理未打标签条目。无 offset：处理完写回 ai_tags，下一批自然前移。
+    /// 按 created_at 游标分页处理未打标签条目。
+    /// 游标在每条**尝试后**推进（无论成功失败）：生成失败的条目保持 NULL 留待下次重试，
+    /// 但不能卡住本轮——否则一页全部失败（guardrail 拒绝、模型持续报错）会让更新的
+    /// 条目永远轮不到。失败项在下一轮 kick 时自然重试一次。
     private func processPendingItems(core: ClipinCore) async {
         var processed = 0
+        var cursor: (createdAt: Int64, id: String)?
         while !Task.isCancelled {
-            let pending: [ClipItem]
+            let pending: [TaggingCandidate]
             do {
-                pending = try core.getUntaggedItems(limit: Self.pageSize)
+                pending = try core.getTaggingCandidates(
+                    limit: Self.pageSize,
+                    afterCreatedAt: cursor?.createdAt,
+                    afterId: cursor?.id
+                )
             } catch {
                 ClipinLog.aiTags.error("Tag backfill query failed: \(error.localizedDescription, privacy: .public)")
                 return
             }
             if pending.isEmpty { break }
 
-            // 整页零成功必须退出：模型持续失败时 getUntaggedItems 会反复返回同一批。
-            var wroteThisPage = 0
             for item in pending {
                 if Task.isCancelled { return }
+                cursor = (item.createdAt, item.id)
                 guard let tags = await Self.generateTags(for: item) else { continue }
                 do {
                     try core.updateAiTags(id: item.id, aiTags: tags.joined(separator: ", "))
-                    wroteThisPage += 1
                     processed += 1
-                    NotificationCenter.default.post(name: .clipboardItemAiTagsUpdated, object: nil)
+                    // 带 item id：ViewModel 只刷新真正变化且正被选中的条目，
+                    // 避免回填几百条时反复重渲染无关预览。
+                    NotificationCenter.default.post(
+                        name: .clipboardItemAiTagsUpdated,
+                        object: item.id
+                    )
                 } catch {
                     ClipinLog.aiTags.error("Tag write failed id=\(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 }
-            }
-            if wroteThisPage == 0 {
-                ClipinLog.aiTags.error("Tag backfill made no progress on a full page, aborting this round")
-                return
             }
         }
         if processed > 0 {
@@ -81,8 +88,8 @@ actor AiTaggingService {
     }
 
     /// 生成一条标签；nil = 本次失败（保持未处理），[] = 内容没有可提取标签（写空串哨兵）。
-    static func generateTags(for item: ClipItem) async -> [String]? {
-        let input = taggingInput(for: item)
+    static func generateTags(for candidate: TaggingCandidate) async -> [String]? {
+        let input = taggingInput(alias: candidate.alias, text: candidate.text)
         guard !input.isEmpty else { return [] }
 
         let session = LanguageModelSession(
@@ -107,30 +114,31 @@ actor AiTaggingService {
         }
     }
 
-    /// 送入模型的正文：别名优先并入；图片用 OCR 文本（无文字则空）。
-    static func taggingInput(for item: ClipItem) -> String {
-        let body: String
-        switch item.clipType {
-        case .image: body = item.ocrText ?? ""
-        default: body = item.content
-        }
+    /// 送入模型的正文：别名优先并入。候选的 text 已由 SQL 截到 2000 字符。
+    static func taggingInput(alias: String?, text: String) -> String {
         var parts: [String] = []
-        if let alias = item.alias, !alias.isEmpty { parts.append(alias) }
-        parts.append(body)
+        if let alias, !alias.isEmpty { parts.append(alias) }
+        parts.append(text)
         return String(parts.joined(separator: "\n").prefix(maxInputCharacters))
     }
 
     static func sanitize(_ rawTags: [String]) -> [String] {
         var seen = Set<String>()
         var result: [String] = []
+        // 模型偶尔把多个标签塞进一个字符串（"budget, planning"）。按分隔符拆开，
+        // 让存储粒度与预览 rail 的拆分规则一致，也避免 FTS 里出现整串噪声。
+        let separators = CharacterSet(charactersIn: ",，、;；")
         for raw in rawTags {
-            let tag = raw
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "#、,，。.;；:："))
-            // 标签会拼进 FTS，换行/超长会污染索引与预览 rail
-            guard !tag.isEmpty, tag.count <= 40, !tag.contains("\n") else { continue }
-            guard seen.insert(tag.lowercased()).inserted else { continue }
-            result.append(tag)
+            for piece in raw.components(separatedBy: separators) {
+                let tag = piece
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "#。.:："))
+                // 标签会拼进 FTS，换行/超长会污染索引与预览 rail
+                guard !tag.isEmpty, tag.count <= 40, !tag.contains("\n") else { continue }
+                guard seen.insert(tag.lowercased()).inserted else { continue }
+                result.append(tag)
+                if result.count == maxTags { break }
+            }
             if result.count == maxTags { break }
         }
         return result

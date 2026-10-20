@@ -148,6 +148,11 @@ extension AppDelegate {
         }
         .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: .clipinOcrBackfillFinished)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.backfillSemanticTags() }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: .clipHistoryDidChange)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
