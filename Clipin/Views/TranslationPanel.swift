@@ -180,13 +180,16 @@ struct TranslationPanelView: View {
 
     /// 目标语言：默认跟随系统语言；源语言恰好等于系统语言时切到另一常用语言，
     /// 避免"翻译成同一种语言"这种无意义结果。
+    /// 必须同时比较书写系统：zh-Hant 与 zh-Hans 的 languageCode 都是 "zh"，
+    /// 只比 languageCode 会把繁体内容误翻成英文，而不是系统的简体中文。
     private static func resolveTarget(for source: Locale.Language) -> Locale.Language {
         let system = Locale.current.language
-        let systemCode = system.languageCode?.identifier
-        if source.languageCode?.identifier != systemCode {
+        let sameLanguage = source.languageCode?.identifier == system.languageCode?.identifier
+            && source.script?.identifier == system.script?.identifier
+        if !sameLanguage {
             return system
         }
-        let alternative = systemCode == "zh" ? "en" : "zh-Hans"
+        let alternative = source.script?.identifier == "Hant" ? "zh-Hans" : "en"
         return Locale.Language(identifier: alternative)
     }
 }
