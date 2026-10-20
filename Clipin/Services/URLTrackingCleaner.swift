@@ -47,6 +47,13 @@ final class URLTrackingCleaner: @unchecked Sendable {
 
     private let providers: [CompiledProvider]
 
+    /// 清理结果缓存。`clean` 在 URL 预览的 body 计算属性里被调用，每次预览重建都会
+    /// 遍历 200+ provider 的正则；同一 URL 来回切换时会重复付这份成本。规则是纯函数，
+    /// 结果只依赖 URL 字符串，按字符串缓存即可。上限与列表分页规模匹配。
+    private let cacheLock = NSLock()
+    private var cache = LRUStore<String, CleanResult>()
+    private static let maxCacheEntries = 200
+
     /// 最大重定向解嵌套层数：广告平台经常嵌套多层（adservice.google.com → t.co → 真实目标）。
     /// 5 层足够覆盖 99% 现实场景；防御性上限避免坏规则形成死循环。
     private let maxRedirectDepth = 5
@@ -67,6 +74,22 @@ final class URLTrackingCleaner: @unchecked Sendable {
     ///
     /// 输入不是有效 URL 或无任何变化时，返回 didModify=false 的结果。
     func clean(_ urlString: String) -> CleanResult {
+        cacheLock.lock()
+        if let cached = cache.get(urlString) {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+
+        let result = computeClean(urlString)
+
+        cacheLock.lock()
+        cache.set(urlString, result, maxEntries: Self.maxCacheEntries)
+        cacheLock.unlock()
+        return result
+    }
+
+    private func computeClean(_ urlString: String) -> CleanResult {
         var current = urlString
         var allRemoved: [String] = []
         var didRedirect = false
