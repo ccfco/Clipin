@@ -33,7 +33,7 @@ final class ClipSectionBuilderTests: XCTestCase {
 
         let sections = ClipSectionBuilder.build(items: [pinned, regular], showPinnedSection: true)
 
-        XCTAssertEqual(sections.first?.title, NSLocalizedString("Pinned", comment: ""))
+        XCTAssertEqual(sections.first?.title, NSLocalizedString("Favorites", comment: ""))
         XCTAssertEqual(sections.first?.items.map(\.id), ["p"])
         XCTAssertTrue(sections.dropFirst().flatMap(\.items).map(\.id).contains("r"))
     }
@@ -42,7 +42,7 @@ final class ClipSectionBuilderTests: XCTestCase {
         let now = ms(Date())
         let pinned = item(id: "p", createdAt: now, isPinned: true)
         let sections = ClipSectionBuilder.build(items: [pinned], showPinnedSection: false)
-        XCTAssertNotEqual(sections.first?.title, NSLocalizedString("Pinned", comment: ""))
+        XCTAssertNotEqual(sections.first?.title, NSLocalizedString("Favorites", comment: ""))
         XCTAssertEqual(sections.flatMap(\.items).map(\.id), ["p"])
     }
 

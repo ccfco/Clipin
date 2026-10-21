@@ -40,6 +40,8 @@ enum AppearanceOverride: String, CaseIterable {
     }
 }
 
+/// 浏览模式。`.pinned` 的用户可见语义是「收藏」（永久保留 + 优先展示），
+/// 内部沿用 pinned 命名以兼容 DB / 归档 / 设置 key。
 enum LauncherBrowseMode: String, CaseIterable {
     case all
     case pinned
@@ -51,9 +53,9 @@ enum LauncherBrowseMode: String, CaseIterable {
     var displayName: String {
         switch self {
         case .all:
-            return NSLocalizedString("All Items", comment: "")
+            return NSLocalizedString("All", comment: "")
         case .pinned:
-            return NSLocalizedString("Pinned Items", comment: "")
+            return NSLocalizedString("Favorites", comment: "")
         case .text:
             return NSLocalizedString("Text", comment: "")
         case .image:
@@ -63,6 +65,43 @@ enum LauncherBrowseMode: String, CaseIterable {
         case .url:
             return NSLocalizedString("URLs", comment: "")
         }
+    }
+
+    var systemImageName: String {
+        switch self {
+        case .all:    return "line.3.horizontal.decrease"
+        case .pinned: return "star.fill"
+        case .text:   return "doc.text"
+        case .image:  return "photo"
+        case .file:   return "folder"
+        case .url:    return "link"
+        }
+    }
+
+    var isTypeFilter: Bool { typeFilter != nil }
+
+    /// Tab 循环与类型菜单的默认顺序：All 里绝大多数条目是文本，Text 放最后，
+    /// 图片/文件/链接这些真正能缩小范围的筛选先出现。用户可在设置里重排。
+    static let defaultFilterCycleOrder: [LauncherBrowseMode] = [.image, .file, .url, .text]
+
+    /// 只保留四个类型筛选、去重，并补齐缺失项——持久化数据损坏或枚举演进时
+    /// 循环仍有完整的一组模式，不会因为少一项而跳错档。
+    static func normalizedFilterOrder(_ order: [LauncherBrowseMode]) -> [LauncherBrowseMode] {
+        var seen = Set<LauncherBrowseMode>()
+        var result: [LauncherBrowseMode] = []
+        for mode in order where mode.isTypeFilter && seen.insert(mode).inserted {
+            result.append(mode)
+        }
+        for mode in defaultFilterCycleOrder where seen.insert(mode).inserted {
+            result.append(mode)
+        }
+        return result
+    }
+
+    /// All 固定第一；Pinned 是独立浏览视图，不参与 Tab 循环，避免搜索态降级成
+    /// All 后出现「按 Tab 视觉无变化」的空转档。
+    static func filterCycleModes(order: [LauncherBrowseMode]) -> [LauncherBrowseMode] {
+        [.all] + normalizedFilterOrder(order)
     }
 
     var typeFilter: ClipType? {
@@ -110,9 +149,9 @@ enum PinnedItemsPresentation: String, CaseIterable {
         case .mixed:
             return NSLocalizedString("Mixed with recent items", comment: "")
         case .topSection:
-            return NSLocalizedString("Separate pinned section", comment: "")
+            return NSLocalizedString("Separate favorites section", comment: "")
         case .pinnedOnlyView:
-            return NSLocalizedString("Only in pinned view", comment: "")
+            return NSLocalizedString("Only in favorites view", comment: "")
         }
     }
 }
@@ -127,7 +166,7 @@ enum LauncherDefaultView: String, CaseIterable {
         case .allItems:
             return NSLocalizedString("All Items", comment: "")
         case .pinnedItems:
-            return NSLocalizedString("Pinned Items", comment: "")
+            return NSLocalizedString("Favorites", comment: "")
         case .rememberLastView:
             return NSLocalizedString("Remember Last View", comment: "")
         }
@@ -272,6 +311,21 @@ final class SettingsStore: ObservableObject {
         didSet { defaults.set(launcherDefaultView.rawValue, forKey: Keys.launcherDefaultView) }
     }
 
+    /// Tab 循环 / 筛选菜单里四个类型筛选的先后顺序。All 永远第一、Pinned 独立，
+    /// 不存进这个数组；写入前统一走 normalizedFilterOrder 保证完整且无重复。
+    @Published var filterCycleOrder: [LauncherBrowseMode] {
+        didSet {
+            // 任何赋值（含设置页重排、未来外部写入）都先收敛到「四个类型各一次」，
+            // 避免残缺顺序让 Tab 循环跳档。didSet 内自赋值不会再次触发观察器，
+            // 所以落盘必须用归一化后的值，不能依赖修正后的递归回调。
+            let normalized = LauncherBrowseMode.normalizedFilterOrder(filterCycleOrder)
+            if normalized != filterCycleOrder {
+                filterCycleOrder = normalized
+            }
+            defaults.set(normalized.map(\.rawValue), forKey: Keys.filterCycleOrder)
+        }
+    }
+
     @Published private(set) var lastLauncherBrowseMode: LauncherBrowseMode {
         didSet { defaults.set(lastLauncherBrowseMode.rawValue, forKey: Keys.lastLauncherBrowseMode) }
     }
@@ -313,6 +367,7 @@ final class SettingsStore: ObservableObject {
         static let urlPreviewScreenshot = "settings.urlPreviewScreenshot"
         static let pinnedItemsPresentation = "settings.pinnedItemsPresentation"
         static let launcherDefaultView = "settings.launcherDefaultView"
+        static let filterCycleOrder = "settings.filterCycleOrder"
         static let lastLauncherBrowseMode = "settings.lastLauncherBrowseMode"
         static let richPasteNoticeCountSeen = "settings.richPasteNoticeCountSeen"
         static let onboardingVersion = "settings.onboardingVersion"
@@ -375,6 +430,10 @@ final class SettingsStore: ObservableObject {
             .flatMap { PinnedItemsPresentation(rawValue: $0) } ?? .mixed
         let storedLauncherDefaultView = defaults.string(forKey: Keys.launcherDefaultView)
             .flatMap { LauncherDefaultView(rawValue: $0) } ?? .allItems
+        let storedFilterCycleOrder = (defaults.array(forKey: Keys.filterCycleOrder) as? [String])
+            .map { $0.compactMap(LauncherBrowseMode.init(rawValue:)) }
+            .map(LauncherBrowseMode.normalizedFilterOrder)
+            ?? LauncherBrowseMode.defaultFilterCycleOrder
         let storedLastLauncherBrowseMode = defaults.string(forKey: Keys.lastLauncherBrowseMode)
             .flatMap { LauncherBrowseMode(rawValue: $0) } ?? .all
         let storedOnboardingVersion = defaults.object(forKey: Keys.onboardingVersion) as? Int ?? 0
@@ -399,6 +458,7 @@ final class SettingsStore: ObservableObject {
         self.urlPreviewScreenshot = defaults.object(forKey: Keys.urlPreviewScreenshot) as? Bool ?? true
         self.pinnedItemsPresentation = storedPinnedItemsPresentation
         self.launcherDefaultView = storedLauncherDefaultView
+        self.filterCycleOrder = storedFilterCycleOrder
         self.lastLauncherBrowseMode = storedLastLauncherBrowseMode
         self.richPasteNoticeCountSeen = defaults.object(forKey: Keys.richPasteNoticeCountSeen) as? Int ?? 0
         self.onboardingVersion = storedOnboardingVersion
@@ -440,6 +500,17 @@ final class SettingsStore: ObservableObject {
 
     func recordLastLauncherBrowseMode(_ mode: LauncherBrowseMode) {
         lastLauncherBrowseMode = mode
+    }
+
+    func moveFilter(_ mode: LauncherBrowseMode, by offset: Int) {
+        guard let index = filterCycleOrder.firstIndex(of: mode) else { return }
+        let target = index + offset
+        guard filterCycleOrder.indices.contains(target) else { return }
+        filterCycleOrder.swapAt(index, target)
+    }
+
+    func resetFilterCycleOrder() {
+        filterCycleOrder = LauncherBrowseMode.defaultFilterCycleOrder
     }
 
     func reportShortcutRegistrationFailure(

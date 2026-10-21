@@ -22,24 +22,35 @@
 "Graphite" = "Graphite";
 "Sunrise" = "Sunrise";
 "Launch Clipin at login" = "Launch Clipin at login";
-"Pinned items in the main list" = "Pinned items in the main list";
-"Choose whether pinned items mix into normal browsing, stay in a separate section, or only appear in the pinned view." = "Choose whether pinned items mix into normal browsing, stay in a separate section, or only appear in the pinned view.";
+"Favorites in the main list" = "Favorites in the main list";
+"Choose whether favorites mix into normal browsing, stay in a separate section, or only appear in the favorites view." = "Choose whether favorites mix into normal browsing, stay in a separate section, or only appear in the favorites view.";
 "Launcher default view" = "Launcher default view";
 "Choose which browse view opens before you start typing. Search always scans the full library." = "Choose which browse view opens before you start typing. Search always scans the full library.";
+"Filter order" = "Filter order";
+"Order used by Tab cycling and the filter menu. All is always first; favorites have their own view (⌥F)." = "Order used by Tab cycling and the filter menu. All is always first; favorites have their own view (⌥F).";
+"Reset order" = "Reset order";
+"Move up" = "Move up";
+"Move down" = "Move down";
 "All Items" = "All Items";
-"Pinned Items" = "Pinned Items";
+"Favorites" = "Favorites";
+"Favorites · %d" = "Favorites · %d";
+"Favorited" = "Favorited";
+"Favorite" = "Favorite";
+"Remove from Favorites" = "Remove from Favorites";
+"Unfavorite" = "Unfavorite";
+"Favorite — kept forever" = "Favorite — kept forever";
 "Remember Last View" = "Remember Last View";
 "Mixed with recent items" = "Mixed with recent items";
-"Separate pinned section" = "Separate pinned section";
-"Only in pinned view" = "Only in pinned view";
+"Separate favorites section" = "Separate favorites section";
+"Only in favorites view" = "Only in favorites view";
 "Sensitive content is always excluded" = "Sensitive content is always excluded";
 "When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off." = "When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off.";
 "Filter out drag-and-drop and app-generated clipboard writes" = "Filter out drag-and-drop and app-generated clipboard writes";
 "Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history." = "Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history.";
-"Keep unpinned history for" = "Keep unpinned history for";
-"Pinned items are always preserved." = "Pinned items are always preserved.";
-"Max unpinned items" = "Max unpinned items";
-"Oldest unpinned items are trimmed first." = "Oldest unpinned items are trimmed first.";
+"Keep non-favorite history for" = "Keep non-favorite history for";
+"Favorites are always preserved." = "Favorites are always preserved.";
+"Max non-favorite items" = "Max non-favorite items";
+"Oldest non-favorite items are trimmed first." = "Oldest non-favorite items are trimmed first.";
 "Run Cleanup Now" = "Run Cleanup Now";
 
 /* SettingsView - Retention picker */
@@ -64,14 +75,15 @@
 "No selection" = "No selection";
 "Actions" = "Actions";
 "Continuous Paste" = "Continuous Paste";
-"Pinned" = "Pinned";
 "Plain Text" = "Plain Text";
 "Paste to %@" = "Paste to %@";
 
 /* MainPanel - context menu */
 "Paste" = "Paste";
-"Unpin" = "Unpin";
-"Pin" = "Pin";
+"No favorites yet" = "No favorites yet";
+"Select a clip, then click the star at the bottom of the preview or press ⌘⇧F. Favorites are kept forever and rank first in search." = "Select a clip, then click the star at the bottom of the preview or press ⌘⇧F. Favorites are kept forever and rank first in search.";
+"Browse All" = "Browse All";
+"%@ (%d)" = "%@ (%d)";
 "Delete" = "Delete";
 
 /* MainPanel - empty state */
@@ -135,6 +147,7 @@
 "File" = "File";
 "Link" = "Link";
 "All" = "All";
+"Recent" = "Recent";
 "Images" = "Images";
 "Files" = "Files";
 "URLs" = "URLs";
@@ -297,8 +310,8 @@
 "Adjust the panel tint while keeping native materials and shared chrome." = "Adjust the panel tint while keeping native materials and shared chrome.";
 "Restart Clipin after changing the app language." = "Restart Clipin after changing the app language.";
 "Skip clipboard writes that were not triggered by an explicit copy action so noisy transient items do not enter history." = "Skip clipboard writes that were not triggered by an explicit copy action so noisy transient items do not enter history.";
-"Oldest unpinned items are trimmed first when the limit is reached." = "Oldest unpinned items are trimmed first when the limit is reached.";
-"Apply the current retention rules immediately and remove outdated unpinned items." = "Apply the current retention rules immediately and remove outdated unpinned items.";
+"Oldest non-favorite items are trimmed first when the limit is reached." = "Oldest non-favorite items are trimmed first when the limit is reached.";
+"Apply the current retention rules immediately and remove outdated non-favorite items." = "Apply the current retention rules immediately and remove outdated non-favorite items.";
 "Export clipboard history" = "Export clipboard history";
 "Create a one-off .clipin.zip snapshot you can archive or share elsewhere." = "Create a one-off .clipin.zip snapshot you can archive or share elsewhere.";
 "Export…" = "Export…";
@@ -382,8 +395,8 @@
 "Revealed in Finder." = "Revealed in Finder.";
 "Continuous Paste is on. Press Esc to exit." = "Continuous Paste is on. Press Esc to exit.";
 "Continuous Paste is off." = "Continuous Paste is off.";
-"Pinned." = "Pinned.";
-"Unpinned." = "Unpinned.";
+"Favorited — kept forever." = "Favorited — kept forever.";
+"Removed from Favorites." = "Removed from Favorites.";
 "Item no longer exists." = "Item no longer exists.";
 "Item could not be read." = "Item could not be read.";
 "Item deleted." = "Item deleted.";
@@ -402,7 +415,7 @@
 
 /* SearchBar / PreviewPane —— Codex review 指出的缺失 key */
 "Search clipboard history…" = "Search clipboard history…";
-"Filter by type — press Tab to cycle" = "Filter by type — press Tab to cycle";
+"Filter by type — Tab cycles, ⌥0–4 jumps directly, ⌥F for favorites" = "Filter by type — Tab cycles, ⌥0–4 jumps directly, ⌥F for favorites";
 "Open in default browser" = "Open in default browser";
 "Full URL" = "Full URL";
 "Query parameters" = "Query parameters";

@@ -447,8 +447,12 @@ struct ActionPaletteBuilder {
                 viewModel.copySelected()
             })
 
-            list.append(PaletteAction(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin", shortcut: .togglePin) {
-                viewModel.togglePinSelected()
+            list.append(PaletteAction(
+                selected.isPinned ? "Remove from Favorites" : "Favorite",
+                systemImage: selected.isPinned ? "star.slash" : "star",
+                shortcut: .toggleFavorite
+            ) {
+                viewModel.toggleFavoriteSelected()
             })
 
             list.append(PaletteAction("Rename", systemImage: "pencil", shortcut: .rename, restoresSearchFocus: false) {

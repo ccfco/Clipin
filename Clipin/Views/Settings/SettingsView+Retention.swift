@@ -47,7 +47,7 @@ extension SettingsView {
                     Text(option.label).tag(option.days)
                 }
             } label: {
-                rowLabel("Keep unpinned history for", "Pinned items are always preserved.")
+                rowLabel("Keep non-favorite history for", "Favorites are always preserved.")
             }
 
             Picker(selection: normalizedMaxItems) {
@@ -55,7 +55,7 @@ extension SettingsView {
                     Text(option.label).tag(option.count)
                 }
             } label: {
-                rowLabel("Max unpinned items", "Oldest unpinned items are trimmed first when the limit is reached.")
+                rowLabel("Max non-favorite items", "Oldest non-favorite items are trimmed first when the limit is reached.")
             }
 
             cleanupActionRow
@@ -74,7 +74,7 @@ extension SettingsView {
             .disabled(activeOperation != nil)
         } label: {
             Text("Run Cleanup Now")
-            Text("Apply the current retention rules immediately and remove outdated unpinned items.")
+            Text("Apply the current retention rules immediately and remove outdated non-favorite items.")
                 .settingsCaption()
             if let statusText = lastCleanupStatusText {
                 Text(statusText)

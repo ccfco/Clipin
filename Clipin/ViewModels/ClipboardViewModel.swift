@@ -72,6 +72,17 @@ final class ClipboardViewModel: ObservableObject {
         didSet { if searchQuery.isEmpty { isInTypingMode = false } }
     }
     @Published var browseMode: LauncherBrowseMode = .all
+    /// 收藏数量：筛选菜单展示「收藏 (N)」，让收藏成为一个有规模的集合而不是空视图。
+    @Published private(set) var favoriteCount: Int = 0
+    /// SettingsStore.filterCycleOrder 的 UI 镜像：SearchBar 需要观察顺序变化重建菜单。
+    /// 顺序的唯一真相仍在上层设置，这里只做 Published 转发。
+    @Published private(set) var filterCycleOrder: [LauncherBrowseMode]
+    /// All 在 pinnedOnlyView 下只包含未固定条目，叫 All 会误导，改用 Recent。
+    var allModeTitle: String {
+        settings.pinnedItemsPresentation == .pinnedOnlyView
+            ? NSLocalizedString("Recent", comment: "")
+            : NSLocalizedString("All", comment: "")
+    }
     @Published private(set) var sections: [ClipSection] = []
     @Published var targetAppName: String?
     /// 目标 App 图标,供动作面板 Paste 行渲染真实 App 图标(对齐 Raycast)。
@@ -247,6 +258,7 @@ final class ClipboardViewModel: ObservableObject {
     private var ocrSubscription: AnyCancellable?
     private var aiTagsSubscription: AnyCancellable?
     private var settingsSubscription: AnyCancellable?
+    private var filterOrderSubscription: AnyCancellable?
     private var loadItemTask: Task<Void, Never>?
     // OCR 静默刷新当前 payload 的任务句柄：必须可被 selectItem 取消，否则 A→B→A 快切时
     // 它会与新 loadItemTask 并发加载同一 id，后完成者把旧快照盖到新结果上。
@@ -284,6 +296,7 @@ final class ClipboardViewModel: ObservableObject {
         self.core = core
         self.settings = settings
         self.browsePageLoader = BrowsePageLoader(core: core, settings: settings)
+        self.filterCycleOrder = settings.filterCycleOrder
         self.sessionBaseBrowseMode = settings.resolvedLaunchBrowseMode()
         self.browseMode = settings.resolvedLaunchBrowseMode()
         debounce = Publishers.CombineLatest($searchQuery, $browseMode)
@@ -327,6 +340,12 @@ final class ClipboardViewModel: ObservableObject {
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.loadItems() }
+        filterOrderSubscription = settings.$filterCycleOrder
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] order in self?.filterCycleOrder = order }
+
+        refreshFavoriteCount()
     }
 
     // MARK: - Load
@@ -344,6 +363,7 @@ final class ClipboardViewModel: ObservableObject {
         if isShowingActions {
             hideActionsPalette()
         }
+        refreshFavoriteCount()
 
         let currentSelectionID = selectLatest ? nil : selectedItemID
         totalLoadedFromDB = 0
@@ -738,7 +758,7 @@ final class ClipboardViewModel: ObservableObject {
         renamingItemID = id
     }
 
-    /// 对当前选中项进入 inline 改名编辑态（主面板 ⇧⌘E 直达，无需先开 ⌘K）。无选中项则忽略。
+    /// 对当前选中项进入 inline 改名编辑态（主面板 ⌘⇧E 直达，无需先开 ⌘K）。无选中项则忽略。
     func beginRenamingSelected() {
         guard let id = selectedListItem?.id else { return }
         beginRenaming(id: id)
@@ -953,24 +973,32 @@ final class ClipboardViewModel: ObservableObject {
         )
     }
 
-    /// Tab 键循环：全部 ↔ 📌 ↔ 文本 ↔ 图片 ↔ 文件 ↔ 链接
-    /// 搜索态剔除 .pinned：搜索时 pinned 被 LauncherSearchScope 降级显示为 .all
-    /// （搜索是全局召回，pinned 只是浏览视图），若仍留在循环里会出现「all→pinned」
-    /// 视觉零变化的空转一档，用户感知为「按了 Tab 没反应」。
+    /// Tab 键循环：全部 → 设置里的类型顺序（默认 图片 → 文件 → 链接 → 文本）。
+    /// 收藏是独立浏览视图，不参与循环：搜索态它会被 LauncherSearchScope 降级为 All，
+    /// 留在循环里会出现「按了 Tab 视觉没反应」的空转档；直达入口是 ⌥F 与菜单。
     func cycleBrowseMode(reverse: Bool = false) {
-        let isSearching = !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let modes: [LauncherBrowseMode] = isSearching
-            ? [.all, .text, .image, .file, .url]
-            : [.all, .pinned, .text, .image, .file, .url]
-        guard let currentIndex = modes.firstIndex(of: browseMode) else {
-            browseMode = .all
-            return
+        let modes = LauncherBrowseMode.filterCycleModes(order: settings.filterCycleOrder)
+        let count = modes.count
+        let nextIndex: Int
+        if let currentIndex = modes.firstIndex(of: browseMode) {
+            nextIndex = reverse
+                ? (currentIndex - 1 + count) % count
+                : (currentIndex + 1) % count
+        } else {
+            // 搜索态下 browseMode 可能停在 .pinned（显示为 All）：把当前档视作 All 再走一步，
+            // 否则第一次 Tab 只会把 pinned 改成 all，用户看到的仍是同一个列表。
+            nextIndex = reverse ? count - 1 : 1
         }
-
-        let nextIndex = reverse
-            ? (currentIndex - 1 + modes.count) % modes.count
-            : (currentIndex + 1) % modes.count
         browseMode = modes[nextIndex]
+    }
+
+    /// 菜单 / ⌥F 的直达入口。收藏是浏览视图：搜索时选中它必须显式退出搜索，
+    /// 否则搜索是全局召回，收藏视图会被降级显示为 All，点击看起来毫无反应。
+    func selectBrowseMode(_ mode: LauncherBrowseMode) {
+        if mode.isPinnedOnly, !searchQuery.isEmpty {
+            searchQuery = ""
+        }
+        browseMode = mode
     }
 
     @discardableResult
@@ -1015,22 +1043,36 @@ final class ClipboardViewModel: ObservableObject {
         targetAppIcon = app?.icon
     }
 
-    func togglePinSelected() {
+    func toggleFavoriteSelected() {
         guard let selectedItemID else { return }
-        togglePin(id: selectedItemID)
+        toggleFavorite(id: selectedItemID)
     }
 
-    func togglePin(id: String) {
+    /// 用户可见语义是「收藏」：永久保留 + 优先展示。Rust 侧仍叫 togglePin。
+    func toggleFavorite(id: String) {
         do {
-            let isPinned = try core.togglePin(id: id)
+            let isFavorite = try core.togglePin(id: id)
+            favoriteCount = max(0, favoriteCount + (isFavorite ? 1 : -1))
             showNotice(
-                isPinned ? NSLocalizedString("Pinned.", comment: "") : NSLocalizedString("Unpinned.", comment: ""),
+                isFavorite
+                    ? NSLocalizedString("Favorited — kept forever.", comment: "")
+                    : NSLocalizedString("Removed from Favorites.", comment: ""),
                 style: .success
             )
         } catch {
             showNotice(error.localizedDescription, style: .error)
         }
         loadItems()
+    }
+
+    private func refreshFavoriteCount() {
+        do {
+            favoriteCount = Int(try core.countPinned())
+        } catch {
+            ClipinLog.viewModel.error(
+                "countPinned failed: \(error.localizedDescription, privacy: .public)"
+            )
+        }
     }
 
     func deleteSelected() {

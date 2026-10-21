@@ -58,7 +58,7 @@
 
 📋 **格式无损往返** — 复制时同步采集 `plain / html / rtf` 多种表示形态，回车粘贴整组原样回放，也可 `⌥H` / `⌥R` 指定以 HTML / RTF 粘贴
 
-✏️ **重命名与编辑** — `⇧⌘E` 给条目起易记别名（进入搜索），`⌘E` 直接编辑文本条目的真实内容
+✏️ **重命名与编辑** — `⌘⇧E` 给条目起易记别名（进入搜索），`⌘E` 直接编辑文本条目的真实内容
 
 📁 **文件集合语义** — Finder 多选复制按"一整组"保存，粘贴 / 打开 / 预览都保留完整集合，`⌘O` 整组在 Finder 中显示
 
@@ -120,8 +120,8 @@ xcodegen generate
 | `⇧↵` | 以纯文本粘贴 |
 | `⌘1`–`⌘9` | 快速粘贴前 9 条 |
 | `⌘C` | 复制到剪贴板（不粘贴） |
-| `⌘⇧P` | 固定/取消固定 |
-| `⇧⌘E` | 重命名（起别名） |
+| `⌘⇧F` | 收藏/取消收藏 |
+| `⌘⇧E` | 重命名（起别名） |
 | `⌘E` | 编辑文本条目内容 |
 | `⌘⌫` | 删除条目（7 秒内可撤销） |
 | `⌘O` | 打开 URL / 在 Finder 中显示文件 |
@@ -129,6 +129,8 @@ xcodegen generate
 | Quick Look 中 `↑` `↓` `←` `→` | 切换上一条 / 下一条可预览项 |
 | `⌘K` | 打开动作面板 |
 | `Tab` / `⇧Tab` | 切换类型筛选 |
+| `⌥0`–`⌥4` | 直达全部 / 文本 / 图片 / 文件 / 链接 |
+| `⌥F` | 打开收藏视图 |
 | `⌘⇧L` | 开启/关闭连续粘贴 |
 | `⌘,` | 打开设置 |
 | `Esc` | 先清除搜索/筛选，再关闭面板 |
@@ -205,7 +207,7 @@ Clipin is a tiny, keyboard-first clipboard manager for macOS. It is built to lau
 - Image OCR search: built-in text recognition for images (zh/en support)
 - Pinyin and initials search for Chinese text
 - Format-preserving paste: captures plain/html/rtf representations, replays them losslessly (or paste as HTML/RTF with `⌥H`/`⌥R`)
-- Rename & edit: alias an item with `⇧⌘E` (searchable), edit text content in place with `⌘E`
+- Rename & edit: alias an item with `⌘⇧E` (searchable), edit text content in place with `⌘E`
 - File collection semantics: multi-selected files stay grouped through paste, open, and preview
 - Link preview: fetches og:image/favicon with a screenshot fallback, strips tracking params via ClearURLs
 - Native Liquid Glass theme: modern macOS 26 style with 4 curated themes

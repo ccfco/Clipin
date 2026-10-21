@@ -22,24 +22,35 @@
 "Graphite" = "石墨";
 "Sunrise" = "晨曦";
 "Launch Clipin at login" = "登录时启动 Clipin";
-"Pinned items in the main list" = "普通列表中的固定项";
-"Choose whether pinned items mix into normal browsing, stay in a separate section, or only appear in the pinned view." = "选择固定项是在普通浏览中混排、单独成组，还是仅出现在固定视图里。";
+"Favorites in the main list" = "普通列表中的收藏项";
+"Choose whether favorites mix into normal browsing, stay in a separate section, or only appear in the favorites view." = "选择收藏项是在普通浏览中混排、单独成组，还是仅出现在收藏视图里。";
 "Launcher default view" = "启动默认视图";
 "Choose which browse view opens before you start typing. Search always scans the full library." = "选择开始输入前默认打开的浏览视图。搜索始终扫描整个资料库。";
+"Filter order" = "筛选顺序";
+"Order used by Tab cycling and the filter menu. All is always first; favorites have their own view (⌥F)." = "Tab 循环与筛选菜单使用的顺序。“全部”始终排第一，收藏项有独立视图（⌥F）。";
+"Reset order" = "恢复默认顺序";
+"Move up" = "上移";
+"Move down" = "下移";
 "All Items" = "全部项目";
-"Pinned Items" = "固定项";
+"Favorites" = "收藏";
+"Favorites · %d" = "收藏 · %d";
+"Favorited" = "已收藏";
+"Favorite" = "收藏";
+"Remove from Favorites" = "取消收藏";
+"Unfavorite" = "取消收藏";
+"Favorite — kept forever" = "收藏后永久保留";
 "Remember Last View" = "记住上次视图";
 "Mixed with recent items" = "与最近项目混排";
-"Separate pinned section" = "单独固定分组";
-"Only in pinned view" = "仅在固定视图显示";
+"Separate favorites section" = "单独收藏分组";
+"Only in favorites view" = "仅在收藏视图显示";
 "Sensitive content is always excluded" = "始终排除敏感内容";
 "When apps like 1Password or Bitwarden mark content as sensitive, Clipin never records it. This cannot be turned off." = "当 1Password、Bitwarden 等应用将内容标记为敏感时，Clipin 永远不会记录。此功能不可关闭。";
 "Filter out drag-and-drop and app-generated clipboard writes" = "过滤拖拽和应用自动写入的剪贴板内容";
 "Skips clipboard entries not triggered by an explicit copy action. Turn on if unintended items keep appearing in your history." = "跳过非用户主动复制触发的剪贴板条目。如果历史记录中频繁出现意外内容，请开启此选项。";
-"Keep unpinned history for" = "未固定记录保留时长";
-"Pinned items are always preserved." = "固定的条目永久保留。";
-"Max unpinned items" = "最多未固定条目数";
-"Oldest unpinned items are trimmed first." = "最旧的未固定条目优先清理。";
+"Keep non-favorite history for" = "未收藏记录保留时长";
+"Favorites are always preserved." = "收藏的条目永久保留。";
+"Max non-favorite items" = "最多未收藏条目数";
+"Oldest non-favorite items are trimmed first." = "最旧的未收藏条目优先清理。";
 "Run Cleanup Now" = "立即清理";
 
 /* SettingsView - Retention picker */
@@ -64,14 +75,15 @@
 "No selection" = "未选中";
 "Actions" = "动作";
 "Continuous Paste" = "连续粘贴";
-"Pinned" = "已固定";
 "Plain Text" = "纯文本";
 "Paste to %@" = "粘贴到 %@";
 
 /* MainPanel - context menu */
 "Paste" = "粘贴";
-"Unpin" = "取消固定";
-"Pin" = "固定";
+"No favorites yet" = "还没有收藏";
+"Select a clip, then click the star at the bottom of the preview or press ⌘⇧F. Favorites are kept forever and rank first in search." = "选中任意条目，点预览底部的星标或按 ⌘⇧F。收藏后会永久保留，并在搜索中优先显示。";
+"Browse All" = "浏览全部";
+"%@ (%d)" = "%@ (%d)";
 "Delete" = "删除";
 
 /* MainPanel - empty state */
@@ -135,6 +147,7 @@
 "File" = "文件";
 "Link" = "链接";
 "All" = "全部";
+"Recent" = "最近";
 "Images" = "图片";
 "Files" = "文件";
 "URLs" = "链接";
@@ -299,8 +312,8 @@
 "Adjust the panel tint while keeping native materials and shared chrome." = "在保留原生材质和统一界面骨架的前提下，调整面板色调。";
 "Restart Clipin after changing the app language." = "更改应用语言后需要重启 Clipin。";
 "Skip clipboard writes that were not triggered by an explicit copy action so noisy transient items do not enter history." = "跳过不是由明确复制动作触发的剪贴板写入，避免噪音临时项进入历史记录。";
-"Oldest unpinned items are trimmed first when the limit is reached." = "达到上限后，会优先清理最旧的未固定条目。";
-"Apply the current retention rules immediately and remove outdated unpinned items." = "立即应用当前保留策略，并移除过期的未固定条目。";
+"Oldest non-favorite items are trimmed first when the limit is reached." = "达到上限后，会优先清理最旧的未收藏条目。";
+"Apply the current retention rules immediately and remove outdated non-favorite items." = "立即应用当前保留策略，并移除过期的未收藏条目。";
 "Export clipboard history" = "导出剪贴板历史";
 "Create a one-off .clipin.zip snapshot you can archive or share elsewhere." = "为当前历史生成一次性 .clipin.zip 快照，便于归档或分享。";
 "Import from a backup" = "从备份文件导入";
@@ -382,8 +395,8 @@
 "Revealed in Finder." = "已在 Finder 中显示。";
 "Continuous Paste is on. Press Esc to exit." = "连续粘贴已开启，按 Esc 退出。";
 "Continuous Paste is off." = "连续粘贴已关闭。";
-"Pinned." = "已固定。";
-"Unpinned." = "已取消固定。";
+"Favorited — kept forever." = "已收藏，将永久保留。";
+"Removed from Favorites." = "已取消收藏。";
 "Item no longer exists." = "这条记录已不存在。";
 "Item could not be read." = "无法读取这条记录。";
 "Item deleted." = "已删除记录。";
@@ -402,7 +415,7 @@
 
 /* SearchBar / PreviewPane —— Codex review 指出的缺失 key */
 "Search clipboard history…" = "搜索剪贴板历史…";
-"Filter by type — press Tab to cycle" = "按类型筛选 — 按 Tab 循环切换";
+"Filter by type — Tab cycles, ⌥0–4 jumps directly, ⌥F for favorites" = "按类型筛选 — Tab 循环切换，⌥0–4 直达，⌥F 查看收藏";
 "Open in default browser" = "在默认浏览器中打开";
 "Full URL" = "完整 URL";
 "Query parameters" = "查询参数";

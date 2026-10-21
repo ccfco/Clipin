@@ -189,10 +189,19 @@ struct SearchBar: View {
     @Binding var query: String
     @Binding var browseMode: LauncherBrowseMode
     let sceneState: ClipinSceneState
+    /// 类型筛选顺序，来自设置（All 固定第一、收藏是独立视图不在其中）。
+    var filterOrder: [LauncherBrowseMode] = LauncherBrowseMode.defaultFilterCycleOrder
+    /// pinnedOnlyView 下 All 只含未固定条目，由 ViewModel 改写为 Recent。
+    var allModeTitle: String = NSLocalizedString("All", comment: "")
+    /// 收藏数量，仅用于菜单项「收藏 (N)」，不进入 chip 文案（避免宽度随数量变化）。
+    var favoriteCount: Int = 0
     var onNavigate: (Int) -> Void = { _ in }
     var onSubmit: () -> Void = {}
     var onEscape: () -> Void = {}
     var onCycleBrowseMode: (Bool) -> Void = { _ in }
+    /// 菜单/⌥ 直达的统一入口。ViewModel 里处理「Pinned 需要先退出搜索」，
+    /// 不在视图层复制一份选中语义。
+    var onSelectBrowseMode: (LauncherBrowseMode) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: ClipinChrome.gap) {
@@ -211,15 +220,18 @@ struct SearchBar: View {
 
             filterChip
 
-            if !query.isEmpty {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(ClipinInk.tertiary)
-                        .frame(width: 20, height: 20)
-                }
-                .buttonStyle(.plain)
+            // 始终保留清除按钮的槽位（空查询时透明禁用），否则输入第一个字符时
+            // 按钮从无到有会把 filter chip 向左顶一下、搜索框宽度突变。
+            Button { query = "" } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(ClipinInk.tertiary)
+                    .frame(width: 20, height: 20)
             }
+            .buttonStyle(.plain)
+            .opacity(query.isEmpty ? 0 : 1)
+            .disabled(query.isEmpty)
+            .accessibilityHidden(query.isEmpty)
         }
         .animation(ClipinMotion.focusShift, value: sceneState)
     }
@@ -237,38 +249,34 @@ struct SearchBar: View {
             .frame(width: 24, height: 26)
     }
 
-    /// 单一 filter chip：当前 mode == all 时极简（只显示一个筛选图标 + Tab 提示），
-    /// 选中具体类型时显示 icon + label。点击弹出 macOS 原生 Menu 提供完整鼠标路径。
-    /// 键盘 Tab/Shift-Tab 循环和 ⌥0-5 直达由 AppDelegate.keyMonitor 处理，不在此控件里。
+    /// 单一 filter chip：始终显示当前筛选名（含 All），并弹出 macOS 原生 Menu 提供鼠标路径。
+    /// 键盘 Tab/Shift-Tab 循环和 ⌥直达由 AppDelegate.keyMonitor 处理，不在此控件里。
+    ///
+    /// 宽度稳定：ZStack 里叠放所有候选模式的同构内容（隐藏），由最宽者决定 chip 宽度。
+    /// 否则 Tab 切换时文本从「无」变「Images」、或换成更宽的类型名，会把左侧搜索框挤得
+    /// 每次抖动一下——launcher 的高频操作里这是明显的廉价感。
     private var filterChip: some View {
         let displayedMode = LauncherSearchScope.displayedMode(query: query, browseMode: browseMode)
         let isAll = displayedMode == .all
+        let allModes: [LauncherBrowseMode] = [.all] + filterOrder + [.pinned]
 
         return Menu {
-            menuItem(.all, key: "0")
-            menuItem(.pinned, key: "1")
+            menuItem(.all)
             Divider()
-            menuItem(.text, key: "2")
-            menuItem(.image, key: "3")
-            menuItem(.file, key: "4")
-            menuItem(.url, key: "5")
+            ForEach(filterOrder, id: \.self) { mode in
+                menuItem(mode)
+            }
+            Divider()
+            menuItem(.pinned)
         } label: {
-            HStack(spacing: ClipinChrome.gap) {
-                Image(systemName: iconName(for: displayedMode))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(isAll ? ClipinInk.secondary : Color.accentColor)
-
-                if !isAll {
-                    Text(chipLabel(for: displayedMode))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
+            ZStack {
+                ForEach(allModes, id: \.self) { mode in
+                    chipContent(for: mode, active: mode != .all)
+                        .hidden()
+                        .accessibilityHidden(true)
                 }
 
-                Text("⇥")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(isAll ? ClipinInk.tertiary : ClipinSelectionInk.dim)
+                chipContent(for: displayedMode, active: !isAll)
             }
             .padding(.horizontal, ClipinChrome.gap)
             .padding(.vertical, ClipinChrome.gap)
@@ -287,42 +295,72 @@ struct SearchBar: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(NSLocalizedString("Filter by type — press Tab to cycle", comment: ""))
+        .help(NSLocalizedString("Filter by type — Tab cycles, ⌥0–4 jumps directly, ⌥F for favorites", comment: ""))
         .animation(ClipinMotion.feedback, value: displayedMode)
     }
 
+    private func chipContent(for mode: LauncherBrowseMode, active: Bool) -> some View {
+        HStack(spacing: ClipinChrome.gap) {
+            Image(systemName: mode.systemImageName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(active ? Color.accentColor : ClipinInk.secondary)
+
+            Text(title(for: mode))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(active ? Color.accentColor : ClipinInk.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+
+            Text("⇥")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(active ? ClipinSelectionInk.dim : ClipinInk.tertiary)
+        }
+    }
+
+    /// 菜单项用 Toggle 而非 Button：macOS 原生 Menu 会给选中的 Toggle 画勾，
+    /// Button 没有选中态，用户看不出当前筛选是哪一档。
     /// 给 menu item 绑定真实 keyboard shortcut（NSMenuItem.keyEquivalent），
-    /// 否则 Menu 打开期间 ⌥0-5 既不会被 AppDelegate 全局监视器接收（NSMenu 切走 run loop mode），
-    /// 也不会被 SwiftUI 自动响应——文本里画了 "⌥0" 也按不动。
+    /// 否则 Menu 打开期间 ⌥ 组合既不会被 AppDelegate 全局监视器接收（NSMenu 切走
+    /// run loop mode），也不会被 SwiftUI 自动响应。
     @ViewBuilder
-    private func menuItem(_ mode: LauncherBrowseMode, key: String) -> some View {
-        Button {
-            browseMode = mode
-        } label: {
-            Label(mode.displayName, systemImage: iconName(for: mode))
+    private func menuItem(_ mode: LauncherBrowseMode) -> some View {
+        let isSelected = LauncherSearchScope.displayedMode(query: query, browseMode: browseMode) == mode
+        Toggle(isOn: Binding(
+            get: { isSelected },
+            set: { isOn in
+                // 点击已选中的项会传 false；筛选是单选，不能取消，保持原样即可。
+                guard isOn else { return }
+                onSelectBrowseMode(mode)
+            }
+        )) {
+            Label(menuTitle(for: mode), systemImage: mode.systemImageName)
         }
-        .keyboardShortcut(KeyEquivalent(Character(key)), modifiers: .option)
+        .keyboardShortcut(KeyEquivalent(Character(shortcutKey(for: mode))), modifiers: .option)
     }
 
-    private func iconName(for mode: LauncherBrowseMode) -> String {
+    /// ⌥ 直达键按类型语义固定，不随自定义循环顺序变化：用户记住的是「⌥1 文本」，
+    /// 不是「第 1 个筛选」。顺序只影响 Tab 循环与菜单排列。
+    private func shortcutKey(for mode: LauncherBrowseMode) -> String {
         switch mode {
-        case .all:    return "line.3.horizontal.decrease"
-        case .pinned: return "pin.fill"
-        case .text:   return "doc.text"
-        case .image:  return "photo"
-        case .file:   return "folder"
-        case .url:    return "link"
+        case .all:    return "0"
+        case .text:   return "1"
+        case .image:  return "2"
+        case .file:   return "3"
+        case .url:    return "4"
+        case .pinned: return "f"
         }
     }
 
-    private func chipLabel(for mode: LauncherBrowseMode) -> String {
-        switch mode {
-        case .all:    return NSLocalizedString("All", comment: "")
-        case .pinned: return NSLocalizedString("Pinned", comment: "")
-        case .text:   return NSLocalizedString("Text", comment: "")
-        case .image:  return NSLocalizedString("Images", comment: "")
-        case .file:   return NSLocalizedString("Files", comment: "")
-        case .url:    return NSLocalizedString("URLs", comment: "")
-        }
+    private func title(for mode: LauncherBrowseMode) -> String {
+        mode == .all ? allModeTitle : mode.displayName
+    }
+
+    /// 收藏数量只出现在菜单里：chip 宽度按最宽文案固定，数字变化不能把搜索框挤动。
+    private func menuTitle(for mode: LauncherBrowseMode) -> String {
+        guard mode == .pinned, favoriteCount > 0 else { return title(for: mode) }
+        return String(
+            format: NSLocalizedString("%@ (%d)", comment: ""),
+            title(for: mode), favoriteCount
+        )
     }
 }

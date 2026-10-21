@@ -163,14 +163,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// 或快速敲组合键时频繁弹出打扰用户;太长则手感迟钝。
     static let commandHoldRevealDelay: Duration = .milliseconds(600)
 
-    /// ⌥+顶排数字键 → 浏览模式映射。文件级常量，避免每次 keyDown 重建字典。
+    /// ⌥+顶排数字键 → 浏览模式映射。收藏不占数字档（独立视图，走 ⌥F），
+    /// 数字固定按类型语义分配，不随设置里的循环顺序变化。
     static let optionDigitBrowseMode: [UInt16: LauncherBrowseMode] = [
         KeyCode.digit0: .all,
-        KeyCode.digit1: .pinned,
-        KeyCode.digit2: .text,
-        KeyCode.digit3: .image,
-        KeyCode.digit4: .file,
-        KeyCode.digit5: .url,
+        KeyCode.digit1: .text,
+        KeyCode.digit2: .image,
+        KeyCode.digit3: .file,
+        KeyCode.digit4: .url,
     ]
 
     enum SettingsWindowMetrics {

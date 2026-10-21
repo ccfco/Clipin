@@ -48,7 +48,7 @@ struct LatestClipboardItemIntent: AppIntent {
 
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let core = AppState.shared.core
-        // 不能复用 getItems：浏览排序是 pinned 优先，置顶旧条目会冒充"最新"。
+        // 不能复用 getItems：浏览列表可能带类型筛选/展示策略；"最新"由专用查询保证。
         guard let item = try core.getLatestItem() else {
             throw ClipinIntentError.emptyHistory
         }

@@ -199,15 +199,14 @@ struct PreviewPane: View, Equatable {
 
     private func footerEntries(for item: ClipItem) -> [PreviewRailEntry] {
         var entries: [PreviewRailEntry] = []
-        // 顺序即层级：source / pinned / OCR 这类"识别项"靠前，time / metric / formats / usage 这类"元数据"靠后。
+        // 收藏是内容级动作，放在 rail 最前：用户看完内容决定"这个要留着"时，星标就在眼前。
+        entries.append(PreviewRailEntry(item: favoriteBadge(for: item)))
+        // 顺序即层级：source / OCR 这类"识别项"靠前，time / metric / formats / usage 这类"元数据"靠后。
         // 早期版本用 prominence 在字号/padding 上拉开 0.5–1pt 差异，但视觉差小到不可分，已删除。
         if let source = primarySourceBadge(for: item) {
             entries.append(PreviewRailEntry(item: source))
         }
         entries.append(PreviewRailEntry(item: timeBadge(for: item)))
-        if let pinned = pinnedBadge(for: item) {
-            entries.append(PreviewRailEntry(item: pinned))
-        }
         // 语义标签是内容级识别结果，和 OCR 同属"这条内容还能怎么被理解"，排在元数据之前。
         entries.append(contentsOf: aiTagBadges(for: item).map(PreviewRailEntry.init))
         entries.append(contentsOf: metricBadges(for: item).map(PreviewRailEntry.init))
@@ -381,13 +380,22 @@ struct PreviewPane: View, Equatable {
         )
     }
 
-    private func pinnedBadge(for item: ClipItem) -> PreviewBadgeItem? {
-        guard item.isPinned else { return nil }
-        return PreviewBadgeItem(
-            id: "pinned",
-            title: NSLocalizedString("Pinned", comment: ""),
-            systemImage: "pin.fill"
-        )
+    /// 收藏 badge 对所有条目常驻：未收藏是空心星（点击收藏），已收藏是 accent 实心星（点击取消）。
+    /// 这是预览区唯一会改变数据的 badge；其余 badge 仍是只读元数据。
+    private func favoriteBadge(for item: ClipItem) -> PreviewBadgeItem {
+        PreviewBadgeItem(
+            id: "favorite",
+            title: item.isPinned
+                ? NSLocalizedString("Favorited", comment: "")
+                : NSLocalizedString("Favorite", comment: ""),
+            systemImage: item.isPinned ? "star.fill" : "star",
+            helpText: item.isPinned
+                ? NSLocalizedString("Remove from Favorites", comment: "")
+                : NSLocalizedString("Favorite — kept forever", comment: ""),
+            isActive: item.isPinned
+        ) {
+            vm.toggleFavorite(id: item.id)
+        }
     }
 
     /// 使用频率 badge：粘贴次数优先（更能反映真实使用价值），否则展示复制次数
@@ -470,19 +478,27 @@ struct PreviewPane: View, Equatable {
         let systemImage: String?
         let icon: NSImage?
         let helpText: String?
+        /// 强调态（目前只有收藏星标使用）：accent 前景 + 淡 accent 底。
+        let isActive: Bool
+        /// 非 nil 时 badge 渲染成可点击按钮；其余元数据 badge 仍为只读。
+        let action: (() -> Void)?
 
         init(
             id: String,
             title: String,
             systemImage: String? = nil,
             icon: NSImage? = nil,
-            helpText: String? = nil
+            helpText: String? = nil,
+            isActive: Bool = false,
+            action: (() -> Void)? = nil
         ) {
             self.id = id
             self.title = title
             self.systemImage = systemImage
             self.icon = icon
             self.helpText = helpText
+            self.isActive = isActive
+            self.action = action
         }
     }
 

@@ -22,10 +22,10 @@ enum KeyCode {
     static let letterH: UInt16 = 0x04
     static let letterC: UInt16 = 0x08
     static let letterE: UInt16 = 0x0E
+    static let letterF: UInt16 = 0x03
     static let letterV: UInt16 = 0x09
     static let letterR: UInt16 = 0x0F
     static let letterO: UInt16 = 0x1F
-    static let letterP: UInt16 = 0x23
     static let letterL: UInt16 = 0x25
     static let letterK: UInt16 = 0x28
     static let comma: UInt16 = 0x2B
@@ -36,7 +36,6 @@ enum KeyCode {
     static let digit2: UInt16 = 19
     static let digit3: UInt16 = 20
     static let digit4: UInt16 = 21
-    static let digit5: UInt16 = 23
 }
 
 struct PaletteActionShortcut: Equatable {
@@ -47,21 +46,21 @@ struct PaletteActionShortcut: Equatable {
     static let pastePlain = Self(badge: "⇧↵", keyCode: KeyCode.returnKey, modifiers: .shift)
     static let preview = Self(badge: "Space", keyCode: KeyCode.space, modifiers: [])
     static let copy = Self(badge: "⌘C", keyCode: KeyCode.letterC, modifiers: .command)
-    static let togglePin = Self(badge: "⌘⇧P", keyCode: KeyCode.letterP, modifiers: [.command, .shift])
+    static let toggleFavorite = Self(badge: "⌘⇧F", keyCode: KeyCode.letterF, modifiers: [.command, .shift])
     static let open = Self(badge: "⌘O", keyCode: KeyCode.letterO, modifiers: .command)
     static let toggleContinuousPaste = Self(badge: "⌘⇧L", keyCode: KeyCode.letterL, modifiers: [.command, .shift])
     static let settings = Self(badge: "⌘,", keyCode: KeyCode.comma, modifiers: .command)
     static let delete = Self(badge: "⌘⌫", keyCode: KeyCode.delete, modifiers: .command)
     static let pasteAsHTML = Self(badge: "⌥H", keyCode: KeyCode.letterH, modifiers: .option)
     static let pasteAsRTF = Self(badge: "⌥R", keyCode: KeyCode.letterR, modifiers: .option)
-    static let rename = Self(badge: "⇧⌘E", keyCode: KeyCode.letterE, modifiers: [.command, .shift])
+    static let rename = Self(badge: "⌘⇧E", keyCode: KeyCode.letterE, modifiers: [.command, .shift])
     static let editContent = Self(badge: "⌘E", keyCode: KeyCode.letterE, modifiers: .command)
 
     static let all: [Self] = [
         .pastePlain,
         .preview,
         .copy,
-        .togglePin,
+        .toggleFavorite,
         .open,
         .toggleContinuousPaste,
         .settings,

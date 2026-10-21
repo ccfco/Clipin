@@ -5,32 +5,59 @@ struct PreviewValueBadge: View {
     let item: PreviewPane.PreviewBadgeItem
 
     var body: some View {
+        Group {
+            if let action = item.action {
+                Button(action: action) {
+                    content
+                }
+                .buttonStyle(.plain)
+                .help(item.helpText ?? item.title)
+                .accessibilityLabel(Text(item.title))
+            } else {
+                content
+                    .help(item.helpText ?? item.title)
+            }
+        }
+    }
+
+    private var content: some View {
         HStack(spacing: ClipinChrome.gap) {
             if let systemImage = item.systemImage {
                 Image(systemName: systemImage)
                     .font(.system(size: 10, weight: .semibold))
+                    .contentTransition(.symbolEffect(.replace))
+                    .symbolEffect(.bounce, value: item.isActive)
             } else if let icon = item.icon {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: 11, height: 11)
             }
 
-            Text(item.title)
-                .font(.system(size: ClipinChrome.previewBadgeFontSize, weight: .medium, design: .rounded))
-                .lineLimit(1)
-                .textSelection(.enabled)
+            Group {
+                let title = Text(item.title)
+                    .font(.system(size: ClipinChrome.previewBadgeFontSize, weight: .medium, design: .rounded))
+                    .lineLimit(1)
+                // 可点击的收藏 badge 关闭文本选择，避免选择手势抢走点击。
+                if item.action == nil {
+                    title.textSelection(.enabled)
+                } else {
+                    title
+                }
+            }
         }
         .fixedSize(horizontal: true, vertical: false)
-        .foregroundStyle(ClipinInk.secondary)
+        .foregroundStyle(item.isActive ? Color.accentColor : ClipinInk.secondary)
         .padding(.horizontal, ClipinChrome.gap)
         .padding(.vertical, ClipinChrome.gap)
         // 元数据徽章是内容区 chip,不上玻璃(玻璃叠窗面会二次发白):用与 ClipinKeycap
         // 同值的扁平半透明填充,Color.primary.opacity 明暗自适应、无需 colorScheme 分支。
+        // 收藏激活态用 accent 淡底,让"已收藏"在 rail 里一眼可辨。
         .background(
             Capsule(style: .continuous)
-                .fill(Color.primary.opacity(0.06))
+                .fill(item.isActive
+                    ? Color.accentColor.opacity(0.12)
+                    : Color.primary.opacity(0.06))
         )
-        .help(item.helpText ?? item.title)
     }
 }
 

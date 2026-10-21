@@ -13,6 +13,7 @@ extension SettingsView {
     var generalContent: some View {
         startupSection
         launcherBehaviorSection
+        filterOrderSection
         pasteAndPreviewSection
         appearanceSection
     }
@@ -75,8 +76,8 @@ extension SettingsView {
                 }
             } label: {
                 rowLabel(
-                    "Pinned items in the main list",
-                    "Choose whether pinned items mix into normal browsing, stay in a separate section, or only appear in the pinned view."
+                    "Favorites in the main list",
+                    "Choose whether favorites mix into normal browsing, stay in a separate section, or only appear in the favorites view."
                 )
             }
 
@@ -96,6 +97,49 @@ extension SettingsView {
                 "Reopen the panel where you last moved it, even after restarting Clipin.",
                 isOn: $settings.rememberPanelPosition
             )
+        }
+    }
+
+    // MARK: - Filter order
+
+    /// Tab 循环 / 筛选菜单的类型顺序。All 固定第一、Pinned 是独立视图，均不参与重排；
+    /// 默认把 Text 放最后（All 里文本最多，Text 筛选收益最低），用户可按自己的使用习惯调整。
+    private var filterOrderSection: some View {
+        Section {
+            ForEach(Array(settings.filterCycleOrder.enumerated()), id: \.element) { index, mode in
+                HStack(spacing: ClipinChrome.gap) {
+                    Label(mode.displayName, systemImage: mode.systemImageName)
+                    Spacer()
+                    Button {
+                        settings.moveFilter(mode, by: -1)
+                    } label: {
+                        Image(systemName: "chevron.up")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(index == 0)
+                    .accessibilityLabel(Text("Move up"))
+                    .help(NSLocalizedString("Move up", comment: ""))
+
+                    Button {
+                        settings.moveFilter(mode, by: 1)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(index == settings.filterCycleOrder.count - 1)
+                    .accessibilityLabel(Text("Move down"))
+                    .help(NSLocalizedString("Move down", comment: ""))
+                }
+            }
+
+            Button("Reset order") {
+                settings.resetFilterCycleOrder()
+            }
+            .disabled(settings.filterCycleOrder == LauncherBrowseMode.defaultFilterCycleOrder)
+        } header: {
+            Text("Filter order")
+        } footer: {
+            Text("Order used by Tab cycling and the filter menu. All is always first; favorites have their own view (⌥F).")
         }
     }
 

@@ -1,10 +1,10 @@
 import Foundation
 
 /// items → 分组 sections 的纯函数收口。从 ClipboardViewModel 抽出:不持有状态、
-/// 不参与渲染拓扑,只按「Pinned / Today / Yesterday / 本地化月日」分组。
+/// 不参与渲染拓扑,只按「收藏 / Today / Yesterday / 本地化月日」分组。
 /// flatOrder / shortcutOrder 等渲染派生态留在 VM。
 enum ClipSectionBuilder {
-    /// showPinnedSection=true:先析出 isPinned 项成 Pinned 组,其余按日期分组。
+    /// showPinnedSection=true:先析出收藏项成一组,其余按日期分组。
     static func build(items: [ClipListItem], showPinnedSection: Bool) -> [ClipSection] {
         guard showPinnedSection else {
             return makeDateSections(from: items)
@@ -13,7 +13,7 @@ enum ClipSectionBuilder {
         let regularItems = items.filter { !$0.isPinned }
         var result: [ClipSection] = []
         if !pinnedItems.isEmpty {
-            result.append(ClipSection(title: NSLocalizedString("Pinned", comment: ""), items: pinnedItems))
+            result.append(ClipSection(title: NSLocalizedString("Favorites", comment: ""), items: pinnedItems))
         }
         result.append(contentsOf: makeDateSections(from: regularItems))
         return result

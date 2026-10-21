@@ -348,6 +348,9 @@ struct ClipItemRow: View {
     /// 打字只重渲染它一个,不波及本行 body(故 Equatable 忽略本字段)。
     let renameDraft: EditingDraft
     let onCommitRename: () -> Void
+    /// 收藏切换。行内不画视觉按钮；保留给 VoiceOver 自定义动作
+    /// （列表行是单一 accessibility element，星标不可见后读屏仍需要一个入口）。
+    var onToggleFavorite: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: ClipinChrome.gap) {
@@ -370,8 +373,9 @@ struct ClipItemRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // pin 信号已交给左侧中性细 rail（ClipinSelectableRowBackground.isPinned），
-            // 这里不再放 pin.fill icon，避免列表 row 视觉重量过高。
+            // 列表行刻意不画收藏星标：收藏是低频的“长期保留 + 搜索优先”信号，
+            // 不是需要逐行扫视的状态；行内常驻/悬停星标会挤占标题宽度并造成重排。
+            // 状态与动作留在预览底部与 ⌘⇧F / 菜单 / 右键里。
 
             if isSelected || hasShortcutBadge {
                 trailingMeta
@@ -393,6 +397,11 @@ struct ClipItemRow: View {
         // 编辑态用 .contain 保留 RenameField 的可聚焦性，浏览态用 .ignore 给干净单条朗读。
         .accessibilityElement(children: isRenaming ? .contain : .ignore)
         .accessibilityLabel(item.accessibilityDescription)
+        .accessibilityAction(named: Text(item.isPinned
+            ? LocalizedStringKey("Remove from Favorites")
+            : LocalizedStringKey("Favorite"))) {
+            onToggleFavorite?()
+        }
     }
 
     /// 类型指示器：图片显示缩略图，颜色值显示色块，其他显示单色图标

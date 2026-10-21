@@ -249,7 +249,8 @@ struct ClipinSectionIntro: View {
 }
 
 /// 所有列表型界面的选中/悬停底板,主列表、动作面板、设置侧栏共用。
-/// 减法重构:选中=单一中性填充(无 rail/无描边);pinned 仍用左侧中性细 rail 表达常驻 pin 状态。
+/// 减法重构:选中=单一中性填充(无 rail/无描边)。列表行不画收藏星标,
+/// 收藏状态只在预览底栏/菜单/快捷键表达,底板也不画常驻 rail。
 struct ClipinSelectableRowBackground: View {
     let isSelected: Bool
     let isHovered: Bool
@@ -257,7 +258,6 @@ struct ClipinSelectableRowBackground: View {
     let selectionStroke: Color
     let hoverFill: Color
     let hoverStroke: Color
-    var isPinned: Bool = false
 
     private var fillColor: Color {
         if isSelected { return selectionFill }
@@ -274,19 +274,7 @@ struct ClipinSelectableRowBackground: View {
     }
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            fillShape
-
-            // pinned 态 rail:2pt 中性细条(非选中时表达常驻 pin 状态)。
-            // 选中态不再画 rail/描边,仅靠中性填充区分。
-            if isPinned && !isSelected {
-                Capsule(style: .continuous)
-                    .fill(selectionStroke.opacity(0.45))
-                    .frame(width: 2)
-                    .padding(.vertical, ClipinChrome.edge)
-                    .padding(.leading, ClipinChrome.edge)
-            }
-        }
+        fillShape
     }
 }
 

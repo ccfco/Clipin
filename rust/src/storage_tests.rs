@@ -9,7 +9,7 @@ fn test_fresh_db_is_version_1() {
     std::fs::create_dir_all(&img_dir).unwrap();
 
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 13, "新建数据库应为 v13");
+    assert_eq!(storage.schema_version(), 14, "新建数据库应为 v14");
 }
 
 #[test]
@@ -28,7 +28,7 @@ fn test_existing_v0_migrates_to_v1() {
 
     // Storage::new 应自动 migrate 到 v1
     let storage = Storage::new(&db_path.to_string_lossy(), &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 13, "旧数据库应 migrate 到 v13");
+    assert_eq!(storage.schema_version(), 14, "旧数据库应 migrate 到 v14");
 
     // 数据表应已创建
     let conn = storage.conn.lock().unwrap();
@@ -55,7 +55,7 @@ fn test_migration_is_idempotent() {
 
     // 第二次 open 不应出错
     let s2 = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(s2.schema_version(), 13);
+    assert_eq!(s2.schema_version(), 14);
 }
 
 #[test]
@@ -78,6 +78,16 @@ fn test_v8_adds_browse_indexes_and_narrows_fts_update_trigger() {
         )
         .unwrap();
     assert_eq!(browse_index_count, 2);
+
+    let recency_index_count: i32 = conn
+        .query_row(
+            "SELECT count(*) FROM sqlite_master
+             WHERE type='index' AND name='idx_type_created_at'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(recency_index_count, 1);
 
     let trigger_sql: String = conn
         .query_row(
@@ -165,7 +175,7 @@ fn test_v10_migration_is_reentrant() {
     }
     // 列还在、版本回到 9 → migrate_to_v10 必须跳过 ALTER；随后继续跑 v11/v12 到 head。
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 13);
+    assert_eq!(storage.schema_version(), 14);
 }
 
 #[test]
@@ -176,7 +186,7 @@ fn test_v11_adds_alias_column_and_rebuilds_fts() {
     std::fs::create_dir_all(&img_dir).unwrap();
 
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 13);
+    assert_eq!(storage.schema_version(), 14);
 
     let conn = storage.conn.lock().unwrap();
 
@@ -249,7 +259,7 @@ fn test_v12_migration_is_reentrant() {
     }
     // 列还在、版本回到 11 → migrate_to_v12 必须跳过 ALTER
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 13);
+    assert_eq!(storage.schema_version(), 14);
 }
 
 #[test]
@@ -872,7 +882,7 @@ fn test_v13_adds_ai_tags_column_and_indexes_it() {
     std::fs::create_dir_all(&img_dir).unwrap();
 
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 13);
+    assert_eq!(storage.schema_version(), 14);
     let conn = storage.conn.lock().unwrap();
 
     let has_ai_tags: bool = conn
@@ -907,7 +917,7 @@ fn test_v13_migration_is_reentrant() {
         conn.execute_batch("PRAGMA user_version = 12;").unwrap();
     }
     let storage = Storage::new(&db_path, &img_dir).unwrap();
-    assert_eq!(storage.schema_version(), 13);
+    assert_eq!(storage.schema_version(), 14);
 }
 
 #[test]
@@ -993,7 +1003,7 @@ fn test_derived_input_changes_invalidate_ai_tags() {
 }
 
 #[test]
-fn test_get_latest_item_ignores_pinned_order() {
+fn test_browse_order_is_recency_first_even_with_pinned_item() {
     let tmp = tempfile::tempdir().unwrap();
     let db_path = tmp.path().join("test.db").to_string_lossy().to_string();
     let img_dir = tmp.path().join("images").to_string_lossy().to_string();
@@ -1007,7 +1017,16 @@ fn test_get_latest_item_ignores_pinned_order() {
         .import_item("fresh new", &ClipType::Text, None, None, None, false, 2_000, None)
         .unwrap();
 
-    // 浏览路径是 pinned 优先，"最新"语义必须绕过它
-    assert_eq!(storage.get_items(1, 0, None).unwrap()[0].id, old.id);
+    // 首页浏览按时间倒序：收藏不能把旧条目顶到新内容前面。
+    assert_eq!(storage.get_items(1, 0, None).unwrap()[0].id, new.id);
     assert_eq!(storage.get_latest_item().unwrap().unwrap().id, new.id);
+    // 收藏视图仍只包含收藏项。
+    assert_eq!(
+        storage
+            .get_pinned_list_items(10, 0, None)
+            .unwrap()
+            .first()
+            .map(|item| item.id.clone()),
+        Some(old.id)
+    );
 }

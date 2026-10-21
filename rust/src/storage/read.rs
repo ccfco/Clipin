@@ -24,7 +24,7 @@ impl Storage {
             let filter_val = t.as_str().to_string();
             let sql = format!(
                 "SELECT {} FROM clip_items WHERE clip_type = ?1
-                 ORDER BY is_pinned DESC, created_at DESC, id DESC
+                 ORDER BY created_at DESC, id DESC
                  LIMIT ?2 OFFSET ?3",
                 Self::item_cols("")
             );
@@ -34,7 +34,7 @@ impl Storage {
         } else {
             let sql = format!(
                 "SELECT {} FROM clip_items
-                 ORDER BY is_pinned DESC, created_at DESC, id DESC
+                 ORDER BY created_at DESC, id DESC
                  LIMIT ?1 OFFSET ?2",
                 Self::item_cols("")
             );
@@ -119,6 +119,17 @@ impl Storage {
         self.get_list_items_with_pinned_filter(limit, offset, type_filter, Some(true))
     }
 
+    /// 用户可见语义是「收藏」：条目永久保留、优先展示。内部沿用 is_pinned 列名。
+    pub fn count_pinned(&self) -> Result<i32, ClipinError> {
+        let conn = self.conn();
+        let count: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM clip_items WHERE is_pinned = 1",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(count)
+    }
+
     pub fn get_unpinned_list_items(
         &self,
         limit: i32,
@@ -140,6 +151,8 @@ impl Storage {
         // 旧实现整段 and_then(...).unwrap_or_default()，主列表浏览/分页路径任何 SQL/decode
         // 失败都被伪装成"空列表"，分页 sentinel 也可能误判 hasMore——按 "不兜底" 改 Result，
         // Swift fetchBrowsePage 不再把 DB 故障当作"没有更多数据"。
+        // 浏览首页必须按时间倒序：收藏的承诺是永久保留 + 搜索优先，不是全库置顶；
+        // 否则几个月前的收藏会压过刚复制的内容。收藏视图/顶部分组由展示策略单独处理。
         match (type_filter, pinned_filter) {
             (Some(t), Some(pinned)) => {
                 let filter_val = t.as_str().to_string();
@@ -165,7 +178,7 @@ impl Storage {
                     "SELECT {cols}
                      FROM clip_items
                      WHERE clip_type = ?1
-                     ORDER BY is_pinned DESC, created_at DESC, id DESC
+                     ORDER BY created_at DESC, id DESC
                      LIMIT ?2 OFFSET ?3",
                     cols = Self::list_item_cols("")
                 );
@@ -193,7 +206,7 @@ impl Storage {
                 let sql = format!(
                     "SELECT {cols}
                      FROM clip_items
-                     ORDER BY is_pinned DESC, created_at DESC, id DESC
+                     ORDER BY created_at DESC, id DESC
                      LIMIT ?1 OFFSET ?2",
                     cols = Self::list_item_cols("")
                 );
@@ -304,9 +317,9 @@ impl Storage {
         Ok(rows)
     }
 
-    /// 最近一次复制/入库的条目（按 created_at，不受 pin 影响）。
-    /// 浏览排序是 is_pinned DESC，置顶旧条目会排在最新条目之前；
-    /// "取最新剪贴板内容"这类外部语义必须走这里。
+    /// 最近一次复制/入库的条目（按 created_at，不受浏览排序/过滤影响）。
+    /// "取最新剪贴板内容"这类外部语义必须走这里，不能依赖 getItems/getListItems
+    /// （它们未来可能带类型筛选或展示策略）。
     pub fn get_latest_item(&self) -> Result<Option<ClipItem>, ClipinError> {
         let conn = self.conn();
         let mut stmt = conn.prepare(&format!(

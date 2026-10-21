@@ -157,6 +157,11 @@ impl ClipinCore {
             .get_pinned_list_items(limit, offset, type_filter.as_ref())
     }
 
+    /// 收藏数量。用户可见语义是「收藏」，内部沿用 pinned 命名。
+    pub fn count_pinned(&self) -> Result<i32, ClipinError> {
+        self.storage.count_pinned()
+    }
+
     /// 获取只包含未 pinned 的轻量列表项，避免 pinned-only 展示策略下第一页被隐藏项吃满
     pub fn get_unpinned_list_items(
         &self,
@@ -525,6 +530,25 @@ mod tests {
 
         let unpinned = core.toggle_pin(item.id).unwrap();
         assert!(!unpinned);
+    }
+
+    #[test]
+    fn test_count_pinned_tracks_toggle() {
+        let core = setup_core();
+        assert_eq!(core.count_pinned().unwrap(), 0);
+
+        let first = core
+            .save_item("first favorite".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        let second = core
+            .save_item("second favorite".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.toggle_pin(first.id.clone()).unwrap();
+        core.toggle_pin(second.id).unwrap();
+        assert_eq!(core.count_pinned().unwrap(), 2);
+
+        core.toggle_pin(first.id).unwrap();
+        assert_eq!(core.count_pinned().unwrap(), 1);
     }
 
     #[test]

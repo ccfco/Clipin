@@ -81,6 +81,9 @@ impl Storage {
         if from_version < 13 {
             Self::migrate_to_v13(&self.conn())?;
         }
+        if from_version < 14 {
+            Self::migrate_to_v14(&self.conn())?;
+        }
         Ok(())
     }
 
@@ -493,6 +496,17 @@ impl Storage {
              SELECT rowid,content,source_name,ocr_text,alias,ai_tags,pinyin_flat,pinyin_initials FROM clip_items;
 
              PRAGMA user_version = 13;",
+        )?;
+        Ok(())
+    }
+
+    /// 浏览首页改为按 created_at 倒序后，类型筛选分页需要匹配的新索引。
+    /// 旧的 (clip_type, is_pinned, created_at) 索引在去掉 is_pinned 首列后无法继续服务排序。
+    fn migrate_to_v14(conn: &Connection) -> Result<(), ClipinError> {
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_type_created_at
+                ON clip_items(clip_type, created_at DESC);
+             PRAGMA user_version = 14;",
         )?;
         Ok(())
     }

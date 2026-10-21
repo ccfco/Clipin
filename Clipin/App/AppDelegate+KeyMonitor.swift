@@ -22,7 +22,7 @@ extension AppDelegate {
                 switch self.keyboardContext {
                 case .mainPanel, .actionsPalette:
                     // 仅「纯 ⌘」长按才浮出:叠加 Shift/Option/Control 说明在组装
-                    // ⌘⇧P 这类组合键(或刚用 ⌘⇧V 热键唤起面板还没松手),不是长按。
+                    // ⌘⇧F 这类组合键(或刚用 ⌘⇧V 热键唤起面板还没松手),不是长按。
                     let isPureCommand = flags.contains(.command)
                         && flags.isDisjoint(with: [.shift, .option, .control])
                     self.updateCommandHoldState(isHeld: isPureCommand)
@@ -541,8 +541,8 @@ extension AppDelegate {
         case KeyCode.escape:
             handleEscape(for: vm)
             return nil
-        case KeyCode.letterP where flags == [.command, .shift]:
-            vm.togglePinSelected()
+        case KeyCode.letterF where flags == [.command, .shift]:
+            vm.toggleFavoriteSelected()
             return nil
         case KeyCode.delete where flags == .command:
             // 文本预览区编辑时（NSTextView 为 firstResponder），⌘⌫ 是系统"删到行首"，
@@ -568,7 +568,7 @@ extension AppDelegate {
             vm.copySelected()
             return nil
         case KeyCode.letterE where flags == [.command, .shift]:
-            // ⇧⌘E / ⌘E 在主面板直达：选中项可见时无需先开 ⌘K。
+            // ⌘⇧E / ⌘E 在主面板直达：选中项可见时无需先开 ⌘K。
             // 必须 return nil 消费事件——否则事件回落到响应链无人处理，系统会「咚」一声。
             vm.beginRenamingSelected()
             return nil
@@ -601,6 +601,11 @@ extension AppDelegate {
                 vm.showNotice(NSLocalizedString("This item has no RTF formatting.", comment: ""), style: .info)
             }
             return nil
+        // ⌥F = 收藏独立视图（不参与 Tab 循环与数字档）。
+        // 搜索态下 selectBrowseMode 会先退出搜索，避免收藏视图被降级成 All 看起来没反应。
+        case KeyCode.letterF where flags == .option:
+            vm.selectBrowseMode(.pinned)
+            return nil
         default:
             if flags == .command,
                let char = event.charactersIgnoringModifiers,
@@ -610,7 +615,7 @@ extension AppDelegate {
                 return nil
             }
             if flags == .option, let mode = Self.optionDigitBrowseMode[event.keyCode] {
-                vm.browseMode = mode
+                vm.selectBrowseMode(mode)
                 return nil
             }
             // 真·可打印字符（无修饰键或仅 Shift）落入搜索框 → 进入打字模式。

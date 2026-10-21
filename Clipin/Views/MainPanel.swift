@@ -163,6 +163,9 @@ struct MainPanel: View {
             query: $viewModel.searchQuery,
             browseMode: $viewModel.browseMode,
             sceneState: sceneState,
+            filterOrder: viewModel.filterCycleOrder,
+            allModeTitle: viewModel.allModeTitle,
+            favoriteCount: viewModel.favoriteCount,
             onNavigate: { delta in
                 if delta > 0 { viewModel.selectNext() }
                 else { viewModel.selectPrev() }
@@ -175,6 +178,9 @@ struct MainPanel: View {
             },
             onCycleBrowseMode: { reverse in
                 viewModel.cycleBrowseMode(reverse: reverse)
+            },
+            onSelectBrowseMode: { mode in
+                viewModel.selectBrowseMode(mode)
             }
         )
         // headerBar 是搜索区边距的唯一 owner（SearchBar 自身不再带 padding）。
@@ -238,7 +244,7 @@ struct MainPanel: View {
                 viewModel.selectItem(id: item.id)
                 viewModel.pasteSelected()
             },
-            onPin: { viewModel.togglePin(id: $0.id) },
+            onToggleFavorite: { viewModel.toggleFavorite(id: $0.id) },
             onDelete: { viewModel.deleteItem(id: $0.id) },
             onClearFilters: { _ = viewModel.clearActiveQueryAndFilters() },
             onLoadMore: { viewModel.loadMoreItems() }
@@ -364,6 +370,21 @@ struct MainPanel: View {
                 help: "Space to preview · arrow keys flip through items in the preview"
             ) {
                 _ = viewModel.previewSelected()
+            })
+        }
+        // 收藏是当前选中项的辅助命令，放在派生动作里最容易被鼠标用户发现；
+        // 快捷键只是加速器，不是唯一入口（预览底栏星标 / 菜单 / 右键另有入口）。
+        // 用列表投影的 selectedListItem 而不是 currentSelectedItem()：后者在
+        // selectedItem 尚未落定时会同步读 DB，而这里是视图 body 求值路径。
+        if let selected = viewModel.selectedListItem {
+            pills.append(FooterDerivedPill(
+                label: selected.isPinned ? "Unfavorite" : "Favorite",
+                shortcut: "⌘⇧F",
+                help: selected.isPinned
+                    ? "Remove from Favorites"
+                    : "Favorite — kept forever"
+            ) {
+                viewModel.toggleFavoriteSelected()
             })
         }
         return pills
@@ -526,7 +547,7 @@ private struct ItemListView: View {
     let sceneState: ClipinSceneState
     let selection: Binding<String?>
     let onActivate: (ClipListItem) -> Void
-    let onPin: (ClipListItem) -> Void
+    let onToggleFavorite: (ClipListItem) -> Void
     let onDelete: (ClipListItem) -> Void
     let onClearFilters: () -> Void
     let onLoadMore: () -> Void
@@ -545,25 +566,35 @@ private struct ItemListView: View {
     }
 
     private var listContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(sections) { section in
-                    sectionHeader(section.title)
-                    ForEach(section.items, id: \.id) { item in
-                        row(for: item, in: section)
+        // 收藏计数固定在列表顶部（不随滚动卷走）：它是视图身份，不是某一组内容的标题。
+        // 放在 ScrollView 外也能避开 LazyVStack + scrollPosition 把首个子视图卷出视口的问题。
+        VStack(spacing: 0) {
+            if vm.browseMode == .pinned, vm.searchQuery.isEmpty {
+                sectionHeader(String(
+                    format: NSLocalizedString("Favorites · %d", comment: ""),
+                    vm.favoriteCount
+                ))
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(sections) { section in
+                        sectionHeader(section.title)
+                        ForEach(section.items, id: \.id) { item in
+                            row(for: item, in: section)
+                        }
+                    }
+                    // 滚到底时触发加载下一页；hasMore=false 时不渲染，避免重复触发
+                    if hasMore {
+                        Color.clear.frame(height: 1)
+                            .onAppear { onLoadMore() }
                     }
                 }
-                // 滚到底时触发加载下一页；hasMore=false 时不渲染，避免重复触发
-                if hasMore {
-                    Color.clear.frame(height: 1)
-                        .onAppear { onLoadMore() }
-                }
+                .scrollTargetLayout()
+                // 仅留底部 inset(末行不贴滚动边)。顶部留白交给首个 section header 的
+                // groupGap 单独表达,避免「列表内距 + header 顶距」再次双层叠加。
+                .padding(.bottom, ClipinChrome.gap)
             }
-            .scrollTargetLayout()
-            // 仅留底部 inset(末行不贴滚动边)。顶部留白交给首个 section header 的
-            // groupGap 单独表达,避免「列表内距 + header 顶距」再次双层叠加。
-            .padding(.bottom, ClipinChrome.gap)
-        }
         // launcher 心智:列表是无 chrome 的纯内容流,与动作面板/引导页/预览滚动区
         // 一致隐藏滚动指示器(否则「始终显示滚动条」系统设置或鼠标用户下会常驻出现)。
         .scrollIndicators(.never)
@@ -575,6 +606,7 @@ private struct ItemListView: View {
         .onChange(of: selection.wrappedValue, initial: true) { _, newID in
             hoveredID = nil
             scrollPosition = newID
+        }
         }
     }
 
@@ -614,7 +646,8 @@ private struct ItemListView: View {
             sceneState: sceneState,
             isRenaming: vm.renamingItemID == item.id,
             renameDraft: vm.renameDraft,
-            onCommitRename: { vm.commitRenaming() }
+            onCommitRename: { vm.commitRenaming() },
+            onToggleFavorite: { onToggleFavorite(item) }
         )
         // .equatable():行不再观察整个 vm 后,本视图每次按键仍会被 ItemListView 重跑而重建每行 struct;
         // EquatableView 用 == 拦下未变行的整 body(JSONDecode/AttributedString 全跳过),
@@ -630,8 +663,7 @@ private struct ItemListView: View {
                 selectionFill: ClipinSelectionInk.fill,
                 selectionStroke: ClipinSelectionInk.stroke,
                 hoverFill: ClipinHoverInk.fill,
-                hoverStroke: ClipinHoverInk.stroke,
-                isPinned: item.isPinned
+                hoverStroke: ClipinHoverInk.stroke
             )
         )
         .scaleEffect(isSelected ? sceneState.selectedRowScale : 1.0)
@@ -657,29 +689,38 @@ private struct ItemListView: View {
         .onHover { hovered in hoveredID = hovered ? item.id : nil }
         .contextMenu {
             Button("Paste") { onActivate(item) }
-            Button(item.isPinned ? LocalizedStringKey("Unpin") : LocalizedStringKey("Pin")) { onPin(item) }
+            Button(item.isPinned ? LocalizedStringKey("Remove from Favorites") : LocalizedStringKey("Favorite")) {
+                onToggleFavorite(item)
+            }
             Divider()
             Button("Delete", role: .destructive) { onDelete(item) }
         }
     }
 
     private var emptyState: some View {
-        VStack(spacing: ClipinChrome.gap) {
-            Image(systemName: hasActiveFilter ? "magnifyingglass" : "clipboard")
+        let isFavoritesEmpty = vm.browseMode == .pinned && vm.searchQuery.isEmpty
+        return VStack(spacing: ClipinChrome.gap) {
+            Image(systemName: isFavoritesEmpty
+                  ? "star"
+                  : (hasActiveFilter ? "magnifyingglass" : "clipboard"))
                 .font(.system(size: 24))
-                .foregroundStyle(ClipinInk.tertiary)
+                .foregroundStyle(isFavoritesEmpty ? Color.accentColor.opacity(0.75) : ClipinInk.tertiary)
 
-            Text(hasActiveFilter ? LocalizedStringKey("No results") : LocalizedStringKey("No history yet"))
+            Text(isFavoritesEmpty
+                 ? LocalizedStringKey("No favorites yet")
+                 : (hasActiveFilter ? LocalizedStringKey("No results") : LocalizedStringKey("No history yet")))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(ClipinInk.secondary)
 
-            Text(hasActiveFilter
-                 ? LocalizedStringKey("Try a different search term, or press Command-K for actions.")
-                 : LocalizedStringKey("Copy something and it will appear here. Command-K still opens actions."))
+            Text(isFavoritesEmpty
+                 ? LocalizedStringKey("Select a clip, then click the star at the bottom of the preview or press ⌘⇧F. Favorites are kept forever and rank first in search.")
+                 : (hasActiveFilter
+                    ? LocalizedStringKey("Try a different search term, or press Command-K for actions.")
+                    : LocalizedStringKey("Copy something and it will appear here. Command-K still opens actions.")))
                 .font(.system(size: 11))
                 .foregroundStyle(ClipinInk.tertiary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 200)
+                .frame(maxWidth: 230)
 
             HStack(spacing: ClipinChrome.gap) {
                 badgeCapsule("⌘K")
@@ -689,7 +730,15 @@ private struct ItemListView: View {
             }
             .padding(.top, ClipinChrome.gap)
 
-            if hasActiveFilter {
+            if isFavoritesEmpty {
+                Button("Browse All") {
+                    vm.selectBrowseMode(.all)
+                }
+                .font(.system(size: 11.5, weight: .medium))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .padding(.top, ClipinChrome.gap)
+            } else if hasActiveFilter {
                 Button("Clear Search & Filters") {
                     onClearFilters()
                 }
