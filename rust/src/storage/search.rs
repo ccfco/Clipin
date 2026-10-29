@@ -15,6 +15,10 @@ struct SearchQuery {
 pub(super) struct SearchHit<T: SearchSortable> {
     pub(super) item: T,
     pub(super) raw_rank: Option<f64>,
+    /// 该命中只来自派生语义标签（ai_tags），字面列（content/source_name/ocr_text/alias）
+    /// 一个都没命中。LIKE 回退路径没有 bm25，这是它唯一可用的粗粒度相关度分档：
+    /// 标签是模型派生数据，只做补充召回，不得把字面精确匹配挤到后面。
+    pub(super) tag_only: bool,
 }
 
 pub(super) trait SearchSortable: Clone {
@@ -56,6 +60,22 @@ impl Storage {
             .map(|column| format!("{column} LIKE ?1 ESCAPE '\\'"))
             .collect::<Vec<_>>()
             .join(" OR ")
+    }
+
+    /// 字面命中列 = 可搜索文本列去掉派生标签列。
+    fn literal_where_clause() -> String {
+        Self::SEARCHABLE_TEXT_COLS
+            .iter()
+            .filter(|column| **column != "ai_tags")
+            .map(|column| format!("{column} LIKE ?1 ESCAPE '\\'"))
+            .collect::<Vec<_>>()
+            .join(" OR ")
+    }
+
+    /// LIKE 路径的标签分档排序键：0 = 字面命中，1 = 仅标签命中。
+    /// SQL 排序与解码后的 tag_only 字段必须同源，否则两处对「标签命中」的定义会漂移。
+    fn tag_only_sort_key() -> String {
+        format!("(CASE WHEN ({}) THEN 0 ELSE 1 END)", Self::literal_where_clause())
     }
 
     fn build_fts5_query_for_columns(query: &str, columns: &[&str]) -> String {
@@ -108,6 +128,10 @@ impl Storage {
                     .item_paste_count()
                     .cmp(&lhs.item.item_paste_count())
             })
+            // 字面命中压过仅标签命中：粗粒度相关度，粒度比 bm25 rank 粗，故排在 rank 之前。
+            // 仍服从 CLAUDE.md「is_pinned > paste_count > 相关度」的硬约束——高频条目优先，
+            // 标签分档只在 paste_count 打平时决定先后。
+            .then_with(|| lhs.tag_only.cmp(&rhs.tag_only))
             .then_with(|| match (&lhs.raw_rank, &rhs.raw_rank) {
                 (Some(left), Some(right)) => {
                     left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal)
@@ -132,6 +156,10 @@ impl Storage {
             if let Some(index) = index_by_id.get(&id).copied() {
                 if merged[index].raw_rank.is_none() && hit.raw_rank.is_some() {
                     merged[index].raw_rank = hit.raw_rank;
+                }
+                // 任一路是字面命中 → 整体算字面命中（拼音路恒为字面级）。
+                if merged[index].tag_only && !hit.tag_only {
+                    merged[index].tag_only = false;
                 }
                 continue;
             }
@@ -185,21 +213,23 @@ impl Storage {
         } else {
             let cols = Self::item_cols("");
             let like_where = Self::like_where_clause();
+            // 标签分档列与 ORDER BY 同源：字面命中 0 排前，仅标签命中 1 排后。
+            let tag_tier = Self::tag_only_sort_key();
             let sql = if type_filter.is_some() {
                 format!(
-                    "SELECT {cols}
+                    "SELECT {cols}, {tag_tier}
                      FROM clip_items
                      WHERE ({like_where})
                        AND clip_type = ?2
-                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
+                     ORDER BY is_pinned DESC, paste_count DESC, {tag_tier} ASC, copy_count DESC, created_at DESC
                      LIMIT 200"
                 )
             } else {
                 format!(
-                    "SELECT {cols}
+                    "SELECT {cols}, {tag_tier}
                      FROM clip_items
                      WHERE {like_where}
-                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
+                     ORDER BY is_pinned DESC, paste_count DESC, {tag_tier} ASC, copy_count DESC, created_at DESC
                      LIMIT 200"
                 )
             };
@@ -208,14 +238,14 @@ impl Storage {
                 let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![&search.raw_like, t.as_str()],
-                    Self::row_to_item_search_hit_without_rank,
+                    Self::row_to_item_search_hit_with_tag_tier,
                 )?
                 .collect()
             } else {
                 let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![&search.raw_like],
-                    Self::row_to_item_search_hit_without_rank,
+                    Self::row_to_item_search_hit_with_tag_tier,
                 )?
                 .collect()
             }
@@ -348,21 +378,22 @@ impl Storage {
         } else {
             let cols = Self::list_item_cols("");
             let like_where = Self::like_where_clause();
+            let tag_tier = Self::tag_only_sort_key();
             let sql = if type_filter.is_some() {
                 format!(
-                    "SELECT {cols}
+                    "SELECT {cols}, {tag_tier}
                      FROM clip_items
                      WHERE ({like_where})
                        AND clip_type = ?2
-                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
+                     ORDER BY is_pinned DESC, paste_count DESC, {tag_tier} ASC, copy_count DESC, created_at DESC
                      LIMIT 200"
                 )
             } else {
                 format!(
-                    "SELECT {cols}
+                    "SELECT {cols}, {tag_tier}
                      FROM clip_items
                      WHERE {like_where}
-                     ORDER BY is_pinned DESC, paste_count DESC, copy_count DESC, created_at DESC
+                     ORDER BY is_pinned DESC, paste_count DESC, {tag_tier} ASC, copy_count DESC, created_at DESC
                      LIMIT 200"
                 )
             };
@@ -371,14 +402,14 @@ impl Storage {
                 let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![&search.raw_like, t.as_str()],
-                    Self::row_to_list_search_hit_without_rank,
+                    Self::row_to_list_search_hit_with_tag_tier,
                 )?
                 .collect()
             } else {
                 let mut stmt = conn.prepare(&sql)?;
                 stmt.query_map(
                     params![&search.raw_like],
-                    Self::row_to_list_search_hit_without_rank,
+                    Self::row_to_list_search_hit_with_tag_tier,
                 )?
                 .collect()
             }

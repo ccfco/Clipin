@@ -824,6 +824,80 @@ mod tests {
     }
 
     #[test]
+    fn test_like_path_literal_hit_outranks_tag_only_hit() {
+        // ≤2 字查询走 LIKE 回退，该路径没有 bm25 rank，「字面命中 vs 仅标签命中」
+        // 是它唯一可用的相关度信号。paste_count 相同时字面命中必须在前面，
+        // 否则语义标签的泛词（“项目”“文档”）会把字面精确匹配挤下去。
+        // 这里刻意让仅标签命中的条目 created_at 更新：没有字面分档时它会靠更新时间胜出。
+        let core = setup_core();
+
+        // ① 字面命中（更旧）
+        core.save_item("标签 字面命中".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        // ② 仅靠语义标签命中（更新）：正文完全不含查询词
+        let tag_only = core
+            .save_item("完全无关的正文".into(), ClipType::Text, None, None, None)
+            .unwrap();
+        core.update_ai_tags(tag_only.id.clone(), "标签".into())
+            .unwrap();
+
+        let results = core.search("标签".into(), None).unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(
+            results[0].content, "标签 字面命中",
+            "字面命中必须压过仅标签命中（LIKE 路径）"
+        );
+
+        let list = core.search_list_items("标签".into(), None).unwrap();
+        assert_eq!(
+            list[0].preview, "标签 字面命中",
+            "字面命中必须压过仅标签命中（LIKE 路径 / list 投影）"
+        );
+    }
+
+    #[test]
+    fn test_fts_path_keeps_literal_hit_ahead_of_tag_only_hit() {
+        // ≥3 字走 FTS。这里钉住一条用户可见契约：即便仅标签命中的条目 copy_count 更高、
+        // 标签列被塞满，字面命中的条目仍必须排第一。
+        // （实测过给 ai_tags 加 bm25 列权重：在真实库上会把 OCR 命中重新洗到前面，
+        // 收益不确定，故列权重保持等权，该契约由 bm25 默认行为 + 排序链保证。）
+        let core = setup_core();
+
+        // ① 字面命中：短文档、查询词占满全文
+        core.save_item("语义标签检索".into(), ClipType::Text, None, None, None)
+            .unwrap();
+
+        // ② 仅标签命中：正文无关，标签列被塞满以稀释密度，并靠 copy_count 加压
+        for _ in 0..5 {
+            let item = core
+                .save_item(
+                    "另一条完全无关的正文".into(),
+                    ClipType::Text,
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap();
+            core.update_ai_tags(
+                item.id.clone(),
+                "语义标签检索, 无关甲, 无关乙, 无关丙, 无关丁".into(),
+            )
+            .unwrap();
+        }
+
+        let results = core.search("语义标签检索".into(), None).unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(
+            results[0].content, "语义标签检索",
+            "FTS 路径：字面命中必须压过仅标签命中"
+        );
+
+        let list = core.search_list_items("语义标签检索".into(), None).unwrap();
+        assert_eq!(list[0].preview, "语义标签检索");
+    }
+
+    #[test]
     fn test_search_dedups_item_matching_both_raw_and_pinyin_fts() {
         // merge_search_hits 对同时命中 raw FTS（内容/别名/OCR）与 pinyin FTS（拼音）两路的
         // 同一条目，必须按 id 去重为一条。该 index_by_id 去重分支此前零覆盖，回归会让搜索结果

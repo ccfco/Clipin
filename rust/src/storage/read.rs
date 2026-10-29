@@ -391,6 +391,9 @@ impl Storage {
             item: Self::row_to_item(row)?,
             // item 投影占 0..=15，FTS rank 永远追加在数据列之后。
             raw_rank: row.get(16)?,
+            // FTS 路径不区分字面/标签命中：ai_tags 已作为 FTS 列参与 bm25，
+            // 相关度由 rank 表达，不再叠一层分档。
+            tag_only: false,
         })
     }
 
@@ -400,6 +403,19 @@ impl Storage {
         Ok(SearchHit {
             item: Self::row_to_item(row)?,
             raw_rank: None,
+            // 拼音 LIKE 路：命中的是 pinyin_flat/pinyin_initials，属字面级召回。
+            tag_only: false,
+        })
+    }
+
+    /// LIKE 回退路（原始查询）专用：item 投影 0..=15 后追加一列标签分档（0=字面命中，1=仅标签命中）。
+    pub(super) fn row_to_item_search_hit_with_tag_tier(
+        row: &rusqlite::Row,
+    ) -> rusqlite::Result<SearchHit<ClipItem>> {
+        Ok(SearchHit {
+            item: Self::row_to_item(row)?,
+            raw_rank: None,
+            tag_only: row.get::<_, i64>(16)? != 0,
         })
     }
 
@@ -434,6 +450,7 @@ impl Storage {
             item: Self::row_to_list_item(row)?,
             // image_width/image_height 占 11、12，alias 占 13，attachment_paths 占 14，FTS rank 后移到 15
             raw_rank: row.get(15)?,
+            tag_only: false,
         })
     }
 
@@ -443,6 +460,18 @@ impl Storage {
         Ok(SearchHit {
             item: Self::row_to_list_item(row)?,
             raw_rank: None,
+            tag_only: false,
+        })
+    }
+
+    /// LIKE 回退路（原始查询）专用：list 投影 0..=14 后追加一列标签分档（0=字面命中，1=仅标签命中）。
+    pub(super) fn row_to_list_search_hit_with_tag_tier(
+        row: &rusqlite::Row,
+    ) -> rusqlite::Result<SearchHit<ClipListItem>> {
+        Ok(SearchHit {
+            item: Self::row_to_list_item(row)?,
+            raw_rank: None,
+            tag_only: row.get::<_, i64>(15)? != 0,
         })
     }
 
