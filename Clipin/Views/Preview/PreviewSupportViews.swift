@@ -64,6 +64,17 @@ struct PreviewValueBadge: View {
 struct PreviewFooterRail: View {
     let entries: [PreviewPane.PreviewRailEntry]
 
+    /// 溢出视口时的右缘渐隐宽度。约半颗徽章：足以读作「后面还有」，又不吃掉最后
+    /// 一颗的可读文字。渲染微调档位，与间距/圆角网格不同源。
+    private static let trailingFadeWidth: CGFloat = 28  // spacing-exempt: 渐隐遮罩宽度，纯渲染微调
+
+    /// 与 PreviewBottomFadeMask 同一判定思路：内容宽度真超过视口才渐隐，
+    /// 刚好放下时遮罩是恒等遮罩，不会无谓淡掉最后一颗徽章。
+    @State private var contentWidth: CGFloat = 0
+    @State private var viewportWidth: CGFloat = 0
+
+    private var isOverflowing: Bool { contentWidth > viewportWidth + 1 }
+
     var body: some View {
         // 外层 previewFooter 已 .padding(.top, ClipinChrome.gap)，rail 内部不再重复加 top；
         // .horizontal/.bottom 1pt 是历史防 clip 残留（glass capsule 现已自带 padding），删除。
@@ -73,6 +84,39 @@ struct PreviewFooterRail: View {
                     PreviewValueBadge(item: entry.item)
                 }
             }
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { viewportWidth = $0 }
+        .mask(PreviewTrailingFadeMask(isOverflowing: isOverflowing, fadeWidth: Self.trailingFadeWidth))
+    }
+}
+
+/// 右缘渐隐遮罩。横向滚动的徽章 rail 专用：溢出被视口硬裁时，那道切口读作
+/// 「渲染坏了」（见截图中被切掉半个字的末位徽章）；渐隐才读作「还有内容、可以横向滚」。
+/// 与纵向 PreviewBottomFadeMask 同一套心智，区别只在一维方向。
+struct PreviewTrailingFadeMask: View {
+    let isOverflowing: Bool
+    let fadeWidth: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = max(geo.size.width, 1)
+            let lead = max(0, (width - fadeWidth) / width)
+            LinearGradient(
+                // 非溢出走两段全黑 = 恒等遮罩；溢出才在末段渐隐。
+                stops: isOverflowing
+                    ? [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: lead),
+                        .init(color: .clear, location: 1),
+                    ]
+                    : [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: 1),
+                    ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
         }
     }
 }
