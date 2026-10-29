@@ -476,6 +476,7 @@
 "Apple Intelligence is not available" = "Apple Intelligence is not available";
 "Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags." = "Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags.";
 "preview.metadata.semanticTag" = "Semantic tag";
+"preview.metadata.semanticTag.search" = "Search for “%@”";
 
 /* Translation panel */
 "Translate" = "Translate";

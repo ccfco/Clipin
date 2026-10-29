@@ -476,6 +476,7 @@
 "Apple Intelligence is not available" = "Apple Intelligence 当前不可用";
 "Turn on Apple Intelligence in System Settings to let Clipin generate on-device semantic tags." = "请在系统设置中开启 Apple Intelligence，Clipin 才能在本机生成语义标签。";
 "preview.metadata.semanticTag" = "语义标签";
+"preview.metadata.semanticTag.search" = "按「%@」搜索";
 
 /* Translation panel */
 "Translate" = "翻译";

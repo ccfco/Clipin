@@ -1001,6 +1001,14 @@ final class ClipboardViewModel: ObservableObject {
         browseMode = mode
     }
 
+    /// 点预览里的语义标签徽章 = 以该标签重新搜索。标签只展示 3 个、完整集合只在 FTS 里，
+    /// 用户看不到也就想不到——这个入口把「隐形召回」变成可发现的动作。
+    /// 走和键入搜索同一条去抖链路，只把焦点交回搜索框，让用户还能继续增删关键词。
+    func searchByTag(_ tag: String) {
+        searchQuery = tag
+        NotificationCenter.default.post(name: .clipinRestoreSearchFocus, object: nil)
+    }
+
     @discardableResult
     func clearActiveQueryAndFilters() -> Bool {
         guard hasActiveFilter else { return false }

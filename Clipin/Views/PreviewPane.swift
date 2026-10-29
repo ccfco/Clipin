@@ -445,6 +445,8 @@ struct PreviewPane: View, Equatable {
 
     /// 语义标签最多展示 3 个：rail 是单行辅助信息，再多会挤掉时间/用量等元数据。
     /// 标签本身已进 FTS，完整集合仍可通过搜索命中，UI 无需穷举。
+    /// 徽章可点：点一下 = 以该标签重新搜索。标签是「搜索能召回、UI 不穷举」的隐形维度，
+    /// 不给入口就只能靠用户盲猜关键词。
     private func aiTagBadges(for item: ClipItem) -> [PreviewBadgeItem] {
         guard let raw = item.aiTags, !raw.isEmpty else { return [] }
         let tags = raw
@@ -452,13 +454,18 @@ struct PreviewPane: View, Equatable {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .prefix(3)
-        return tags.enumerated().map { index, tag in
+        return tags.map { tag in
             PreviewBadgeItem(
-                id: "ai-tag-\(index)",
+                id: "ai-tag-\(tag)",
                 title: tag,
                 systemImage: "sparkles",
-                helpText: NSLocalizedString("preview.metadata.semanticTag", comment: "")
-            )
+                helpText: String(
+                    format: NSLocalizedString("preview.metadata.semanticTag.search", comment: ""),
+                    tag
+                )
+            ) {
+                vm.searchByTag(tag)
+            }
         }
     }
 
