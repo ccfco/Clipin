@@ -500,3 +500,9 @@
 "Return the most recent clipboard item as plain text. Images return their OCR text, or their file path when no text was recognized." = "Return the most recent clipboard item as plain text. Images return their OCR text, or their file path when no text was recognized.";
 "Clipin history is empty." = "Clipin history is empty.";
 "Latest Item" = "Latest Item";
+
+/* Local folder / path recognition & Finder open */
+"Open in Finder" = "Open in Finder";
+"Opened in Finder." = "Opened in Finder.";
+"Reveal" = "Reveal";
+"Folder" = "Folder";

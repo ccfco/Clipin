@@ -543,7 +543,11 @@ final class ClipboardViewModel: ObservableObject {
             // 旧实现用 try? 把 getItem 失败伪装成 selectedItem = nil，预览区悄无声息——
             // 用户连按 Return/⌘O 重复 toast，根本不知道是 DB 故障。失败时显式 notice。
             let result: Result<ClipItem, Error> = await Task.detached(priority: .userInitiated) {
-                do { return .success(try core.getItem(id: capturedId)) }
+                do {
+                    let item = try core.getItem(id: capturedId)
+                    await Self.prewarmLocalPathIfNeeded(for: item)
+                    return .success(item)
+                }
                 catch { return .failure(error) }
             }.value
             guard !Task.isCancelled, self.selectedItemID == capturedId else { return }
@@ -871,7 +875,12 @@ final class ClipboardViewModel: ObservableObject {
     }
 
     func openSelected() {
-        guard let id = selectedItemID, let item = loadItem(id: id) else { return }
+        guard let id = selectedItemID else { return }
+        openItem(id: id)
+    }
+
+    func openItem(id: String) {
+        guard let item = loadItem(id: id) else { return }
         switch item.clipType {
         case .url:
             if let url = URL(string: item.content), NSWorkspace.shared.open(url) {
@@ -888,14 +897,40 @@ final class ClipboardViewModel: ObservableObject {
                 showNotice(NSLocalizedString("No copied files could be found.", comment: ""), style: .error)
                 return
             }
+            if urls.count == 1, LocalPathDetector.isTrueDirectory(urls[0]) {
+                openLocalURL(urls[0], isDirectory: true)
+                return
+            }
             NSWorkspace.shared.activateFileViewerSelecting(urls)
             if urls.count < paths.count {
                 showNotice(NSLocalizedString("Some files could not be found.", comment: ""), style: .warning)
             } else {
                 showNotice(NSLocalizedString("Revealed in Finder.", comment: ""), style: .success)
             }
-        default:
+        case .text:
+            if let resolved = LocalPathDetector.resolveSinglePath(from: item.content) {
+                openLocalURL(resolved.url, isDirectory: resolved.isDirectory)
+            }
+        case .image:
             break
+        }
+    }
+
+    func openLocalURL(_ url: URL, isDirectory: Bool? = nil) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            showNotice(NSLocalizedString("No copied files could be found.", comment: ""), style: .error)
+            return
+        }
+        let openAsDirectory = isDirectory ?? LocalPathDetector.isTrueDirectory(url)
+        if openAsDirectory {
+            if NSWorkspace.shared.open(url) {
+                showNotice(NSLocalizedString("Opened in Finder.", comment: ""), style: .success)
+            } else {
+                showNotice(NSLocalizedString("No copied files could be found.", comment: ""), style: .error)
+            }
+        } else {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+            showNotice(NSLocalizedString("Revealed in Finder.", comment: ""), style: .success)
         }
     }
 
@@ -1168,7 +1203,14 @@ final class ClipboardViewModel: ObservableObject {
 
     var canOpenSelectedItem: Bool {
         guard let item = selectedListItem else { return false }
-        return item.clipType == .url || item.clipType == .file
+        switch item.clipType {
+        case .url, .file:
+            return true
+        case .text:
+            return resolvedLocalPathForSelected() != nil
+        case .image:
+            return false
+        }
     }
 
     var canPreviewSelectedItem: Bool {
@@ -1181,8 +1223,17 @@ final class ClipboardViewModel: ObservableObject {
         case .url:
             return NSLocalizedString("Open URL", comment: "")
         case .file:
-            return NSLocalizedString("Reveal in Finder", comment: "")
-        default:
+            return resolvedLocalPathForSelected()?.isDirectory == true
+                ? NSLocalizedString("Open in Finder", comment: "")
+                : NSLocalizedString("Reveal in Finder", comment: "")
+        case .text:
+            if let resolved = resolvedLocalPathForSelected() {
+                return resolved.isDirectory
+                    ? NSLocalizedString("Open in Finder", comment: "")
+                    : NSLocalizedString("Reveal in Finder", comment: "")
+            }
+            return NSLocalizedString("Open", comment: "")
+        case .image:
             return NSLocalizedString("Open", comment: "")
         }
     }
@@ -1194,12 +1245,47 @@ final class ClipboardViewModel: ObservableObject {
             return "safari"
         case .file:
             return "folder"
-        default:
+        case .text:
+            if let resolved = resolvedLocalPathForSelected() {
+                return resolved.isDirectory ? "folder" : "doc"
+            }
+            return "arrow.up.right.square"
+        case .image:
             return "arrow.up.right.square"
         }
     }
 
     // MARK: - Private
+
+    nonisolated private static func prewarmLocalPathIfNeeded(for item: ClipItem) async {
+        switch item.clipType {
+        case .file:
+            let paths = FileClipboardContent.paths(from: item.content)
+            if paths.count == 1, let first = paths.first {
+                _ = await PreviewMetadataCache.shared.loadLocalPath(for: first)
+            }
+        case .text:
+            if LocalPathDetector.looksLikeSingleLocalPath(item.content) {
+                _ = await PreviewMetadataCache.shared.loadLocalPath(for: item.content)
+            }
+        case .url, .image:
+            break
+        }
+    }
+
+    private func resolvedLocalPathForSelected() -> LocalPathResolution? {
+        guard let item = currentSelectedItem() else { return nil }
+        switch item.clipType {
+        case .file:
+            let paths = FileClipboardContent.paths(from: item.content)
+            guard paths.count == 1, let first = paths.first else { return nil }
+            return PreviewMetadataCache.shared.cachedLocalPath(for: first)
+        case .text:
+            return PreviewMetadataCache.shared.cachedLocalPath(for: item.content)
+        case .url, .image:
+            return nil
+        }
+    }
 
     /// 把"取条目 + 可选 touch + 失败时给出用户可见反馈"收口到一处。
     /// 旧实现散落 6 处 `try? core.getItem` 把 SQLite 错误静默吞掉——用户按 Return / ⌘O

@@ -500,3 +500,9 @@
 "Return the most recent clipboard item as plain text. Images return their OCR text, or their file path when no text was recognized." = "以纯文本返回最近一条剪贴板内容。图片返回识别出的文字；没有文字时返回文件路径。";
 "Clipin history is empty." = "Clipin 历史为空。";
 "Latest Item" = "最新内容";
+
+/* Local folder / path recognition & Finder open */
+"Open in Finder" = "在 Finder 中打开";
+"Opened in Finder." = "已在 Finder 中打开。";
+"Reveal" = "显示";
+"Folder" = "文件夹";

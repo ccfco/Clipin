@@ -18,6 +18,8 @@ struct FilePreviewBody: View {
     /// @State 桥接：.task 异步预热 cache，完成后 fileIcons 更新触发重渲染，
     /// 渲染时直接走 PreviewMetadataCache 的 cached* 路径，永远不在主线程同步读 IconServices。
     @State private var fileIcons: [String: NSImage] = [:]
+    /// 本地路径存在性 + 目录判定的异步缓存快照（同样由 .task 预热，避免 body 同步 stat）。
+    @State private var pathResolutions: [String: LocalPathResolution] = [:]
 
     /// 多文件叠放栈的 matchedGeometryEffect namespace:让同一张卡(按 paths 索引为 id)在
     /// 切换 currentIndex 后从旧位置(front / back-left / back-right) 平滑插值到新位置。
@@ -77,22 +79,30 @@ struct FilePreviewBody: View {
             }
         }
         .task(id: item.id) {
-            // 预热前 maxRows 个 file icon；后续超出的折叠在 "+N more"，不需要异步拉
+            // 预热前 maxRows 个 file icon 与路径存在性/目录属性；后续超出的折叠在 "+N more"
             await withTaskGroup(of: Void.self) { group in
                 for path in paths.prefix(maxRows) {
                     group.addTask {
                         _ = await PreviewMetadataCache.shared.loadFileIcon(at: path)
                     }
+                    group.addTask {
+                        _ = await PreviewMetadataCache.shared.loadLocalPath(for: path)
+                    }
                 }
             }
-            // 更新本地 @State 触发重渲染，body 重建时 cachedFileIcon 同步命中
-            var snapshot: [String: NSImage] = [:]
+            // 更新本地 @State 触发重渲染，body 重建时 cached* 同步命中
+            var iconSnapshot: [String: NSImage] = [:]
+            var pathSnapshot: [String: LocalPathResolution] = [:]
             for path in paths.prefix(maxRows) {
                 if let icon = PreviewMetadataCache.shared.cachedFileIcon(at: path) {
-                    snapshot[path] = icon
+                    iconSnapshot[path] = icon
+                }
+                if let resolved = PreviewMetadataCache.shared.cachedLocalPath(for: path) {
+                    pathSnapshot[path] = resolved
                 }
             }
-            fileIcons = snapshot
+            fileIcons = iconSnapshot
+            pathResolutions = pathSnapshot
         }
     }
 
@@ -256,15 +266,19 @@ struct FilePreviewBody: View {
     /// 单文件时即主文件本身。
     @ViewBuilder
     private func fileTextHeader(currentPath: String, currentURL: URL, paths: [String]) -> some View {
-        VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-            Text(FileClipboardContent.displayName(for: currentPath))
-                .font(.system(size: 17, weight: .semibold))
-            Text(fileHeaderSubtitle(paths: paths, primaryURL: currentURL))
-                .font(.system(size: 12.5))
-                .foregroundStyle(ClipinInk.secondary)
-                .textSelection(.enabled)
+        HStack(alignment: .top, spacing: ClipinChrome.groupGap) {
+            VStack(alignment: .leading, spacing: ClipinChrome.gap) {
+                Text(FileClipboardContent.displayName(for: currentPath))
+                    .font(.system(size: 17, weight: .semibold))
+                Text(fileHeaderSubtitle(paths: paths, primaryURL: currentURL))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(ClipinInk.secondary)
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            finderActionButton(for: currentPath)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// 给一个 path + 它在原 paths 数组中的位置,返回可预览的图片路径——
@@ -307,6 +321,23 @@ struct FilePreviewBody: View {
                     .font(.system(size: 12.5))
                     .foregroundStyle(ClipinInk.secondary)
                     .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            finderActionButton(for: primaryPath)
+        }
+    }
+
+    private func resolution(for path: String) -> LocalPathResolution? {
+        if let resolved = pathResolutions[path] { return resolved }
+        return PreviewMetadataCache.shared.cachedLocalPath(for: path)
+    }
+
+    @ViewBuilder
+    private func finderActionButton(for path: String) -> some View {
+        if let resolved = resolution(for: path) {
+            FinderOpenCapsuleButton(isDirectory: resolved.isDirectory) {
+                vm.openLocalURL(resolved.url, isDirectory: resolved.isDirectory)
             }
         }
     }

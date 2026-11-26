@@ -228,3 +228,26 @@ extension View {
     }
 }
 
+struct FinderOpenCapsuleButton: View {
+    let isDirectory: Bool
+    var compact: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: ClipinChrome.gap) {
+                Image(systemName: "folder")
+                    .font(.system(size: compact ? 10 : 11, weight: .semibold))
+                Text(isDirectory ? "Open" : "Reveal")
+                    .font(.system(size: compact ? 11 : 12, weight: .semibold))
+            }
+            .padding(.horizontal, compact ? ClipinChrome.gap : ClipinChrome.groupGap)
+            .padding(.vertical, ClipinChrome.gap)
+            .foregroundStyle(isDirectory ? Color.accentColor : ClipinInk.secondary)
+            .clipinChromeGlass(in: Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(isDirectory ? "Open in Finder" : "Reveal in Finder")
+    }
+}
+

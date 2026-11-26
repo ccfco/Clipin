@@ -244,6 +244,7 @@ struct MainPanel: View {
                 viewModel.selectItem(id: item.id)
                 viewModel.pasteSelected()
             },
+            onOpen: { viewModel.openItem(id: $0.id) },
             onToggleFavorite: { viewModel.toggleFavorite(id: $0.id) },
             onDelete: { viewModel.deleteItem(id: $0.id) },
             onClearFilters: { _ = viewModel.clearActiveQueryAndFilters() },
@@ -547,6 +548,7 @@ private struct ItemListView: View {
     let sceneState: ClipinSceneState
     let selection: Binding<String?>
     let onActivate: (ClipListItem) -> Void
+    let onOpen: (ClipListItem) -> Void
     let onToggleFavorite: (ClipListItem) -> Void
     let onDelete: (ClipListItem) -> Void
     let onClearFilters: () -> Void
@@ -689,12 +691,26 @@ private struct ItemListView: View {
         .onHover { hovered in hoveredID = hovered ? item.id : nil }
         .contextMenu {
             Button("Paste") { onActivate(item) }
+            if item.clipType == .url {
+                Button("Open URL") { onOpen(item) }
+            } else if item.clipType == .file {
+                Button(contextFileOpenLabel(for: item)) { onOpen(item) }
+            } else if item.id == selection.wrappedValue, vm.canOpenSelectedItem {
+                Button(vm.selectedOpenLabel) { onOpen(item) }
+            }
             Button(item.isPinned ? LocalizedStringKey("Remove from Favorites") : LocalizedStringKey("Favorite")) {
                 onToggleFavorite(item)
             }
             Divider()
             Button("Delete", role: .destructive) { onDelete(item) }
         }
+    }
+
+    private func contextFileOpenLabel(for item: ClipListItem) -> LocalizedStringKey {
+        if item.id == selection.wrappedValue {
+            return LocalizedStringKey(vm.selectedOpenLabel)
+        }
+        return "Reveal in Finder"
     }
 
     private var emptyState: some View {

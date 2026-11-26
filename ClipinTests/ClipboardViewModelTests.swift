@@ -385,6 +385,82 @@ final class ClipboardViewModelTests: XCTestCase {
         XCTAssertEqual(visibleContents(in: viewModel), ["beta item"])
     }
 
+    @MainActor
+    func testTextFolderAndFileFolderEnableOpenAndQuickLookPreview() async throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipinVMFolderTests-\(UUID().uuidString)", isDirectory: true)
+        let folderURL = rootURL.appendingPathComponent("TestFolder", isDirectory: true)
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        tempRoots.append(rootURL)
+
+        let core = try makeCore()
+        _ = try core.importItem(
+            content: folderURL.path,
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 3_000,
+            alias: nil
+        )
+        _ = try core.importItem(
+            content: folderURL.path + "/missing-subdir",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 2_000,
+            alias: nil
+        )
+        _ = try core.importItem(
+            content: folderURL.path,
+            clipType: .file,
+            sourceApp: nil,
+            sourceName: nil,
+            imagePath: nil,
+            isPinned: false,
+            createdAt: 1_000,
+            alias: nil
+        )
+
+        let viewModel = ClipboardViewModel(core: core)
+        viewModel.loadItems(selectLatest: true)
+
+        let ids = visibleIDs(in: viewModel)
+        XCTAssertEqual(ids.count, 3)
+
+        // 1) .text existing folder
+        viewModel.selectItem(id: ids[0])
+        let deadline1 = Date().addingTimeInterval(2)
+        while Date() < deadline1, viewModel.selectedItem?.id != ids[0] {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(viewModel.canOpenSelectedItem)
+        XCTAssertTrue(viewModel.canPreviewSelectedItem)
+        XCTAssertEqual(viewModel.selectedOpenLabel, NSLocalizedString("Open in Finder", comment: ""))
+
+        // 2) .text missing folder
+        viewModel.selectItem(id: ids[1])
+        let deadline2 = Date().addingTimeInterval(2)
+        while Date() < deadline2, viewModel.selectedItem?.id != ids[1] {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertFalse(viewModel.canOpenSelectedItem)
+        XCTAssertFalse(viewModel.canPreviewSelectedItem)
+
+        // 3) .file existing folder
+        viewModel.selectItem(id: ids[2])
+        let deadline3 = Date().addingTimeInterval(2)
+        while Date() < deadline3, viewModel.selectedItem?.id != ids[2] {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(viewModel.canOpenSelectedItem)
+        XCTAssertTrue(viewModel.canPreviewSelectedItem)
+        XCTAssertEqual(viewModel.selectedOpenLabel, NSLocalizedString("Open in Finder", comment: ""))
+    }
+
     private func makeCore() throws -> ClipinCore {
         let rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ClipinViewModelTests-\(UUID().uuidString)", isDirectory: true)

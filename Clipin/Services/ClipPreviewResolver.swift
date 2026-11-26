@@ -11,7 +11,7 @@ struct ClipPreviewSession: Equatable {
 }
 
 enum ClipPreviewResolver {
-    static func resolve(item: ClipItem) -> [ClipPreviewEntry]? {
+    static func resolve(item: ClipItem, allowDiskProbe: Bool = false) -> [ClipPreviewEntry]? {
         let urls: [URL]
 
         switch item.clipType {
@@ -29,8 +29,15 @@ enum ClipPreviewResolver {
             guard let url = URL(string: item.content) else { return nil }
             urls = [url]
 
-        default:
-            return nil
+        case .text:
+            guard LocalPathDetector.looksLikeSingleLocalPath(item.content) else { return nil }
+            if allowDiskProbe {
+                guard let resolved = LocalPathDetector.resolveSinglePath(from: item.content) else { return nil }
+                urls = [resolved.url]
+            } else {
+                guard let resolved = PreviewMetadataCache.shared.cachedLocalPath(for: item.content) else { return nil }
+                urls = [resolved.url]
+            }
         }
 
         guard !urls.isEmpty else { return nil }
@@ -111,12 +118,9 @@ enum ClipPreviewResolver {
             guard let path = listItem.imagePath else { return [] }
             return existingFileURLs(from: [path]).map { ClipPreviewEntry(clipID: listItem.id, url: $0) }
 
-        case .file, .url:
+        case .file, .url, .text:
             guard let item = loadItem(listItem.id) else { return [] }
-            return resolve(item: item) ?? []
-
-        default:
-            return []
+            return resolve(item: item, allowDiskProbe: true) ?? []
         }
     }
 }

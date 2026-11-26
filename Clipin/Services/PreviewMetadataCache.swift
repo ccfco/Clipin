@@ -28,6 +28,17 @@ final class PreviewMetadataCache: @unchecked Sendable {
     private var fileSizes: LRUStore<String, String> = .init()
     private var appIcons: LRUStore<String, NSImage> = .init()
     private var fileIcons: LRUStore<String, NSImage> = .init()
+    private var localPaths: LRUStore<String, CachedPathProbe> = .init()
+    private static let localPathProbeTTL: Duration = .seconds(3)
+
+    private struct CachedPathProbe {
+        let resolution: LocalPathResolution?
+        let probedAt: ContinuousClock.Instant
+
+        var isFresh: Bool {
+            probedAt.duration(to: .now) < PreviewMetadataCache.localPathProbeTTL
+        }
+    }
 
     struct ImageDimensions: Equatable, Sendable {
         let width: Int
@@ -54,6 +65,16 @@ final class PreviewMetadataCache: @unchecked Sendable {
     func cachedFileIcon(at path: String) -> NSImage? {
         lock.lock(); defer { lock.unlock() }
         return fileIcons.get(path)
+    }
+
+    func cachedLocalPath(for raw: String) -> LocalPathResolution? {
+        lock.lock(); defer { lock.unlock() }
+        return localPaths.get(raw)?.resolution
+    }
+
+    func hasCachedLocalPathProbe(for raw: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return localPaths.get(raw)?.isFresh == true
     }
 
     // MARK: - Async (load + cache) accessors
@@ -104,6 +125,40 @@ final class PreviewMetadataCache: @unchecked Sendable {
         return nil
     }
 
+    func loadLocalPath(for raw: String) async -> LocalPathResolution? {
+        if let probe = cachedLocalPathProbeEntry(for: raw), probe.isFresh {
+            return probe.resolution
+        }
+        let resolution = await Task.detached(priority: .userInitiated) {
+            LocalPathDetector.resolveSinglePath(from: raw)
+        }.value
+        storeLocalPathProbe(CachedPathProbe(resolution: resolution, probedAt: .now), for: raw)
+        return resolution
+    }
+
+    func loadInlinePaths(for candidates: [InlinePathCandidate]) async -> [(NSRange, LocalPathResolution)] {
+        guard !candidates.isEmpty else { return [] }
+        return await Task.detached(priority: .userInitiated) {
+            var resolved: [(NSRange, LocalPathResolution)] = []
+            resolved.reserveCapacity(candidates.count)
+            for candidate in candidates {
+                if Task.isCancelled { break }
+                if let existing = self.cachedLocalPathProbeEntry(for: candidate.rawPath), existing.isFresh {
+                    if let hit = existing.resolution {
+                        resolved.append((candidate.range, hit))
+                    }
+                    continue
+                }
+                let result = LocalPathDetector.resolveSinglePath(from: candidate.rawPath)
+                self.storeLocalPathProbe(CachedPathProbe(resolution: result, probedAt: .now), for: candidate.rawPath)
+                if let result {
+                    resolved.append((candidate.range, result))
+                }
+            }
+            return resolved
+        }.value
+    }
+
     // MARK: - Sync (cache-write) helpers
     // NSLock 在 Swift 6 async 上下文不可用（锁跨 await 是危险模式）。
     // 所有写都收口成同步小函数，async 接口里只调这些 sync helper。
@@ -126,6 +181,16 @@ final class PreviewMetadataCache: @unchecked Sendable {
     private func storeFileIcon(_ image: NSImage, for path: String) {
         lock.lock(); defer { lock.unlock() }
         fileIcons.set(path, image, maxEntries: maxEntries)
+    }
+
+    private func cachedLocalPathProbeEntry(for raw: String) -> CachedPathProbe? {
+        lock.lock(); defer { lock.unlock() }
+        return localPaths.get(raw)
+    }
+
+    private func storeLocalPathProbe(_ probe: CachedPathProbe, for raw: String) {
+        lock.lock(); defer { lock.unlock() }
+        localPaths.set(raw, probe, maxEntries: maxEntries)
     }
 
     // MARK: - Raw IO helpers (run on background task)

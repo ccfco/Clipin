@@ -569,6 +569,8 @@ struct PreviewPane: View, Equatable {
         /// JSON 自动 pretty-print：默认开启（更易读），允许切回 Raw 看原始压缩格式。
         /// 用 @State 让用户的选择保留在当前 item 视图生命周期内；切到下一条目重置回默认。
         @State private var renderMode: RenderMode = .auto
+        /// 单行本地路径的异步探测结果（按 text 绑定，防止切换条目时上一条的 @State 闪到下一条）。
+        @State private var detectedPath: (text: String, resolution: LocalPathResolution?)?
 
         enum RenderMode { case auto, raw }
 
@@ -606,7 +608,7 @@ struct PreviewPane: View, Equatable {
             }()
 
             VStack(alignment: .leading, spacing: ClipinChrome.gap) {
-                // 仅当检测到 JSON 时才显示 toggle，避免对普通文本造成视觉噪声
+                // 仅当检测到 JSON 或本地有效路径时才显示顶部识别栏，避免对普通文本造成视觉噪声
                 if isJSON {
                     HStack(spacing: ClipinChrome.gap) {
                         Label("JSON", systemImage: "curlybraces")
@@ -630,6 +632,16 @@ struct PreviewPane: View, Equatable {
                         .buttonStyle(.plain)
                         .help(renderMode == .auto ? "Show original compact JSON" : "Pretty-print JSON")
                     }
+                } else if let resolved = effectiveDetectedPath {
+                    HStack(spacing: ClipinChrome.gap) {
+                        Label(resolved.isDirectory ? "Folder" : "File", systemImage: resolved.isDirectory ? "folder" : "doc")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(ClipinInk.secondary)
+                        Spacer(minLength: 6)
+                        FinderOpenCapsuleButton(isDirectory: resolved.isDirectory, compact: true) {
+                            vm.openLocalURL(resolved.url, isDirectory: resolved.isDirectory)
+                        }
+                    }
                 }
 
                 SelectableTextPreview(
@@ -643,6 +655,23 @@ struct PreviewPane: View, Equatable {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
+            .task(id: text) {
+                guard !isJSON, LocalPathDetector.looksLikeSingleLocalPath(text) else {
+                    detectedPath = nil
+                    return
+                }
+                let resolved = await PreviewMetadataCache.shared.loadLocalPath(for: text)
+                guard !Task.isCancelled else { return }
+                detectedPath = (text: text, resolution: resolved)
+            }
+        }
+
+        private var effectiveDetectedPath: LocalPathResolution? {
+            if let detectedPath, detectedPath.text == text {
+                return detectedPath.resolution
+            }
+            guard LocalPathDetector.looksLikeSingleLocalPath(text) else { return nil }
+            return PreviewMetadataCache.shared.cachedLocalPath(for: text)
         }
     }
 

@@ -54,4 +54,82 @@ final class ClipPreviewResolverTests: XCTestCase {
         XCTAssertEqual(session?.selectedIndex, 3)
         XCTAssertEqual(session?.entries.count, 7)
     }
+
+    func testResolveTextFolderPathWithCacheAndDiskProbe() async throws {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipPreviewResolverTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+
+        let folderPath = rootURL.path
+        let folderItem = ClipItem(
+            id: "text-folder",
+            content: folderPath,
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            isPinned: false,
+            createdAt: 0,
+            imagePath: nil,
+            attachmentPaths: nil,
+            charCount: 0,
+            copyCount: 1,
+            firstCopiedAt: 0,
+            ocrText: nil,
+            pasteCount: 0,
+            alias: nil,
+            aiTags: nil
+        )
+
+        // With allowDiskProbe: true, resolves directly
+        let probed = ClipPreviewResolver.resolve(item: folderItem, allowDiskProbe: true)
+        XCTAssertEqual(probed?.count, 1)
+        XCTAssertEqual(probed?.first?.url.standardizedFileURL.path, rootURL.standardizedFileURL.path)
+
+        // Warming PreviewMetadataCache enables sync resolve(allowDiskProbe: false)
+        _ = await PreviewMetadataCache.shared.loadLocalPath(for: folderPath)
+        let cached = ClipPreviewResolver.resolve(item: folderItem, allowDiskProbe: false)
+        XCTAssertEqual(cached?.count, 1)
+
+        // Missing path or multiline text never resolves
+        let missingItem = ClipItem(
+            id: "text-missing",
+            content: folderPath + "/definitely-does-not-exist",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            isPinned: false,
+            createdAt: 0,
+            imagePath: nil,
+            attachmentPaths: nil,
+            charCount: 0,
+            copyCount: 1,
+            firstCopiedAt: 0,
+            ocrText: nil,
+            pasteCount: 0,
+            alias: nil,
+            aiTags: nil
+        )
+        XCTAssertNil(ClipPreviewResolver.resolve(item: missingItem, allowDiskProbe: true))
+
+        let multilineItem = ClipItem(
+            id: "text-multiline",
+            content: "\(folderPath)\n\(folderPath)",
+            clipType: .text,
+            sourceApp: nil,
+            sourceName: nil,
+            isPinned: false,
+            createdAt: 0,
+            imagePath: nil,
+            attachmentPaths: nil,
+            charCount: 0,
+            copyCount: 1,
+            firstCopiedAt: 0,
+            ocrText: nil,
+            pasteCount: 0,
+            alias: nil,
+            aiTags: nil
+        )
+        XCTAssertNil(ClipPreviewResolver.resolve(item: multilineItem, allowDiskProbe: true))
+    }
 }
