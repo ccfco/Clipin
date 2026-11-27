@@ -928,21 +928,26 @@ fn test_tagging_candidates_are_lightweight_and_cursor_advances() {
     std::fs::create_dir_all(&img_dir).unwrap();
     let storage = Storage::new(&db_path, &img_dir).unwrap();
 
+    // 显式指定递增 created_at，避免连续插入落在同一毫秒内退化成随机 UUID 排序
     let long = "字".repeat(5_000);
-    let first = storage.save_item(&long, &ClipType::Text, None, None, None).unwrap();
+    let first = storage
+        .import_item(&long, &ClipType::Text, None, None, None, false, 1_000, None)
+        .unwrap();
     let second = storage
-        .save_item("second item with enough text", &ClipType::Text, None, None, None)
+        .import_item("second item with enough text", &ClipType::Text, None, None, None, false, 2_000, None)
         .unwrap();
     let third = storage
-        .save_item("third item with enough text", &ClipType::Text, None, None, None)
+        .import_item("third item with enough text", &ClipType::Text, None, None, None, false, 3_000, None)
         .unwrap();
     storage.set_alias(&first.id, Some("预算")).unwrap();
 
     let page = storage.get_tagging_candidates(2, None, None).unwrap();
     assert_eq!(page.len(), 2);
     // 长文本必须被截到 2000 字符，不能整行拷贝
+    assert_eq!(page[0].id, first.id);
     assert_eq!(page[0].text.chars().count(), 2_000);
     assert_eq!(page[0].alias.as_deref(), Some("预算"));
+    assert_eq!(page[1].id, second.id);
 
     let last = page.last().unwrap();
     let next = storage
@@ -951,6 +956,43 @@ fn test_tagging_candidates_are_lightweight_and_cursor_advances() {
     assert_eq!(next.len(), 1, "游标之后应只剩第三条");
     assert_eq!(next[0].id, third.id);
     assert!(next.iter().all(|c| c.id != second.id && c.id != first.id));
+
+    // 同毫秒多条记录场景：复合游标 (created_at, id) 也必须不漏不重地走完
+    let same_ts = 4_000_i64;
+    for i in 0..5 {
+        storage
+            .import_item(
+                &format!("same timestamp candidate {i}"),
+                &ClipType::Text,
+                None,
+                None,
+                None,
+                false,
+                same_ts,
+                None,
+            )
+            .unwrap();
+    }
+    let mut visited = std::collections::HashSet::new();
+    let mut cursor: Option<(i64, String)> = None;
+    loop {
+        let batch = storage
+            .get_tagging_candidates(
+                2,
+                cursor.as_ref().map(|c| c.0),
+                cursor.as_ref().map(|c| c.1.as_str()),
+            )
+            .unwrap();
+        if batch.is_empty() {
+            break;
+        }
+        for c in &batch {
+            assert!(visited.insert(c.id.clone()), "游标翻页不应重复返回 id={}", c.id);
+        }
+        let tail = batch.last().unwrap();
+        cursor = Some((tail.created_at, tail.id.clone()));
+    }
+    assert_eq!(visited.len(), 8, "全量游标翻页应不漏不重覆盖全部 8 条");
 }
 
 #[test]
